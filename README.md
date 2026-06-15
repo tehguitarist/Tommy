@@ -49,6 +49,10 @@ cmake --build build --target Tommy_VST3  # VST3
 This project is under active development. See `CLAUDE.md` for the current
 build step and implementation notes.
 
+## License
+
+Tommy is licensed under the [GNU Affero General Public License v3.0](LICENSE) (AGPLv3).
+
 ## Credits
 
 Built by Leigh Pierce using [JUCE](https://juce.com/) and

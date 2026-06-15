@@ -51,4 +51,4 @@ All three are in `schematics/` at the repo root. Load them when verifying any ci
 
 > Update this line at the **start** of each session to reflect where work is resuming,
 > and again when a step completes. Do not rely on conversation history to infer progress.
-> **CURRENT: Step 2 — JUCE CMake scaffold**
+> **CURRENT: Step 3 — chowdsp_wdf smoke test (RC lowpass). Step 2 complete: AU scaffold built, installed, and passes `auval`. VST3 target deferred — re-add `VST3` to `FORMATS` in CMakeLists.txt when revisiting.**

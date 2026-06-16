@@ -7,6 +7,34 @@
 namespace tommy::dsp
 {
 /**
+ * Accurate Wright-omega provider for the WDF diode models. chowdsp's default omega4 uses fast
+ * bit-trick log/exp approximations that impose a ~-35 dB distortion floor (oversampling-immune,
+ * audible on a "transparent" pedal). This solves w + ln(w) = x to ~machine precision with a few
+ * Newton steps on std::log/std::exp — drops the floor to the true aliasing level. Plugged into
+ * the diode templates' OmegaProvider slot. (Note: DiodePairT's "Best" path hardcodes omega4 and
+ * ignores this; its "Good" path and DiodeT honour it — so we use those.)
+ */
+struct AccurateOmega
+{
+    template <typename T>
+    static T omega (T x)
+    {
+        // Wright omega principal branch: w > 0, w + ln(w) = x.
+        T w = (x > (T) 1) ? (x - std::log (x)) : std::exp (x);
+        if (w < (T) 1e-12)
+            w = (T) 1e-12;
+        for (int i = 0; i < 4; ++i) // Newton: w -= f*w/(w+1), f = w + ln(w) - x (quadratic conv.)
+        {
+            const T f = w + std::log (w) - x;
+            w -= f * w / (w + (T) 1);
+            if (w < (T) 1e-12)
+                w = (T) 1e-12;
+        }
+        return w;
+    }
+};
+
+/**
  * Stage 1 — IC1_A drive stage (NON-INVERTING op-amp) with SW1 clipping in the feedback loop.
  *
  * Verified against `updated schematic - timmy.png` (2026-06-16). Signal enters the op-amp (+)
@@ -79,7 +107,12 @@ public:
         c1.reset();
         c1P.reset();
         c1S.reset();
+        railPrevX = 0.0;
     }
+
+    /** Enable 1st-order ADAA on the op-amp rail saturation (the hard-edged nonlinearity that
+     *  aliases most). In addition to oversampling, not instead — see dsp.md. */
+    void setAdaaEnabled (bool enabled) { adaaOn = enabled; }
 
     /** BASS / DRIVE as already-tapered resistances in ohms (A-taper applied by the caller). */
     void setParams (double bassResistanceOhms, double driveResistanceOhms)
@@ -155,10 +188,55 @@ public:
                 break;
         }
 
-        return railClip (vin + vf);
+        return applyRail (vin + vf);
     }
 
 private:
+    // 1st-order ADAA wrapper around the rail saturation: replaces g(x) with the average of g
+    // over [x[n-1], x[n]] = (G(x[n]) - G(x[n-1])) / (x[n] - x[n-1]), G = antiderivative of the
+    // clip. Bandlimits the hard rail corner, cutting aliasing on top of oversampling. Falls back
+    // to the midpoint value when the step is tiny (avoids 0/0). State updates every call so
+    // toggling ADAA is glitch-free.
+    double applyRail (double x)
+    {
+        if (! railClampOn)
+        {
+            railPrevX = x;
+            return x;
+        }
+        double y;
+        if (adaaOn)
+        {
+            const double dx = x - railPrevX;
+            y = (std::abs (dx) > 1.0e-7) ? (railAntideriv (x) - railAntideriv (railPrevX)) / dx
+                                         : railClip (0.5 * (x + railPrevX));
+        }
+        else
+        {
+            y = railClip (x);
+        }
+        railPrevX = x;
+        return y;
+    }
+
+    // Antiderivative of railClip(x), with G(0)=0 (piecewise: x^2/2 linear, cubic knee, then
+    // linear once hard-clamped). Even about each (asymmetric) rail magnitude.
+    double railAntideriv (double x) const
+    {
+        const double L = (x >= 0.0) ? railPos : railNegMag;
+        const double ax = std::abs (x);
+        const double W = kRailKneeW;
+        if (ax <= L - W)
+            return 0.5 * ax * ax;
+        if (ax < L + W)
+        {
+            const double d = ax - (L - W);
+            return 0.5 * ax * ax - d * d * d / (12.0 * W);
+        }
+        const double B = 0.5 * (L + W) * (L + W) - (2.0 / 3.0) * W * W;
+        return B + L * (ax - (L + W));
+    }
+
     // Asymmetric op-amp output-rail saturation (9V supply). Models the JRC4559 output stage
     // saturating against its rails: DEAD LINEAR until railKneeW volts before the rail, a short
     // parabolic knee, then a HARD clamp at the rail — matching a real op-amp output transistor
@@ -197,8 +275,10 @@ private:
 
     ClipMode mode = ClipMode::Linear;
     bool railClampOn = true;
+    bool adaaOn = false;
     double railPos = kRailPosDefault;
     double railNegMag = kRailNegDefault;
+    double railPrevX = 0.0;
 
     // --- Gain-set leg Zg : R3 + ( C3 || (BASS_R + C4) ) ---  (shared by all modes)
     Res r3 { 3.3e3 };
@@ -222,12 +302,14 @@ private:
     chowdsp::wdft::ResistiveCurrentSourceT<double> nortonP { 503.3e3 };
     Cap c1P { 100.0e-12 };
     Parallel<decltype (nortonP), decltype (c1P)> zfP { nortonP, c1P };
-    chowdsp::wdft::DiodePairT<double, decltype (zfP), chowdsp::wdft::DiodeQuality::Best> diodePair { zfP, kIs, kVt, kN };
+    // DiodeQuality::Good honours the OmegaProvider (Best hardcodes omega4); with AccurateOmega
+    // the eqn-18 antiparallel-pair reflection is accurate, removing the omega4 distortion floor.
+    chowdsp::wdft::DiodePairT<double, decltype (zfP), chowdsp::wdft::DiodeQuality::Good, AccurateOmega> diodePair { zfP, kIs, kVt, kN };
 
     // --- Single-diode feedback (mode Hard): Norton(R7+DRIVE) || C1, single diode root ---
     chowdsp::wdft::ResistiveCurrentSourceT<double> nortonS { 503.3e3 };
     Cap c1S { 100.0e-12 };
     Parallel<decltype (nortonS), decltype (c1S)> zfS { nortonS, c1S };
-    chowdsp::wdft::DiodeT<double, decltype (zfS), chowdsp::wdft::DiodeQuality::Best> diodeS { zfS, kIs, kVt, kN };
+    chowdsp::wdft::DiodeT<double, decltype (zfS), chowdsp::wdft::DiodeQuality::Best, AccurateOmega> diodeS { zfS, kIs, kVt, kN };
 };
 } // namespace tommy::dsp

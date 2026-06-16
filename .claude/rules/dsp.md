@@ -59,14 +59,22 @@ rtype.setSMatrixData({{ s00, s01, ... }, { s10, s11, ... }, ... }); // precomput
 ### Nonlinear elements
 ```cpp
 // Antiparallel diode pair (Modes A and B — use for D5+D6, D3+D4):
-wdft::DiodePairT<double, decltype(next), wdft::DiodeQuality::Best> dp { next, Is, Vt, nDiodes };
+wdft::DiodePairT<double, decltype(next), wdft::DiodeQuality::Good, AccurateOmega> dp { next, Is, Vt, nDiodes };
 // nDiodes = ideality factor n (NOT a physical diode count). For 1N4148: nDiodes=1.752
-// Use DiodeQuality::Best — higher accuracy Wright Omega approximation, correct for audio
 
 // Single diode (Mode C — use for D1):
-wdft::DiodeT<double, decltype(next), wdft::DiodeQuality::Best> d { next, Is, Vt, nDiodes };
+wdft::DiodeT<double, decltype(next), wdft::DiodeQuality::Best, AccurateOmega> d { next, Is, Vt, nDiodes };
 // Same parameter convention as DiodePairT
 ```
+
+**Omega accuracy (2026-06-16, Step 6) — do NOT revert to the default omega4:** chowdsp's default
+`Omega::omega` (= `omega4`) uses bit-trick `log_approx`/`exp_approx` that impose a ~-35 dB
+oversampling-immune distortion floor — audible on a transparent pedal. We supply a custom
+`AccurateOmega` provider (std::log/exp + Newton solve of `w + ln(w) = x`) in `Stage1.h`.
+**Gotcha:** `DiodePairT`'s `DiodeQuality::Best` path HARDCODES `omega4` and ignores the
+OmegaProvider — so for the pair use `DiodeQuality::Good` (eqn-18; accurate once given a true
+omega). `DiodeT` and the pair's `Good` path both honour the provider. Verified via the Step-6
+audible-band aliasing test. (Perf: accurate omega is heavier than omega4 — profile at Step 7.)
 
 ### Ideal op-amp
 ```cpp

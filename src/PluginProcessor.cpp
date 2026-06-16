@@ -1,5 +1,8 @@
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
+#include "utils/TaperUtils.h"
+
+#include <cmath>
 
 TommyAudioProcessor::TommyAudioProcessor()
     : AudioProcessor (BusesProperties()
@@ -7,6 +10,15 @@ TommyAudioProcessor::TommyAudioProcessor()
                            .withOutput ("Output", juce::AudioChannelSet::stereo(), true)),
       apvts (*this, nullptr, "PARAMETERS", createParameterLayout())
 {
+    pBass = apvts.getRawParameterValue ("bass");
+    pDrive = apvts.getRawParameterValue ("drive");
+    pTreble = apvts.getRawParameterValue ("treble");
+    pVolume = apvts.getRawParameterValue ("volume");
+    pClip = apvts.getRawParameterValue ("clipping_mode");
+    pInTrim = apvts.getRawParameterValue ("input_trim");
+    pOutTrim = apvts.getRawParameterValue ("output_trim");
+    pOversampling = apvts.getRawParameterValue ("oversampling");
+    pBypass = apvts.getRawParameterValue ("bypass");
 }
 
 TommyAudioProcessor::~TommyAudioProcessor() = default;
@@ -44,8 +56,31 @@ juce::AudioProcessorValueTreeState::ParameterLayout TommyAudioProcessor::createP
     return { params.begin(), params.end() };
 }
 
-void TommyAudioProcessor::prepareToPlay (double, int)
+void TommyAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
 {
+    currentSampleRate = sampleRate;
+    maxBlock = samplesPerBlock;
+    currentFactorLog2 = (int) (pOversampling != nullptr ? pOversampling->load() : 2.0f);
+
+    for (auto& ch : dsp)
+    {
+        ch.prepare (sampleRate, samplesPerBlock, currentFactorLog2);
+        ch.reset();
+    }
+
+    scratch.setSize (2, samplesPerBlock);
+
+    const double smoothSec = 0.01; // 10 ms — no zipper on level controls
+    inputGain.reset (sampleRate, smoothSec);
+    outputGain.reset (sampleRate, smoothSec);
+    bypassMix.reset (sampleRate, 0.005); // ~5 ms bypass crossfade
+
+    inputGain.setCurrentAndTargetValue (1.0f);
+    outputGain.setCurrentAndTargetValue (kOutputMakeup);
+    const bool startBypassed = pBypass != nullptr && pBypass->load() > 0.5f;
+    bypassMix.setCurrentAndTargetValue (startBypassed ? 1.0f : 0.0f);
+
+    setLatencySamples ((int) std::lround (dsp[0].getLatencySamples()));
 }
 
 void TommyAudioProcessor::releaseResources()
@@ -62,8 +97,81 @@ void TommyAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::
 {
     juce::ScopedNoDenormals noDenormals;
 
-    for (auto channel = getTotalNumInputChannels(); channel < getTotalNumOutputChannels(); ++channel)
-        buffer.clear (channel, 0, buffer.getNumSamples());
+    const int numSamples = buffer.getNumSamples();
+    const int numCh = juce::jmin (buffer.getNumChannels(), 2);
+
+    for (int channel = getTotalNumInputChannels(); channel < getTotalNumOutputChannels(); ++channel)
+        buffer.clear (channel, 0, numSamples);
+
+    // 1. Oversampling factor change (allocates in setFactor — see Step-7 RT-safety carry-forward).
+    const int wantFactor = (int) pOversampling->load();
+    if (wantFactor != currentFactorLog2)
+    {
+        currentFactorLog2 = wantFactor;
+        for (auto& ch : dsp)
+            ch.setFactor (currentFactorLog2);
+        setLatencySamples ((int) std::lround (dsp[0].getLatencySamples()));
+    }
+
+    // 2. Read params; map pot rotations to WDF resistances / gains (block-rate WDF update).
+    const auto bassR = tommy::taper::bassResistance (pBass->load());
+    const auto driveR = tommy::taper::driveResistance (pDrive->load());
+    const auto trebR = tommy::taper::trebleResistance (pTreble->load());
+    const auto volGain = tommy::taper::volumeGain (pVolume->load());
+    const auto mode = static_cast<tommy::dsp::Stage1::ClipMode> (1 + (int) pClip->load()); // 0/1/2 -> Soft/Medium/Hard
+
+    inputGain.setTargetValue ((float) tommy::taper::dbToGain (pInTrim->load()));
+    outputGain.setTargetValue ((float) (kOutputMakeup * volGain * tommy::taper::dbToGain (pOutTrim->load())));
+    const bool wantBypass = pBypass->load() > 0.5f;
+    bypassMix.setTargetValue (wantBypass ? 1.0f : 0.0f);
+    bypassed.store (wantBypass);
+
+    for (auto& ch : dsp)
+        ch.setControls (bassR, driveR, trebR, mode);
+
+    // 3. Per channel: input trim + meter, run the WDF chain in double, crossfade bypass, out meter.
+    float inPeak[2] = { 0.0f, 0.0f }, outPeak[2] = { 0.0f, 0.0f };
+    for (int c = 0; c < numCh; ++c)
+    {
+        auto* in = buffer.getWritePointer (c);
+        auto* work = scratch.getWritePointer (c);
+
+        // Input trim + dry copy (for bypass crossfade) + input metering.
+        auto inG = inputGain;
+        for (int i = 0; i < numSamples; ++i)
+        {
+            const float g = inG.getNextValue();
+            const float dry = in[i];
+            const float wet = dry * g;
+            work[i] = (double) wet;
+            inPeak[c] = juce::jmax (inPeak[c], std::abs (wet));
+        }
+
+        dsp[c].processBlock (work, numSamples);
+
+        // Output makeup * volume * output trim, then crossfade against the dry input.
+        auto outG = outputGain;
+        auto mix = bypassMix;
+        for (int i = 0; i < numSamples; ++i)
+        {
+            const float processed = (float) work[i] * outG.getNextValue();
+            const float m = mix.getNextValue();
+            const float y = processed * (1.0f - m) + in[i] * m;
+            in[i] = y;
+            outPeak[c] = juce::jmax (outPeak[c], std::abs (y));
+        }
+    }
+
+    // Mirror the smoothers' consumed state across channels by advancing once for real (above we
+    // copied the smoothers per channel so each channel ramps identically from the same start).
+    inputGain.skip (numSamples);
+    outputGain.skip (numSamples);
+    bypassMix.skip (numSamples);
+
+    inputLevelL.store (inPeak[0]);
+    inputLevelR.store (numCh > 1 ? inPeak[1] : inPeak[0]);
+    outputLevelL.store (outPeak[0]);
+    outputLevelR.store (numCh > 1 ? outPeak[1] : outPeak[0]);
 }
 
 juce::AudioProcessorEditor* TommyAudioProcessor::createEditor()

@@ -62,6 +62,10 @@ add_executable(ClippingStage_Sine tests/ClippingStage_Sine.cpp)
 target_link_libraries(ClippingStage_Sine PRIVATE chowdsp::chowdsp_wdf)
 target_compile_options(ClippingStage_Sine PRIVATE -Wall -Wextra)
 
+add_executable(Stage2_Treble_FreqResponse tests/Stage2_Treble_FreqResponse.cpp)
+target_link_libraries(Stage2_Treble_FreqResponse PRIVATE chowdsp::chowdsp_wdf)
+target_compile_options(Stage2_Treble_FreqResponse PRIVATE -Wall -Wextra)
+
 # Step 6 aliasing test needs JUCE (juce::dsp::Oversampling + FFT), so it is a JUCE console app.
 juce_add_console_app(Step6_Aliasing PRODUCT_NAME "Step6_Aliasing")
 target_sources(Step6_Aliasing PRIVATE tests/Step6_Aliasing.cpp)
@@ -70,6 +74,18 @@ target_compile_definitions(Step6_Aliasing PRIVATE
     JUCE_WEB_BROWSER=0
     JUCE_STANDALONE_APPLICATION=1)
 target_link_libraries(Step6_Aliasing PRIVATE
+    chowdsp::chowdsp_wdf
+    juce::juce_dsp
+    juce::juce_recommended_config_flags)
+
+# Step 7 full-chain integration test (TommyDSP uses ClippingOversampler -> juce_dsp).
+juce_add_console_app(Step7_Integration PRODUCT_NAME "Step7_Integration")
+target_sources(Step7_Integration PRIVATE tests/Step7_Integration.cpp)
+target_compile_definitions(Step7_Integration PRIVATE
+    JUCE_USE_CURL=0
+    JUCE_WEB_BROWSER=0
+    JUCE_STANDALONE_APPLICATION=1)
+target_link_libraries(Step7_Integration PRIVATE
     chowdsp::chowdsp_wdf
     juce::juce_dsp
     juce::juce_recommended_config_flags)

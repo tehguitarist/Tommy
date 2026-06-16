@@ -163,10 +163,19 @@ constexpr double n_1N4148  = 1.752;     // ideality factor — passed as nDiodes
 
 ## ADAA
 
-- Apply ADAA to the diode waveshaper stage within the WDF tree
 - ADAA is in addition to oversampling, not instead of it
 - ADAA must be transparent — must not colour the sound
 - Reference: DAFx2020 paper "Antiderivative antialiasing in nonlinear wave digital filters" — 2x ADAA + oversampling outperforms higher oversampling alone
+
+**IMPLEMENTED 2026-06-16 (Step 6) — ADAA is on the RAIL CLIP, not the diodes (deliberate, do
+not re-litigate at Step 9):** Measured audible-band aliasing shows the hard op-amp rail clip is
+the dominant aliasing source; the soft diodes already produce fast-decaying harmonics that
+oversampling alone crushes (Soft 8x = -81 dB; ADAA there is a 0.03 dB no-op). The chowdsp diode
+models also expose no closed-form antiderivative, so diode ADAA would require a bespoke
+omega-antiderivative implementation for ~no audible gain. So 1st-order ADAA wraps `railClip`
+(exact piecewise antiderivative `railAntideriv` in `Stage1.h`); diodes rely on oversampling +
+the AccurateOmega fix. Hard mode: 8x -54 dB → 8x+ADAA -60 dB. If Step 9 listening reveals
+residual diode aliasing at low OS factors, revisit diode ADAA (Esqueda 2020, omega antiderivative).
 
 ## Potentiometer Tapers
 

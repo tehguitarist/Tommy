@@ -18,7 +18,13 @@
 Every `CapacitorT` (and `CapacitorAlphaT`) must have `.prepare(sampleRate)` called in `prepareToPlay`. Forgetting this leaves the capacitor at its initial state with an undefined sample rate and produces silence or wrong behaviour. Call prepare on every capacitor in every WDF stage. Also reset the oversampler in `prepareToPlay`.
 
 ### PolarityInverterT
-The `PolarityInverterT` is required between the R-type adaptor and the ideal voltage source for **inverting** op-amp stages (IC1_A is inverting). It flips the sign of the wave variable so the voltage readout at the output port gives the correct polarity. Omitting it produces an inverted output from Stage 1. IC1_B is non-inverting — no polarity inverter needed there.
+**Corrected 2026-06-16:** IC1_A is **non-inverting** (verified against `updated schematic -
+timmy.png` — see the circuit.md audit banner). Earlier guidance here claiming IC1_A is
+inverting and needs a `PolarityInverterT` was wrong. **Neither op-amp stage inverts**, so
+neither IC1_A nor IC1_B needs a `PolarityInverterT` for op-amp polarity. (Stage 0 also needed
+no inverter — confirmed by its DC-step polarity test.) Use `PolarityInverterT` only if a
+specific WDF sub-tree's sign convention requires it for a correct voltage readout, not because
+of op-amp inversion. Confirm output polarity with a DC-step test in every stage's validation.
 
 ## chowdsp_wdf API Reference (key types)
 

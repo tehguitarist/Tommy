@@ -45,3 +45,19 @@ target_link_libraries(Tommy
 )
 
 target_compile_options(Tommy PRIVATE -Wall -Wextra)
+
+add_executable(SmokeTest_RC tests/SmokeTest_RC.cpp)
+target_link_libraries(SmokeTest_RC PRIVATE chowdsp::chowdsp_wdf)
+target_compile_options(SmokeTest_RC PRIVATE -Wall -Wextra)
+
+add_executable(Stage0_FreqResponse tests/Stage0_FreqResponse.cpp)
+target_link_libraries(Stage0_FreqResponse PRIVATE chowdsp::chowdsp_wdf)
+target_compile_options(Stage0_FreqResponse PRIVATE -Wall -Wextra)
+
+add_executable(Stage1_FreqResponse tests/Stage1_FreqResponse.cpp)
+target_link_libraries(Stage1_FreqResponse PRIVATE chowdsp::chowdsp_wdf)
+target_compile_options(Stage1_FreqResponse PRIVATE -Wall -Wextra)
+
+add_executable(ClippingStage_Sine tests/ClippingStage_Sine.cpp)
+target_link_libraries(ClippingStage_Sine PRIVATE chowdsp::chowdsp_wdf)
+target_compile_options(ClippingStage_Sine PRIVATE -Wall -Wextra)

@@ -8,6 +8,8 @@ analog drive, with a few modern conveniences layered on top.
 > Tommy is an original implementation built from circuit analysis and is not
 > affiliated with or endorsed by any pedal manufacturer.
 
+![image](image.png)
+
 ## Features
 
 - Circuit-modelled drive stage with coupled Bass/Gain interaction, just like the

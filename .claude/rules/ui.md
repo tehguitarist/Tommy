@@ -48,9 +48,9 @@ Three-column layout with an oversampling strip below:
 
 ## Plugin Window
 
-- Fixed size: **480 × 480 px**
+- Fixed size: **420 × 480 px**
 - Not resizable in v1
-- Set via `setSize(480, 480)` in `PluginEditor` constructor
+- Set via `setSize(420, 480)` in `PluginEditor` constructor
 
 ## Side Panels — Input (left) and Output (right)
 

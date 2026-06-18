@@ -132,20 +132,27 @@ IC1_A and IC1_B are both **JRC4559** (= NJM4559, equivalent to RC4559).
 - Dual op-amp, ±18V supply capable, unity-gain stable. **In THIS pedal it runs on the single
   9V supply (~8.3V at V+, VREF ~4.6V) — see the Power supply note above. Not ±18V here.**
 - Use **ideal op-amp WDF model** for the gain/feedback solve (both stages).
-- **Output rail headroom IS modelled (2026-06-16)** on IC1_A: the JRC4559 is not rail-to-rail,
-  so on ~8.3V/VREF~4.6V the output swings ≈ **+2.2V / −3.1V** (bipolar, relative to VREF;
-  positive rails first as bias sits above mid-supply). Implemented in `Stage1.h` (`railClip`):
-  a faithful op-amp output-saturation curve — **dead linear until ~0.35V before the rail, a
-  short parabolic knee, then a HARD clamp at the rail** (a real output transistor saturates
-  hard, NOT a gentle tanh). This makes Hard mode's asymmetry correct (soft diode clip one way,
-  hard rail clip the other). Verified transparent (bit-exact) below the knee. `setRailVoltages`
-  / `setRailClampEnabled` to tune/disable. Values are estimates (datasheet ±12V@±15V/RL≥10k is
-  conservative; ~1.5V/rail typical at light load) — refine subjectively at Step 9. The hard
-  edge's aliasing is handled by Step-6 oversampling + ADAA (apply ADAA to this rail clip too).
+- **Output rail headroom IS modelled** on BOTH IC1_A (2026-06-16) and IC1_B (2026-06-17): the
+  JRC4559 is not rail-to-rail, so on ~8.2V/VREF~4.6V the output swings ≈ **+2.5V / −3.4V**
+  (bipolar, relative to VREF; positive rails first as bias sits above mid-supply). Implemented in
+  `Stage1.h`/`Stage2.h` (`railClip`): a faithful op-amp output-saturation curve — **dead linear
+  until ~0.35V before the rail, a short parabolic knee, then a HARD clamp at the rail** (a real
+  output transistor saturates hard, NOT a gentle tanh). This makes Hard mode's asymmetry correct
+  (soft diode clip one way, hard rail clip the other). Verified transparent (bit-exact) below the
+  knee. `setRailVoltages` / `setRailClampEnabled` to tune/disable.
+  **Rail value provenance (2026-06-17):** NO published Timmy bench measurement exists (web search
+  found only qualitative confirmation). Datasheet (NJM4559) gives ±13V typ swing on ±15V at RL≥2k
+  ⇒ ~2V headroom-from-rail at that load; the Timmy loads IC1 far lighter (≥25k) so real headroom
+  is ~1.2V, giving the +2.5/−3.4 estimate (nudged up from the earlier conservative +2.2/−3.1).
+  Still an estimate (±0.5V) — refine subjectively at Step 9; only a scope/SPICE would pin it.
 - This is an OUTPUT-STAGE approximation (does not re-close the feedback loop). For Soft/Medium
-  the diodes already bound node_D well inside the rails, so it only engages in Hard mode's
-  unclipped polarity and Linear at extreme drive. IC1_B (Stage 2) rails not yet modelled —
-  add if Step 7/9 shows it clipping at -12 dBu calibration.
+  the diodes already bound node_D well inside the rails, so on IC1_A it only engages in Hard
+  mode's unclipped polarity and Linear at extreme drive. **IC1_B (Stage 2) rails ARE now modelled
+  (2026-06-17):** measurement (`tests/Stage2_RailProbe`) showed node_J hitting ~6.2V on the
+  negative polarity in Hard mode (= 2× Stage 1's −rail, doubled by the +2 gain) — physically
+  impossible on 9V. Clamped with the same model at base rate; safe because that swing arrives as
+  an already-band-limited flat clipped top from Stage 1's oversampled clip, plus 1st-order ADAA.
+  This also corrects Hard mode being audibly louder than Soft/Medium.
 
 ---
 

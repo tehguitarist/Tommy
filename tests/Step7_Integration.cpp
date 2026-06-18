@@ -67,7 +67,7 @@ int main()
     {
         const double pk = runPeak (0.5, 0.95, 0.5, 0 /*Soft*/, 3, 0.5, fin);
         std::printf ("[driven] high drive, 0.5V in -> peak %.3f V  (finite=%d, bounded by rails)\n", pk, fin);
-        if (! fin || pk > 7.0) // Stage2 (x2) of rail-clamped Stage1 (<=3.1V) => <=~6.2V
+        if (! fin || pk > 3.3) // node_J is rail-clamped in Stage 2 to <= 3.1V (+ knee) on each polarity
             ++failures;
     }
 

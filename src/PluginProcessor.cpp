@@ -17,8 +17,9 @@ TommyAudioProcessor::TommyAudioProcessor()
     pClip = apvts.getRawParameterValue ("clipping_mode");
     pInTrim = apvts.getRawParameterValue ("input_trim");
     pOutTrim = apvts.getRawParameterValue ("output_trim");
-    pOversampling = apvts.getRawParameterValue ("oversampling");
-    pBypass = apvts.getRawParameterValue ("bypass");
+    pOversampling  = apvts.getRawParameterValue ("oversampling");
+    pRenderOs      = apvts.getRawParameterValue ("render_oversampling");
+    pBypass        = apvts.getRawParameterValue ("bypass");
 }
 
 TommyAudioProcessor::~TommyAudioProcessor() = default;
@@ -51,6 +52,9 @@ juce::AudioProcessorValueTreeState::ParameterLayout TommyAudioProcessor::createP
     params.push_back (std::make_unique<juce::AudioParameterChoice> ("oversampling", "Oversampling",
         juce::StringArray { "1x", "2x", "4x", "8x" }, 2));
 
+    params.push_back (std::make_unique<juce::AudioParameterChoice> ("render_oversampling", "Render Oversampling",
+        juce::StringArray { "1x", "2x", "4x", "8x" }, 3)); // default 8x for offline bouncing
+
     params.push_back (std::make_unique<juce::AudioParameterBool> ("bypass", "Bypass", false));
 
     return { params.begin(), params.end() };
@@ -65,6 +69,7 @@ void TommyAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
     for (auto& ch : dsp)
     {
         ch.prepare (sampleRate, samplesPerBlock, currentFactorLog2);
+        ch.setAdaaEnabled (true); // ADAA on both op-amp rail clips (dsp.md) — in addition to OS
         ch.reset();
     }
 
@@ -89,8 +94,16 @@ void TommyAudioProcessor::releaseResources()
 
 bool TommyAudioProcessor::isBusesLayoutSupported (const BusesLayout& layouts) const
 {
-    return layouts.getMainOutputChannelSet() == juce::AudioChannelSet::stereo()
-        && layouts.getMainInputChannelSet() == juce::AudioChannelSet::stereo();
+    const auto& in  = layouts.getMainInputChannelSet();
+    const auto& out = layouts.getMainOutputChannelSet();
+
+    if (in  != juce::AudioChannelSet::mono() && in  != juce::AudioChannelSet::stereo())
+        return false;
+    if (out != juce::AudioChannelSet::mono() && out != juce::AudioChannelSet::stereo())
+        return false;
+
+    // Allow mono→mono, mono→stereo, stereo→stereo. Not stereo→mono.
+    return in.size() <= out.size();
 }
 
 void TommyAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer&)
@@ -103,8 +116,10 @@ void TommyAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::
     for (int channel = getTotalNumInputChannels(); channel < getTotalNumOutputChannels(); ++channel)
         buffer.clear (channel, 0, numSamples);
 
-    // 1. Oversampling factor change (allocates in setFactor — see Step-7 RT-safety carry-forward).
-    const int wantFactor = (int) pOversampling->load();
+    // 1. Oversampling factor — choose realtime or render parameter depending on context.
+    const int wantFactor = isNonRealtime()
+        ? (pRenderOs != nullptr ? (int) pRenderOs->load() : 3)
+        : (int) pOversampling->load();
     if (wantFactor != currentFactorLog2)
     {
         currentFactorLog2 = wantFactor;
@@ -130,8 +145,12 @@ void TommyAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::
         ch.setControls (bassR, driveR, trebR, mode);
 
     // 3. Per channel: input trim + meter, run the WDF chain in double, crossfade bypass, out meter.
+    // Process only actual input channels; if mono-in/stereo-out we copy ch0 to ch1 afterward.
+    const int numInputCh = getMainBusNumInputChannels();
+    const int channelsToProcess = juce::jmin (numInputCh, 2);
+
     float inPeak[2] = { 0.0f, 0.0f }, outPeak[2] = { 0.0f, 0.0f };
-    for (int c = 0; c < numCh; ++c)
+    for (int c = 0; c < channelsToProcess; ++c)
     {
         auto* in = buffer.getWritePointer (c);
         auto* work = scratch.getWritePointer (c);
@@ -149,6 +168,17 @@ void TommyAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::
 
         dsp[c].processBlock (work, numSamples);
 
+        // Hard-gate sub-threshold DSP output to prevent inaudible WDF residuals leaking.
+        // If every sample is below ~-140 dBFS the whole block is zeroed; early-exit avoids
+        // checking every sample for a normally-active block.
+        {
+            bool hasSig = false;
+            for (int n = 0; n < numSamples && !hasSig; ++n)
+                hasSig = (work[n] * work[n] > 1e-14);
+            if (!hasSig)
+                std::fill (work, work + numSamples, 0.0);
+        }
+
         // Output makeup * volume * output trim, then crossfade against the dry input.
         auto outG = outputGain;
         auto mix = bypassMix;
@@ -162,6 +192,10 @@ void TommyAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::
         }
     }
 
+    // Mono-in / stereo-out: copy the processed mono channel to the second output channel.
+    if (numInputCh == 1 && numCh == 2)
+        buffer.copyFrom (1, 0, buffer, 0, 0, numSamples);
+
     // Mirror the smoothers' consumed state across channels by advancing once for real (above we
     // copied the smoothers per channel so each channel ramps identically from the same start).
     inputGain.skip (numSamples);
@@ -169,9 +203,9 @@ void TommyAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::
     bypassMix.skip (numSamples);
 
     inputLevelL.store (inPeak[0]);
-    inputLevelR.store (numCh > 1 ? inPeak[1] : inPeak[0]);
+    inputLevelR.store (channelsToProcess > 1 ? inPeak[1] : inPeak[0]);
     outputLevelL.store (outPeak[0]);
-    outputLevelR.store (numCh > 1 ? outPeak[1] : outPeak[0]);
+    outputLevelR.store (channelsToProcess > 1 ? outPeak[1] : outPeak[0]);
 }
 
 juce::AudioProcessorEditor* TommyAudioProcessor::createEditor()

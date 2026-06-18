@@ -83,8 +83,12 @@ public:
     // ~3V/rail conservative; ~1.5V/rail typical at light load). Expressed bipolar (relative to
     // VREF), positive peaks rail first because the ~4.6V bias sits above mid-supply. These are
     // estimates — refine by ear/measurement at Step 9 via setRailVoltages(). ---
-    static constexpr double kRailPosDefault = 2.2;  // +V from VREF before the upper rail
-    static constexpr double kRailNegDefault = 3.1;  // |V| from VREF before the lower rail
+    // Nudged 2026-06-17 from +2.2/-3.1 to +2.5/-3.4: datasheet gives ~2V headroom-from-rail at
+    // RL>=2k (NJM4559: +-13V typ swing on +-15V); the Timmy loads IC1 far lighter (>=25k) so real
+    // headroom is ~1.2V, putting the rails closer to the supply. No published Timmy measurement
+    // exists (only qualitative confirmation) — still an estimate, refine by ear at Step 9.
+    static constexpr double kRailPosDefault = 2.5;  // +V from VREF before the upper rail
+    static constexpr double kRailNegDefault = 3.4;  // |V| from VREF before the lower rail
     static constexpr double kRailKneeW = 0.35;      // knee half-width (V): linear until rail-W,
                                                     // parabolic knee, then HARD clamp at rail+W
 

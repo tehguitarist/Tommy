@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.15)
 
-project(Tommy VERSION 0.1.0)
+project(Tommy VERSION 0.2.1)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -17,12 +17,14 @@ juce_add_plugin(Tommy
     PLUGIN_CODE Tom1
     FORMATS AU
     PRODUCT_NAME "Tommy"
+    COPY_PLUGIN_AFTER_BUILD TRUE
 )
 
 target_sources(Tommy
     PRIVATE
         src/PluginProcessor.cpp
         src/PluginEditor.cpp
+        src/ui/TommyLookAndFeel.cpp
 )
 
 target_compile_definitions(Tommy
@@ -74,6 +76,18 @@ target_compile_definitions(Step6_Aliasing PRIVATE
     JUCE_WEB_BROWSER=0
     JUCE_STANDALONE_APPLICATION=1)
 target_link_libraries(Step6_Aliasing PRIVATE
+    chowdsp::chowdsp_wdf
+    juce::juce_dsp
+    juce::juce_recommended_config_flags)
+
+# Stage 2 rail probe (measurement, not pass/fail): peak node_J across the operating space.
+juce_add_console_app(Stage2_RailProbe PRODUCT_NAME "Stage2_RailProbe")
+target_sources(Stage2_RailProbe PRIVATE tests/Stage2_RailProbe.cpp)
+target_compile_definitions(Stage2_RailProbe PRIVATE
+    JUCE_USE_CURL=0
+    JUCE_WEB_BROWSER=0
+    JUCE_STANDALONE_APPLICATION=1)
+target_link_libraries(Stage2_RailProbe PRIVATE
     chowdsp::chowdsp_wdf
     juce::juce_dsp
     juce::juce_recommended_config_flags)

@@ -43,7 +43,14 @@ public:
     }
 
     void setFactor (int factorLog2) { clipper.setFactor (factorLog2); }
-    void setAdaaEnabled (bool e) { clipper.setAdaaEnabled (e); }
+
+    /** ADAA on both op-amp rail clips (Stage 1 inside the oversampler, Stage 2 at base rate). */
+    void setAdaaEnabled (bool e)
+    {
+        clipper.setAdaaEnabled (e);
+        stage2.setAdaaEnabled (e);
+    }
+
     double getLatencySamples() const { return clipper.getLatencySamples(); }
 
     /** Processes one channel block in place (values in volts). */

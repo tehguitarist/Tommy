@@ -163,21 +163,26 @@ int main()
     {
         std::printf ("\n[9V rails]\n");
 
-        // (a) Hard-mode unclipped polarity must hard-clamp AT the negative rail (-3.1 V),
-        //     not the ~-77 V the ideal op-amp produced. A real op-amp clips hard at the rail.
+        // Reference the model's own rail constants so the test tracks setRailVoltages() defaults.
+        const double railPos = Stage1::kRailPosDefault;  // +V from VREF
+        const double railNeg = -Stage1::kRailNegDefault; // -V from VREF
+
+        // (a) Hard-mode unclipped polarity must hard-clamp AT the negative rail (not the ~-77 V
+        //     the ideal op-amp produced). A real op-amp clips hard at the rail.
         const auto hard = measure (Stage1::ClipMode::Hard, 1000.0, 0.5, fs, bassR, 1.0e6);
-        std::printf ("  Hard min (hard-clamped at rail): %+.3f V (expect -3.10)\n", hard.min);
-        if (std::abs (hard.min - (-3.1)) > 0.05)
+        std::printf ("  Hard min (hard-clamped at rail): %+.3f V (expect %+.2f)\n", hard.min, railNeg);
+        if (std::abs (hard.min - railNeg) > 0.05)
         {
             std::fprintf (stderr, "FAIL: Hard unclipped polarity not hard-clamped at the rail\n");
             ++failures;
         }
 
-        // (b) Linear mode driven far past the rails must hard-clamp exactly at +2.2 / -3.1 V
+        // (b) Linear mode driven far past the rails must hard-clamp exactly at the rails
         //     (confirms a true hard limit, not a soft roll-off that keeps creeping up).
         const auto lin = measure (Stage1::ClipMode::Linear, 1000.0, 0.5, fs, bassR, 1.0e6);
-        std::printf ("  Linear max %+.3f (expect +2.20)  min %+.3f (expect -3.10)\n", lin.max, lin.min);
-        if (std::abs (lin.max - 2.2) > 0.05 || std::abs (lin.min - (-3.1)) > 0.05)
+        std::printf ("  Linear max %+.3f (expect %+.2f)  min %+.3f (expect %+.2f)\n",
+                     lin.max, railPos, lin.min, railNeg);
+        if (std::abs (lin.max - railPos) > 0.05 || std::abs (lin.min - railNeg) > 0.05)
         {
             std::fprintf (stderr, "FAIL: Linear output not hard-clamped exactly at the rails\n");
             ++failures;

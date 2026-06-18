@@ -1,0 +1,71 @@
+#pragma once
+
+#include <cmath>
+
+// Generic pot-taper and gain helpers for circuit-modelled pedal plugins.
+// The first three functions are universal; the rest are WORKED EXAMPLES showing how to map a
+// normalised APVTS parameter (0..1) to a WDF resistance/divider. Copy the pattern, not the
+// exact values — every circuit's pot wiring differs. See docs/calibration-and-gain-staging.md
+// for the hard-won lessons baked into these (especially the DRIVE floor note below).
+
+namespace pedal::taper
+{
+/** dB -> linear gain. */
+inline double dbToGain (double dB) { return std::pow (10.0, dB / 20.0); }
+
+/** Audio (log) taper approximation: R = Rmax * 10^(2x - 2), x in [0,1] => Rmax/100 .. Rmax.
+ *  NOTE THE 1% FLOOR: at x=0 this returns Rmax/100, NOT 0. Fine for small pots, but a TRAP for
+ *  large ones — see audioTaperR0 and driveResistanceExample below. Use for audio-taper rheostats. */
+inline double audioTaperR (double x, double rMax)
+{
+    if (x <= 0.0)
+        return rMax * 0.01;
+    if (x >= 1.0)
+        return rMax;
+    return rMax * std::pow (10.0, 2.0 * x - 2.0);
+}
+
+/** Audio taper anchored to 0 at minimum: same curve shape, but x=0 -> 0 ohm exactly.
+ *  USE THIS for any pot whose physical minimum is ~0 ohm AND whose Rmax is large enough that the
+ *  1% floor of audioTaperR injects an audible resistance. On a 1M feedback pot the 1% floor =
+ *  10k, which added ~7.7 dB of phantom minimum-gain in the reference build (the diodes/op-amp
+ *  then overdrove far too early). This was a real, hard-to-spot bug — prefer this for gain pots. */
+inline double audioTaperR0 (double x, double rMax)
+{
+    if (x <= 0.0)
+        return 0.0;
+    if (x >= 1.0)
+        return rMax;
+    return rMax * (std::pow (10.0, 2.0 * x - 2.0) - 0.01) / 0.99;
+}
+
+// ---------------------------------------------------------------------------------------------
+// WORKED EXAMPLES — adapt to your schematic. Direction (x vs 1-x) and Rmax come from the circuit.
+// ---------------------------------------------------------------------------------------------
+
+/** EXAMPLE: a gain/drive pot in an op-amp feedback leg (more R = more gain). Anchored to 0 at
+ *  min because it is a large (e.g. A1M) pot — DO NOT use the floored audioTaperR here. */
+inline double driveResistanceExample (double x) { return audioTaperR0 (x, 1.0e6); }
+
+/** EXAMPLE: a tone-CUT control wired as a rheostat (knob up = more cut = more series R).
+ *  Cut-only controls map x->R directly (x=0 = no cut). A pot wired as Ra || Rtotal: */
+inline double cutRheostatExample (double x)
+{
+    const double ra = audioTaperR (x, 50.0e3);
+    return (ra * 50.0e3) / (ra + 50.0e3); // ~0..25k
+}
+
+/** EXAMPLE: a passive output volume pot as a voltage divider (returns 0..1 gain).
+ *  Generic shape: split Rtotal into upper/lower arms by the (tapered) wiper fraction, optionally
+ *  with a fixed shaping resistor across one arm. Output = wiper / input.
+ *  A passive pot can only ATTENUATE: max rotation = unity passthrough, everything below < unity. */
+inline double volumeGainExample (double x)
+{
+    constexpr double rTotal = 25.0e3, rShape = 7.5e3; // rShape across the upper arm (optional)
+    const double frac = (x <= 0.0) ? 0.0 : std::pow (10.0, 2.0 * x - 2.0); // audio law 0.01..1
+    const double rLow = frac * rTotal;              // wiper -> GND
+    const double rUp = (1.0 - frac) * rTotal;       // top -> wiper
+    const double rUpPar = (rUp * rShape) / (rUp + rShape);
+    return rLow / (rUpPar + rLow);
+}
+} // namespace pedal::taper

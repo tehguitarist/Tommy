@@ -218,9 +218,12 @@ void TommyAudioProcessorEditor::timerCallback()
     outLevel = juce::jmax(audioProcessor.getOutputLevel(0), outLevel * decayPerFrame);
 
     // Clamp sub-threshold values to zero so the VU reads clean silence when no audio plays.
-    // DSP processing of silence produces denormals / tiny residuals that would otherwise
-    // light the lowest segment permanently. ~-66 dBFS floor is well below any real signal.
-    static constexpr float kNoiseFl = 5e-4f;
+    // At the unity volume setting output ≈ input, so the meter shows the source's idle noise
+    // floor (guitar hum + interface noise), which the pedal's gain makes visible on the lowest
+    // segment. ~-54 dBFS clears typical idle noise yet sits far below any real playing (even soft
+    // notes peak well above this), so nothing audible is masked. Raised from -66 dBFS after the
+    // output-makeup recalibration lifted the idle floor above the old threshold.
+    static constexpr float kNoiseFl = 2e-3f;
     if (inLevel  < kNoiseFl) inLevel  = 0.0f;
     if (outLevel < kNoiseFl) outLevel = 0.0f;
 

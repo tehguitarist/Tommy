@@ -3,7 +3,7 @@
 #include "TommyLookAndFeel.h"
 
 // 3-position toggle switch for the SW1 clipping mode.
-// Positions: 0 = Soft (top), 1 = Med (middle), 2 = Hard (bottom).
+// Positions: 0 = Asym (top, single diode), 1 = Open (middle, one pair), 2 = Sym (bottom, all diodes).
 // The body is a narrow (20px) toggle bar; labels sit 4px to its right.
 // The body+labels block is centred within the component.
 // Both mouseDown and mouseDrag update position so the lever can be dragged.
@@ -68,7 +68,7 @@ public:
         g.drawRoundedRectangle(leverX + 0.5f, leverY + 0.5f, leverW - 1.0f, leverH - 1.0f, 3.0f * sc, 1.0f);
 
         // Labels to the right of the body
-        static const char* const labels[] = { "Soft", "Med", "Hard" };
+        static const char* const labels[] = { "Asym", "Open", "Sym" };
         g.setFont(juce::Font(juce::FontOptions(7.0f * sc)));
 
         for (int n = 0; n < 3; ++n)

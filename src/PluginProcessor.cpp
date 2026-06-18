@@ -40,8 +40,11 @@ juce::AudioProcessorValueTreeState::ParameterLayout TommyAudioProcessor::createP
     params.push_back (std::make_unique<juce::AudioParameterFloat> ("volume", "Volume",
         juce::NormalisableRange<float> (0.0f, 1.0f), 0.5f));
 
+    // Choices ordered to match physical switch (top→bottom): Asym / Open / Sym.
+    // Index 0 = top lever (asymmetric, single diode), 1 = middle (high-headroom symmetric),
+    // 2 = bottom (heavy symmetric saturation, all diodes). See TaperUtils mode mapping.
     params.push_back (std::make_unique<juce::AudioParameterChoice> ("clipping_mode", "Clipping",
-        juce::StringArray { "Soft", "Medium", "Hard" }, 0));
+        juce::StringArray { "Asymmetric", "Open", "Symmetric" }, 1)); // default: middle (Open)
 
     params.push_back (std::make_unique<juce::AudioParameterFloat> ("input_trim", "Input Trim",
         juce::NormalisableRange<float> (-12.0f, 12.0f), 0.0f));
@@ -133,10 +136,20 @@ void TommyAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::
     const auto driveR = tommy::taper::driveResistance (pDrive->load());
     const auto trebR = tommy::taper::trebleResistance (pTreble->load());
     const auto volGain = tommy::taper::volumeGain (pVolume->load());
-    const auto mode = static_cast<tommy::dsp::Stage1::ClipMode> (1 + (int) pClip->load()); // 0/1/2 -> Soft/Medium/Hard
+    // Physical switch top→bottom: Asym (single diode) / Open (one pair) / Sym (all diodes).
+    // pClip index 0/1/2 maps to ClipMode Hard/Medium/Soft respectively.
+    static constexpr tommy::dsp::Stage1::ClipMode kClipModes[] = {
+        tommy::dsp::Stage1::ClipMode::Hard,   // 0 = top = asymmetric, single diode D1
+        tommy::dsp::Stage1::ClipMode::Medium, // 1 = middle = high-headroom symmetric, one pair
+        tommy::dsp::Stage1::ClipMode::Soft,   // 2 = bottom = heavy symmetric, all four diodes
+    };
+    const auto mode = kClipModes[juce::jlimit (0, 2, (int) pClip->load())];
 
     inputGain.setTargetValue ((float) tommy::taper::dbToGain (pInTrim->load()));
-    outputGain.setTargetValue ((float) (kOutputMakeup * volGain * tommy::taper::dbToGain (pOutTrim->load())));
+    // 1/kInputRef converts the circuit's volt-domain output back to DAW full-scale; it cancels the
+    // kInputRef applied at the input for the linear path, leaving kOutputMakeup as the level trim.
+    outputGain.setTargetValue (
+        (float) (kOutputMakeup * volGain * tommy::taper::dbToGain (pOutTrim->load()) / kInputRef));
     const bool wantBypass = pBypass->load() > 0.5f;
     bypassMix.setTargetValue (wantBypass ? 1.0f : 0.0f);
     bypassed.store (wantBypass);
@@ -156,13 +169,15 @@ void TommyAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::
         auto* work = scratch.getWritePointer (c);
 
         // Input trim + dry copy (for bypass crossfade) + input metering.
+        // The meter and bypass dry path stay in DAW (full-scale) domain; only the signal handed
+        // to the WDF chain is scaled to real volts by kInputRef (undone by 1/kInputRef at output).
         auto inG = inputGain;
         for (int i = 0; i < numSamples; ++i)
         {
             const float g = inG.getNextValue();
             const float dry = in[i];
             const float wet = dry * g;
-            work[i] = (double) wet;
+            work[i] = (double) wet * kInputRef;
             inPeak[c] = juce::jmax (inPeak[c], std::abs (wet));
         }
 

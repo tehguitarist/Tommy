@@ -47,9 +47,25 @@ public:
 private:
     static juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout();
 
-    // float input is treated as volts at the pedal input; this scales the multi-volt internal
-    // output back toward unity. Tunable at Step 9 with the VU meters / -12 dBu calibration.
-    static constexpr float kOutputMakeup = 0.25f;
+    // Input reference: volts-per-full-scale. Anchors the DAW float to real guitar volts so the
+    // nonlinear stages (diodes ~0.3-0.6V, op-amp rails +-2.5/3.4V from VREF) clip at the
+    // physically correct point relative to the player's dynamics. Calibrated 2026-06-18 from a
+    // measured humbucker peak: 0.7 V at -13.4 dBFS (=0.214 float) => 0.7/0.214 ~= 3.27 V/FS
+    // (implies the interface Hi-Z input maps ~3.27 V peak to 0 dBFS at 0 gain). The signal is
+    // scaled UP by this entering the WDF chain and DOWN by 1/kInputRef leaving it, so K_in
+    // cancels in the linear path — it changes ONLY where clipping engages, not clean-signal level.
+    static constexpr float kInputRef = 3.27f;
+
+    // Output makeup (dimensionless, applied after 1/kInputRef). The physically-honest value is 1.0
+    // (output voltage measured at the same volts-per-full-scale reference as the input); set to 0.9
+    // as the closest-to-real value that still guarantees no output clipping. Ceiling check: Stage 2's
+    // worst-case rail is 3.4 V, so the loudest possible output (full drive + full volume) peaks at
+    // 3.4 * 0.9 / kInputRef ≈ -0.6 dBFS — just under 0 dBFS. This is a deliberate ~1 dB headroom pad,
+    // NOT a calibration crutch: with the input load anchored (kInputRef) the circuit sets unity on
+    // its own (~1 o'clock at min drive). 1.0 would be exact but can tick ~+0.3 dBFS at the extreme
+    // corner. Re-calibrated 2026-06-18 alongside the DRIVE taper fix (which dropped min-drive gain
+    // 7.7 dB, 8.96x→3.71x — without it this makeup would sit much lower). Tune by ear within 0.8-1.0.
+    static constexpr float kOutputMakeup = 0.9f;
 
     std::array<tommy::dsp::TommyDSP, 2> dsp;
     juce::AudioBuffer<double> scratch; // double work buffer (WDF is double)

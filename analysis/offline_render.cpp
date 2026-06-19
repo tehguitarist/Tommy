@@ -35,6 +35,9 @@ int main (int argc, char** argv)
     const int factorLog2 = std::atoi (argv[8]);
     const double sr = (argc > 9) ? std::atof (argv[9]) : 48000.0;
     const double kInputRef = (argc > 10) ? std::atof (argv[10]) : kInputRefDefault;
+    // Optional treble taper override for fitting: TREB_R = coeff * trebX^exp (argv[11], argv[12]).
+    const double trebCoeff = (argc > 11) ? std::atof (argv[11]) : -1.0;
+    const double trebExp = (argc > 12) ? std::atof (argv[12]) : 1.43;
 
     static const Stage1::ClipMode modes[] = { Stage1::ClipMode::Hard, Stage1::ClipMode::Medium,
                                               Stage1::ClipMode::Soft };
@@ -52,8 +55,9 @@ int main (int argc, char** argv)
     constexpr int blk = 512;
     tommy::dsp::TommyDSP dsp;
     dsp.prepare (sr, blk, factorLog2);
-    dsp.setControls (tp::bassResistance (bassX), tp::driveResistance (driveX),
-                     tp::trebleResistance (trebX), mode);
+    const double trebR = (trebCoeff > 0.0) ? trebCoeff * std::pow (trebX, trebExp)
+                                           : tp::trebleResistance (trebX);
+    dsp.setControls (tp::bassResistance (bassX), tp::driveResistance (driveX), trebR, mode);
     dsp.setAdaaEnabled (true);
 
     const double outGain = kOutputMakeup * tp::volumeGain (volX) / kInputRef;

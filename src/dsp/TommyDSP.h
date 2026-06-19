@@ -44,6 +44,9 @@ public:
 
     void setFactor (int factorLog2) { clipper.setFactor (factorLog2); }
 
+    /** Tune Asymmetric-mode diode counts per polarity (for calibration). */
+    void setAsymCounts (double nPos, double nNeg) { clipper.setAsymCounts (nPos, nNeg); }
+
     /** ADAA on both op-amp rail clips (Stage 1 inside the oversampler, Stage 2 at base rate). */
     void setAdaaEnabled (bool e)
     {

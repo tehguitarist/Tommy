@@ -35,6 +35,67 @@ struct AccurateOmega
 };
 
 /**
+ * Asymmetric antiparallel diode pair (root WDF). Like chowdsp DiodePairT's "Good" path (Werner
+ * eqn 18) but with a DIFFERENT effective thermal voltage per polarity — i.e. a different number of
+ * series diodes each way (n_pos forward, n_neg reverse). Models the SW1 "Asymmetric" position,
+ * which the NAM captures show is a MILD 2-sided asymmetric clip (odd-dominant + moderate even
+ * harmonics), NOT the one-sided single diode circuit.md assumed. Honours the OmegaProvider
+ * (AccurateOmega), so no omega4 distortion floor.
+ */
+template <typename T, typename Next, typename OmegaProvider>
+class AsymDiodePairT final : public chowdsp::wdft::RootWDF
+{
+public:
+    AsymDiodePairT (Next& n, T is, T vt, T nPos, T nNeg) : next (n)
+    {
+        n.connectToParent (this);
+        setParams (is, vt, nPos, nNeg);
+    }
+
+    /** nPos/nNeg = effective series-diode count (incl. ideality) for each polarity. */
+    void setParams (T is, T vt, T nPos, T nNeg)
+    {
+        Is = is;
+        VtP = nPos * vt;
+        VtN = nNeg * vt;
+        calcImpedance();
+    }
+
+    void calcImpedance() override
+    {
+        using std::log;
+        R_Is = next.wdf.R * Is;
+        oneOverVtP = (T) 1 / VtP;
+        R_Is_overVtP = R_Is * oneOverVtP;
+        logP = log (R_Is_overVtP);
+        oneOverVtN = (T) 1 / VtN;
+        R_Is_overVtN = R_Is * oneOverVtN;
+        logN = log (R_Is_overVtN);
+    }
+
+    inline void incident (T x) noexcept { wdf.a = x; }
+
+    inline T reflected() noexcept
+    {
+        // Werner eqn (18), per-polarity Vt: a>=0 uses the n_pos branch, a<0 the n_neg branch.
+        if (wdf.a >= (T) 0)
+            wdf.b = wdf.a + (T) 2 * (R_Is - VtP * OmegaProvider::omega (logP + wdf.a * oneOverVtP + R_Is_overVtP));
+        else
+            wdf.b = wdf.a - (T) 2 * (R_Is - VtN * OmegaProvider::omega (logN - wdf.a * oneOverVtN + R_Is_overVtN));
+        return wdf.b;
+    }
+
+    chowdsp::wdft::WDFMembers<T> wdf;
+
+private:
+    T Is = 1.0e-9, VtP = 1.0, VtN = 1.0;
+    T oneOverVtP = 1.0, R_Is_overVtP = 0.0, logP = 0.0;
+    T oneOverVtN = 1.0, R_Is_overVtN = 0.0, logN = 0.0;
+    T R_Is = 0.0;
+    const Next& next;
+};
+
+/**
  * Stage 1 — IC1_A drive stage (NON-INVERTING op-amp) with SW1 clipping in the feedback loop.
  *
  * Verified against `updated schematic - timmy.png` (2026-06-16). Signal enters the op-amp (+)
@@ -92,6 +153,12 @@ public:
     static constexpr double kRailKneeW = 0.35;      // knee half-width (V): linear until rail-W,
                                                     // parabolic knee, then HARD clamp at rail+W
 
+    // SW1 "Asymmetric" position: effective series-diode count each polarity (× ideality kN).
+    // The captures show a MILD 2-sided asymmetry (not circuit.md's one-sided single diode) —
+    // tuned to match the measured H2/H3 balance at the "switch up" setting.
+    static constexpr double kAsymNpos = 1.0; // forward branch: 1 diode
+    static constexpr double kAsymNneg = 2.0; // reverse branch: 2 diodes
+
     Stage1() = default;
 
     void prepare (double sampleRate)
@@ -100,7 +167,7 @@ public:
         c4.prepare (sampleRate);
         c1.prepare (sampleRate);
         c1P.prepare (sampleRate);
-        c1S.prepare (sampleRate);
+        c1A.prepare (sampleRate);
         reset();
     }
 
@@ -110,7 +177,7 @@ public:
         c4.reset();
         c1.reset();
         c1P.reset();
-        c1S.reset();
+        c1A.reset();
         railPrevX = 0.0;
     }
 
@@ -130,7 +197,13 @@ public:
         // Feedback series resistance R7 + DRIVE for the Norton-source diode sub-trees.
         const double rfb = 3.3e3 + driveResistanceOhms;
         nortonP.setResistanceValue (rfb);
-        nortonS.setResistanceValue (rfb);
+        nortonA.setResistanceValue (rfb);
+    }
+
+    /** Tune the Asymmetric-mode diode counts (effective series diodes per polarity, × ideality). */
+    void setAsymCounts (double nPos, double nNeg)
+    {
+        diodeA.setParams (kIs, kVt, nPos * kN, nNeg * kN);
     }
 
     void setMode (ClipMode m)
@@ -185,10 +258,10 @@ public:
                 break;
 
             case ClipMode::Hard:
-                nortonS.setCurrent (ig);
-                diodeS.incident (zfS.reflected());
-                zfS.incident (diodeS.reflected());
-                vf = chowdsp::wdft::voltage<double> (c1S);
+                nortonA.setCurrent (ig);
+                diodeA.incident (zfA.reflected());
+                zfA.incident (diodeA.reflected());
+                vf = chowdsp::wdft::voltage<double> (c1A);
                 break;
         }
 
@@ -310,10 +383,12 @@ private:
     // the eqn-18 antiparallel-pair reflection is accurate, removing the omega4 distortion floor.
     chowdsp::wdft::DiodePairT<double, decltype (zfP), chowdsp::wdft::DiodeQuality::Good, AccurateOmega> diodePair { zfP, kIs, kVt, kN };
 
-    // --- Single-diode feedback (mode Hard): Norton(R7+DRIVE) || C1, single diode root ---
-    chowdsp::wdft::ResistiveCurrentSourceT<double> nortonS { 503.3e3 };
-    Cap c1S { 100.0e-12 };
-    Parallel<decltype (nortonS), decltype (c1S)> zfS { nortonS, c1S };
-    chowdsp::wdft::DiodeT<double, decltype (zfS), chowdsp::wdft::DiodeQuality::Best, AccurateOmega> diodeS { zfS, kIs, kVt, kN };
+    // --- Asymmetric-pair feedback (mode Hard/"Asymmetric"): Norton(R7+DRIVE) || C1, asym pair root.
+    // Mild 2-sided asymmetric clip (n_pos vs n_neg diodes) — matches the captures' odd-dominant +
+    // moderate-even profile, unlike the old single diode (one-sided, strong even). ---
+    chowdsp::wdft::ResistiveCurrentSourceT<double> nortonA { 503.3e3 };
+    Cap c1A { 100.0e-12 };
+    Parallel<decltype (nortonA), decltype (c1A)> zfA { nortonA, c1A };
+    AsymDiodePairT<double, decltype (zfA), AccurateOmega> diodeA { zfA, kIs, kVt, kAsymNpos * kN, kAsymNneg * kN };
 };
 } // namespace tommy::dsp

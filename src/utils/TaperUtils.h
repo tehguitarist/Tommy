@@ -53,11 +53,19 @@ inline double bassResistance (double x)
 }
 
 /** DRIVE knob up => more gain => LARGER feedback resistance. Rmax = 1M (A1M pot).
- *  Anchored to 0Ω at minimum: a real A1M pot reaches ~0Ω fully CCW, but the generic audioTaperR
- *  floors at 1% of max = 10kΩ here — enough feedback to add ~7.7 dB of phantom minimum-drive gain
- *  (measured: 8.96x vs 3.71x at min drive), making the pedal overdrive far too early. This shifts
- *  the audio-taper curve so x=0 -> 0Ω while preserving its shape in the usable range (x=1 -> 1M). */
-inline double driveResistance (double x) { return audioTaperR0 (x, 1.0e6); }
+ *  TAPER (corrected 2026-06-19): like treble/bass, the 10^(2x-2) audio approximation was too
+ *  aggressive — it under-drove the mid of the sweep, so the plugin clipped far less than the real
+ *  pedal there (THD 10.6% vs 16.6% at drive 10:30). Fitting THD-vs-drive to the gain-sweep
+ *  captures gives a gentler power law 1e6 * x^2.2, which matches mid-drive THD within ~1% (clean
+ *  stays clean; full drive = 1M unchanged). (Drive's exponent ~2.2 > treble/bass ~1.43 — the A1M
+ *  pot's taper differs from the A50k tone pots.) NOTE: at full drive the plugin's THD caps ~3-4%
+ *  below the real pedal (clipping-character ceiling, not gain — see project notes). */
+inline double driveResistance (double x)
+{
+    if (x <= 0.0)
+        return 0.0;
+    return 1.0e6 * std::pow (x, 2.2);
+}
 
 /** TREBLE knob up (x->1) => MORE cut (darker). TREB rheostat feeds the R5(1k)/C5(10n) low-pass;
  *  more series R => lower corner => more HF cut. x=0: R=0 => corner ~15.9 kHz (no cut).

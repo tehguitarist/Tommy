@@ -31,15 +31,17 @@ inline double audioTaperR0 (double x, double rMax)
 }
 
 // --- Control-to-WDF mappings. ---
-// BASS and TREBLE are CUT-only controls (confirmed from real pedal, 2026-06-18):
-//   Knob at 0 (CCW) = natural circuit state, no additional cut.
-//   Knob at max (CW) = maximum cut. Neither knob ever boosts above its CCW reference.
+// BASS and TREBLE are CUT controls with the knob direction CORRECTED 2026-06-19 from NAM captures
+// of the (MXR) Timmy: knob fully CW (x=1, "5 o'clock") = NO cut = full band; turning CCW (toward
+// x=0, "7 o'clock") progressively cuts. (The earlier "x=0 = no cut" was backwards — the swept
+// captures show treble swinging -10.7 dB@noon -> +9.9 dB@max at 8 kHz, i.e. CW = brighter.)
+// So both controls take (1 - x): the cut increases as the knob is turned down.
 // DRIVE and VOLUME behave conventionally (up = more).
 
-/** BASS knob up => bass CUT => LARGER gain-set resistance (less C4 path to AC ground).
- *  At CCW (x=0): ~500Ω → C4 (1µF) strongly shunts node_X → maximum inherent bass character.
- *  At CW (x=1): 50kΩ → C4 path largely blocked → relative bass cut. Rmax = 50k (A50k). */
-inline double bassResistance (double x) { return audioTaperR (x, 50.0e3); }
+/** BASS knob up (CW) => MORE low end => SMALLER gain-set resistance (more C4 path to AC ground).
+ *  At CW (x=1): ~0Ω → C4 (1µF) strongly shunts node_X → full low-frequency gain (no cut).
+ *  At CCW (x=0): 50kΩ → C4 path largely blocked → maximum bass cut. Rmax = 50k (A50k). */
+inline double bassResistance (double x) { return audioTaperR0 (1.0 - x, 50.0e3); }
 
 /** DRIVE knob up => more gain => LARGER feedback resistance. Rmax = 1M (A1M pot).
  *  Anchored to 0Ω at minimum: a real A1M pot reaches ~0Ω fully CCW, but the generic audioTaperR
@@ -48,17 +50,21 @@ inline double bassResistance (double x) { return audioTaperR (x, 50.0e3); }
  *  the audio-taper curve so x=0 -> 0Ω while preserving its shape in the usable range (x=1 -> 1M). */
 inline double driveResistance (double x) { return audioTaperR0 (x, 1.0e6); }
 
-/** TREBLE knob up => treble CUT => LARGER series resistance in the TREB/R5/C5 low-pass.
- *  TREB is a rheostat wired as Ra || 50k (wiper jumpered to pin 3, circuit.md).
- *  At CCW (x=0): Ra=0Ω → effective series R 0 → cut corner ~15.9 kHz (negligible cut).
- *  At CW (x=1): Ra=50kΩ → effective series R ~25kΩ → cut corner ~600 Hz (heavy cut).
- *  Uses audioTaperR0 (anchored to 0 at min): the generic 1% floor left ~500Ω in series even at
- *  CCW, dropping the min-treble corner to ~10.6 kHz — ~3 dB too dark at 8 kHz vs the real pedal
- *  (NAM A/B, 2026-06-19). A real pot reaches ~0Ω fully CCW. (Same floor trap as the DRIVE pot.) */
+/** TREBLE knob up (CW) => LESS cut (brighter). TREB is a rheostat (wiper jumpered to pin 3)
+ *  feeding the R5/C5 low-pass.
+ *  At CW (x=1): R=0Ω → cut corner ~15.9 kHz (no cut, full HF).
+ *  At CCW (x=0): R=max → cut corner ~hundreds of Hz (heavy cut).
+ *  Takes (1 - x) so cut deepens as the knob turns down; audioTaperR0 anchors the no-cut (CW)
+ *  end to 0Ω. RANGE empirically fit to the MXR-Timmy NAM captures (2026-06-19): the schematic's
+ *  50k gave far too shallow a cut (noon was +3 dB@8kHz vs the captured -10.7 dB). A ~250k range
+ *  puts the noon corner at ~730 Hz, matching the captures (max stays bright; mids slightly
+ *  under-cut due to the audio-taper shape). MXR values differ from the original schematic — refine
+ *  with a clean single-control treble sweep when a pedal is available. */
 inline double trebleResistance (double x)
 {
-    const double ra = audioTaperR0 (x, 50.0e3);
-    return (ra * 50.0e3) / (ra + 50.0e3); // ~0..25k
+    constexpr double rRange = 250.0e3; // empirical (MXR); schematic A50k was too little cut
+    const double ra = audioTaperR0 (1.0 - x, rRange);
+    return (ra * rRange) / (ra + rRange); // 0 .. ~rRange/2
 }
 
 /** VOLUME divider gain (A25K with R11 7k5 across the upper section). x = rotation 0..1.

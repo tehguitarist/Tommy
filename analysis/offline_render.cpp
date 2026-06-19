@@ -38,6 +38,9 @@ int main (int argc, char** argv)
     // Optional treble taper override for fitting: TREB_R = coeff * trebX^exp (argv[11], argv[12]).
     const double trebCoeff = (argc > 11) ? std::atof (argv[11]) : -1.0;
     const double trebExp = (argc > 12) ? std::atof (argv[12]) : 1.43;
+    // Optional bass taper override: BASS_R = coeff * bassX^exp (argv[13], argv[14]).
+    const double bassCoeff = (argc > 13) ? std::atof (argv[13]) : -1.0;
+    const double bassExp = (argc > 14) ? std::atof (argv[14]) : 1.43;
 
     static const Stage1::ClipMode modes[] = { Stage1::ClipMode::Hard, Stage1::ClipMode::Medium,
                                               Stage1::ClipMode::Soft };
@@ -57,7 +60,9 @@ int main (int argc, char** argv)
     dsp.prepare (sr, blk, factorLog2);
     const double trebR = (trebCoeff > 0.0) ? trebCoeff * std::pow (trebX, trebExp)
                                            : tp::trebleResistance (trebX);
-    dsp.setControls (tp::bassResistance (bassX), tp::driveResistance (driveX), trebR, mode);
+    const double bassR = (bassCoeff > 0.0) ? bassCoeff * std::pow (bassX, bassExp)
+                                           : tp::bassResistance (bassX);
+    dsp.setControls (bassR, tp::driveResistance (driveX), trebR, mode);
     dsp.setAdaaEnabled (true);
 
     const double outGain = kOutputMakeup * tp::volumeGain (volX) / kInputRef;

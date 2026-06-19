@@ -104,6 +104,30 @@ The full-drive end is unchanged; only the bottom of the sweep is corrected.
 **General rule:** whenever a pot's physical minimum is ~0 Ω, verify your taper actually returns ~0
 there. Print `taper(0.0)` and sanity-check it against the schematic.
 
+## 3b. The audio-taper APPROXIMATION is too aggressive (the bigger taper bug)
+
+Separate from the floor: the `10^(2x-2)` audio approximation itself is **too steep**. It puts only
+**~10% of the pot resistance at the midpoint**, where a real audio pot sits nearer **~35-40%**. For
+tone controls (which set audible corner frequencies) this makes the control far too shallow —
+e.g. the reference build's treble cut was ~+3 dB at noon where the real pedal was **−10.7 dB**.
+
+The fix is **not** to inflate the pot value (that's an artificial hack and over-darkens the
+extremes). Instead **fit the taper from captures**: render a clean low-level sweep at several knob
+positions, extract the corner (`R = 1/(2π·fc·C) − Rseries`) vs knob, and fit. The reference build
+landed on a clean **power law `R ≈ Rmax · x^1.43` with Rmax ≈ the SCHEMATIC pot value** — the
+pot/cap/topology were right, only the taper *curve* was wrong. (p≈1.4 is a good audio-pot start;
+p=1 is linear.) See `powerLawTaper` in `TaperUtils.h`.
+
+This was found by A/B-ing offline renders (the real DSP chain) against pedal captures and fitting
+in the *render* (a 1st-order analytical estimate was ~2 dB off because of interacting stages like
+an HF feedback cap). **Cross-check the fit against more than one capture batch** — in the reference
+build one batch was internally inconsistent (non-monotonic) and would have misled the fit.
+
+**Caveat — tone pots in a feedback gain-set leg are coupled to gain:** if a tone control lives in an
+op-amp feedback/gain-set network (not a passive interstage), changing its taper also changes that
+stage's gain, which shifts the level/clipping calibration. Re-verify levels after retapering such a
+control.
+
 ---
 
 ## 4. Output load: almost never worth modelling

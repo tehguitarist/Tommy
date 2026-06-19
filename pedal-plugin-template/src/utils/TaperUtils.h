@@ -39,6 +39,21 @@ inline double audioTaperR0 (double x, double rMax)
     return rMax * (std::pow (10.0, 2.0 * x - 2.0) - 0.01) / 0.99;
 }
 
+/** Power-law taper: R = rMax * x^p.  ** Often the BEST model for a real audio pot. **
+ *  The 10^(2x-2) audio approximation above is frequently TOO AGGRESSIVE — it puts only ~10% of R
+ *  at the midpoint, where a real audio pot sits nearer ~35-40%. In the reference build this made
+ *  the tone controls (which set audible corner frequencies) far too shallow. Fitting the measured
+ *  corner-vs-knob from pedal captures gave a clean power law with p~1.4 and rMax ~= the SCHEMATIC
+ *  pot value (the pot/cap were right — only the taper CURVE was wrong). When you have captures,
+ *  fit p and rMax to them (see docs/calibration-and-gain-staging.md); p~1.4 is a good starting
+ *  point for an "audio" pot, p=1 is linear. */
+inline double powerLawTaper (double x, double rMax, double p = 1.43)
+{
+    if (x <= 0.0)
+        return 0.0;
+    return rMax * std::pow (x, p);
+}
+
 // ---------------------------------------------------------------------------------------------
 // WORKED EXAMPLES — adapt to your schematic. Direction (x vs 1-x) and Rmax come from the circuit.
 // ---------------------------------------------------------------------------------------------
@@ -47,13 +62,10 @@ inline double audioTaperR0 (double x, double rMax)
  *  min because it is a large (e.g. A1M) pot — DO NOT use the floored audioTaperR here. */
 inline double driveResistanceExample (double x) { return audioTaperR0 (x, 1.0e6); }
 
-/** EXAMPLE: a tone-CUT control wired as a rheostat (knob up = more cut = more series R).
- *  Cut-only controls map x->R directly (x=0 = no cut). A pot wired as Ra || Rtotal: */
-inline double cutRheostatExample (double x)
-{
-    const double ra = audioTaperR (x, 50.0e3);
-    return (ra * 50.0e3) / (ra + 50.0e3); // ~0..25k
-}
+/** EXAMPLE: a tone-CUT control (knob up = more cut). Cut-only controls map x->R directly
+ *  (x=0 = no cut). Prefer the power-law taper fit to captures over the audio approximation — the
+ *  latter under-cuts badly. Reference build used ~50k * x^1.43 (schematic pot value, fitted curve): */
+inline double cutControlExample (double x) { return powerLawTaper (x, 50.0e3, 1.43); }
 
 /** EXAMPLE: a passive output volume pot as a voltage divider (returns 0..1 gain).
  *  Generic shape: split Rtotal into upper/lower arms by the (tapered) wiper fraction, optionally

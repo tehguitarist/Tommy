@@ -38,9 +38,19 @@ inline double audioTaperR0 (double x, double rMax)
 // not the direction.) DRIVE and VOLUME behave conventionally (up = more).
 
 /** BASS knob up => bass CUT => LARGER gain-set resistance (less C4 path to AC ground).
- *  At CCW (x=0): ~500Ω → C4 (1µF) strongly shunts node_X → maximum inherent bass (no cut).
- *  At CW (x=1): 50kΩ → C4 path largely blocked → maximum bass cut. Rmax = 50k (A50k). */
-inline double bassResistance (double x) { return audioTaperR (x, 50.0e3); }
+ *  x=0: ~0Ω => C4 strongly shunts node_X => full low end (no cut). x=1: ~50kΩ => max bass cut.
+ *  TAPER: same correction as treble (2026-06-19). The audio approximation 10^(2x-2) gave too
+ *  little resistance, leaving +1.5..+2.9 dB too much bass vs the captures (bass boost H(60)-H(500)).
+ *  The gentler measured power law 50k * x^1.43 (schematic A50k pot) matches the captured bass to
+ *  within ~0.5 dB at mid settings. NOTE: bass sits in Stage 1's gain-set leg, so this also slightly
+ *  lowers LF gain at bass-noon — re-check overall level by ear (midband-anchored calibration held
+ *  in analysis, but confirm). */
+inline double bassResistance (double x)
+{
+    if (x <= 0.0)
+        return 0.0;
+    return 50.0e3 * std::pow (x, 1.43);
+}
 
 /** DRIVE knob up => more gain => LARGER feedback resistance. Rmax = 1M (A1M pot).
  *  Anchored to 0Ω at minimum: a real A1M pot reaches ~0Ω fully CCW, but the generic audioTaperR

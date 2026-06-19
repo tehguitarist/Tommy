@@ -94,6 +94,11 @@ pair's `Good` path both honour the provider. Verify with an audible-band aliasin
 - Honour the schematic's taper (audio/log vs linear). Build kits often substitute linear for cost —
   do NOT follow the kit, follow the schematic.
 - See `utils/TaperUtils.h` and calibration doc §3 for the **audio-taper floor trap** on large pots.
+- **The `10^(2x-2)` audio approximation is too aggressive** (only ~10% R at midpoint vs ~35-40% for
+  a real audio pot) — it makes tone controls far too shallow. Prefer fitting a **power-law taper**
+  (`R = Rmax * x^p`, p≈1.4) to captures, with Rmax ≈ the schematic pot value. See calibration
+  doc §3b. Tone pots inside a feedback gain-set leg are coupled to gain — re-check levels after
+  retapering them.
 
 ## Signal calibration
 

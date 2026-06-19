@@ -7,3 +7,8 @@ Builds/
 JuceLibraryCode/
 .idea/
 .vscode/
+
+# analysis render WAVs (large, local only)
+analysis/*.wav
+analysis/**/*.wav
+__pycache__/

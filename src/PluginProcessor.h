@@ -48,13 +48,18 @@ private:
     static juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout();
 
     // Input reference: volts-per-full-scale. Anchors the DAW float to real guitar volts so the
-    // nonlinear stages (diodes ~0.3-0.6V, op-amp rails +-2.5/3.4V from VREF) clip at the
-    // physically correct point relative to the player's dynamics. Calibrated 2026-06-18 from a
-    // measured humbucker peak: 0.7 V at -13.4 dBFS (=0.214 float) => 0.7/0.214 ~= 3.27 V/FS
-    // (implies the interface Hi-Z input maps ~3.27 V peak to 0 dBFS at 0 gain). The signal is
-    // scaled UP by this entering the WDF chain and DOWN by 1/kInputRef leaving it, so K_in
-    // cancels in the linear path — it changes ONLY where clipping engages, not clean-signal level.
-    static constexpr float kInputRef = 3.27f;
+    // nonlinear stages (diodes ~0.3-0.6V, op-amp rails) clip at the physically correct point.
+    // Scaled UP entering the WDF chain and DOWN by 1/kInputRef leaving it, so it cancels in the
+    // linear path — it changes ONLY where clipping engages, not the clean-signal level/unity.
+    //
+    // RE-CALIBRATED 2026-06-19 from NAM captures of the real pedal (analysis/): the earlier 3.27
+    // (from a 0.7V@-13.4dBFS guitar reading) drove the clipper ~9 dB too hot — the real pedal is
+    // CLEAN at min drive up to -6 dBFS (0.1% THD) where 3.27 was already clipping (3.3% THD) and
+    // ~4.6 dB compressed. Sweeping against the NAM level/THD curves (analysis/sweep_kinput.py)
+    // fits ~1.0-1.5; 1.2 matches Open/Symmetric output to within ~1 dB across the drive range and
+    // also collapses the apparent mid-EQ error (which was over-compression, not tone). NOTE: this
+    // matches the NAM capture level — verify by ear with the guitar; nudge 1.0-1.5 to taste.
+    static constexpr float kInputRef = 1.2f;
 
     // Output makeup (dimensionless, applied after 1/kInputRef). The physically-honest value is 1.0
     // (output voltage measured at the same volts-per-full-scale reference as the input); set to 0.9

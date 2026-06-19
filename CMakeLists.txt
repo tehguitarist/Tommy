@@ -92,6 +92,18 @@ target_link_libraries(Stage2_RailProbe PRIVATE
     juce::juce_dsp
     juce::juce_recommended_config_flags)
 
+# Offline renderer for A/B analysis vs NAM captures (uses TommyDSP -> juce_dsp).
+juce_add_console_app(OfflineRender PRODUCT_NAME "OfflineRender")
+target_sources(OfflineRender PRIVATE analysis/offline_render.cpp)
+target_compile_definitions(OfflineRender PRIVATE
+    JUCE_USE_CURL=0
+    JUCE_WEB_BROWSER=0
+    JUCE_STANDALONE_APPLICATION=1)
+target_link_libraries(OfflineRender PRIVATE
+    chowdsp::chowdsp_wdf
+    juce::juce_dsp
+    juce::juce_recommended_config_flags)
+
 # Step 7 full-chain integration test (TommyDSP uses ClippingOversampler -> juce_dsp).
 juce_add_console_app(Step7_Integration PRODUCT_NAME "Step7_Integration")
 target_sources(Step7_Integration PRIVATE tests/Step7_Integration.cpp)

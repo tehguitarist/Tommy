@@ -8,7 +8,7 @@ namespace tommy::taper
 inline double dbToGain (double dB) { return std::pow (10.0, dB / 20.0); }
 
 /** Audio (log) taper approximation: R = Rmax * 10^(2x - 2), x in [0,1] => Rmax/100 .. Rmax.
- *  (dsp.md). Used for the rheostat controls. */
+ *  (dsp.md). NOTE the 1% floor at x=0 — a trap for large/HF-critical pots (see audioTaperR0). */
 inline double audioTaperR (double x, double rMax)
 {
     if (x <= 0.0)
@@ -16,6 +16,18 @@ inline double audioTaperR (double x, double rMax)
     if (x >= 1.0)
         return rMax;
     return rMax * std::pow (10.0, 2.0 * x - 2.0);
+}
+
+/** Audio taper anchored to 0 at minimum: same curve shape, x=0 -> 0Ω exactly. Use for pots whose
+ *  physical minimum is ~0Ω and where the 1% floor of audioTaperR is audible (DRIVE gain, TREBLE
+ *  cut corner). */
+inline double audioTaperR0 (double x, double rMax)
+{
+    if (x <= 0.0)
+        return 0.0;
+    if (x >= 1.0)
+        return rMax;
+    return rMax * (std::pow (10.0, 2.0 * x - 2.0) - 0.01) / 0.99;
 }
 
 // --- Control-to-WDF mappings. ---
@@ -34,20 +46,18 @@ inline double bassResistance (double x) { return audioTaperR (x, 50.0e3); }
  *  floors at 1% of max = 10kΩ here — enough feedback to add ~7.7 dB of phantom minimum-drive gain
  *  (measured: 8.96x vs 3.71x at min drive), making the pedal overdrive far too early. This shifts
  *  the audio-taper curve so x=0 -> 0Ω while preserving its shape in the usable range (x=1 -> 1M). */
-inline double driveResistance (double x)
-{
-    if (x <= 0.0) return 0.0;
-    if (x >= 1.0) return 1.0e6;
-    return 1.0e6 * (std::pow (10.0, 2.0 * x - 2.0) - 0.01) / 0.99;
-}
+inline double driveResistance (double x) { return audioTaperR0 (x, 1.0e6); }
 
 /** TREBLE knob up => treble CUT => LARGER series resistance in the TREB/R5/C5 low-pass.
  *  TREB is a rheostat wired as Ra || 50k (wiper jumpered to pin 3, circuit.md).
- *  At CCW (x=0): Ra~500Ω → effective series R ~0 → cut corner ~15.9 kHz (negligible cut).
- *  At CW (x=1): Ra=50kΩ → effective series R ~25kΩ → cut corner ~600 Hz (heavy cut). */
+ *  At CCW (x=0): Ra=0Ω → effective series R 0 → cut corner ~15.9 kHz (negligible cut).
+ *  At CW (x=1): Ra=50kΩ → effective series R ~25kΩ → cut corner ~600 Hz (heavy cut).
+ *  Uses audioTaperR0 (anchored to 0 at min): the generic 1% floor left ~500Ω in series even at
+ *  CCW, dropping the min-treble corner to ~10.6 kHz — ~3 dB too dark at 8 kHz vs the real pedal
+ *  (NAM A/B, 2026-06-19). A real pot reaches ~0Ω fully CCW. (Same floor trap as the DRIVE pot.) */
 inline double trebleResistance (double x)
 {
-    const double ra = audioTaperR (x, 50.0e3);
+    const double ra = audioTaperR0 (x, 50.0e3);
     return (ra * 50.0e3) / (ra + 50.0e3); // ~0..25k
 }
 

@@ -175,6 +175,42 @@ each op-amp's output, and measure the worst-case node before assuming.
 
 ---
 
+## 6b. Validating clipping: harmonics, saturation, and the "go hotter" trap
+
+Don't validate the drive/clipping by THD alone — compare the **harmonic profile** to captures.
+Play a steady **low-frequency tone** (~220 Hz, so H2..H8 all fall below Nyquist *and* below the
+tone-control corner, i.e. un-filtered), FFT it, and read the harmonic amplitudes for plugin vs real:
+
+- **Clip TYPE** = even/odd balance. Symmetric clip → odd-dominant (H3, H5), even ≈ 0. Asymmetric →
+  even harmonics (H2, H4) appear. A one-sided clip is *strongly* even (H2 > H3); a mild 2-sided
+  asym is odd-dominant with H2 a few dB under H3. Match this, not just the THD number.
+- **Saturation AMOUNT** = THD, swept across the **drive knob**. This is the single best way to catch
+  a wrong gain taper: in the reference build the plugin clipped 10.6% where the real did 16.6% at
+  10:30 because the drive pot used the too-aggressive `10^(2x-2)` approximation. Fit the **gain
+  taper from THD-vs-drive** (it came out `Rmax·x^2.2` — gentler than the audio approx, steeper than
+  the tone pots' `x^1.43`; tapers differ per pot, so fit each).
+
+### The "go hotter" trap (counter-intuitive — measure, don't assume)
+
+If the plugin is **quieter and less-distorted than the real pedal once it clips**, the instinct is
+to raise the input level (`kInputRef`). **This makes it worse.** Because `kInputRef` cancels in the
+linear path and the clamped-distortion component is divided back down by `1/kInputRef` at the
+output, going hotter *lowers* both THD and clipped output level. The clipped ceiling is set by the
+**clipping element** (diode clamp + op-amp rails), not the input level — so fix it there, not with
+the input trim. (Verified by sweep: hotter `kInputRef` moved both THD and level further from the
+real pedal at every drive setting.)
+
+### Known limitation: the high-drive character ceiling
+
+An ideal-op-amp + ideal-diode WDF model **caps below the real pedal's THD at full drive** (18% vs
+22% in the reference build) and runs a couple dB quieter there — the real circuit clips *harder /
+at a higher ceiling*. No taper or input-level value closes this (it's character, not gain). Likely
+sources, in order: the **real op-amp output stage** clipping at hot playing levels your test tones
+don't reach (model finite-gain op-amp output saturation, not just an ideal one), and **diode
+sharpness** (the real part may clip harder than textbook 1N4148). Treat as a refinement, not a bug.
+
+---
+
 ## 7. VU meter idle-noise gate
 
 At the unity volume setting, output ≈ input, so the meter shows the **source's idle noise floor**
@@ -198,5 +234,13 @@ masked. If you change the output makeup, the idle floor moves with it — re-che
 - [ ] Makeup ≈ 0.9; verify the loudest setting (full drive + full volume) peaks < 0 dBFS.
 - [ ] Op-amp rails clamped on every op-amp output; worst-case node measured.
 - [ ] Cut controls map x→cut (knob up = more cut), not inverted.
+- [ ] Gain/drive taper fit from THD-vs-drive captures, not the audio approximation.
+- [ ] Clip TYPE matched by harmonic profile (even/odd balance), not THD alone; asym modes use a
+      2-sided asymmetric pair, not a single diode.
+- [ ] THD-vs-drive matched across ALL clip modes and the full drive range (not just one point).
+- [ ] Didn't "go hotter" to fix a clipped-level/THD deficit — that's the clipping ceiling, not input.
 - [ ] VU idle gate re-checked after the final makeup value.
 - [ ] `kInputRef` and makeup decoupled: changing input load must NOT move the unity point.
+- [ ] Fits cross-checked against ≥2 capture batches; level-inconsistent/non-monotonic batches dropped.
+- [ ] Captures taken from the TARGET pedal (note primary vs secondary references — knob direction
+      and component values can differ between, e.g., an original and a licensed reissue).

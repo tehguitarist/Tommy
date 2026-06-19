@@ -55,6 +55,19 @@ wdft::DiodeT<double, decltype(next), wdft::DiodeQuality::Best, AccurateOmega> d 
 - chowdsp diodes have no series-Rs parameter; add an explicit `ResistorT` in series if Rs is
   audibly significant (usually negligible at guitar levels).
 
+### Asymmetric clip modes — don't reach for the single `DiodeT`
+
+`DiodePairT` is **symmetric** (same threshold both ways); `DiodeT` is **one-sided** (clips one
+polarity, the other runs to the rail). A pedal's "asymmetric" switch position is usually NOT
+one-sided — it's a **mild 2-sided asymmetry** (both polarities clip, at slightly different
+thresholds, e.g. 1 diode one way vs 2 in series the other). The captures tell you: a one-sided
+clip is strongly **even-dominant** (H2 is the biggest harmonic); a real "asym" mode is
+**odd-dominant with moderate even** (H3 biggest, H2 ~6 dB below). Using `DiodeT` here gave H2 > H3
+and was too loud/bright — wrong. Implement an **asymmetric antiparallel pair**: copy `DiodePairT`'s
+"Good" path (Werner eqn 18) but use a different effective `Vt` per polarity (pick by `sign(a)`).
+Tune the diode-count ratio to match the captured even/odd balance (1:2 matched in the reference
+build). It still honours the OmegaProvider, so no omega4 floor.
+
 ### Omega accuracy gotcha (do NOT use the default omega)
 
 chowdsp's default `Omega::omega` (omega4) uses bit-trick log/exp approximations that impose a

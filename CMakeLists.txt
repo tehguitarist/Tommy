@@ -10,6 +10,13 @@ add_subdirectory(libs/JUCE)
 add_subdirectory(libs/xsimd)
 add_subdirectory(libs/chowdsp_wdf)
 
+# Treat chowdsp_wdf's headers as SYSTEM includes so its internal warnings (e.g.
+# -Wshadow-field-in-constructor, pulled in by juce_recommended_warning_flags) don't surface in our
+# build, while -Wall/-Wextra still apply to OUR code. (chowdsp_wdf is a header-only INTERFACE target;
+# re-declaring its interface include dir as SYSTEM is the portable, CMake 3.15-compatible way.)
+get_target_property(_chowdsp_inc chowdsp_wdf INTERFACE_INCLUDE_DIRECTORIES)
+set_target_properties(chowdsp_wdf PROPERTIES INTERFACE_SYSTEM_INCLUDE_DIRECTORIES "${_chowdsp_inc}")
+
 juce_add_plugin(Tommy
     COMPANY_NAME "Leigh Pierce"
     BUNDLE_ID com.leighpierce.Tommy

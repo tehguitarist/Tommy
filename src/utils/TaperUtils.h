@@ -85,7 +85,14 @@ inline double trebleResistance (double x)
 {
     if (x <= 0.0)
         return 0.0;
-    return 70.0e3 * std::pow (x, 1.43);
+    // BATCH-4 RE-FIT (2026-06-20, PRIMARY pedal): the previous 70k*x^1.43 cut treble far too
+    // aggressively above ~9 o'clock. Against the drive-independent HF shelf of the primary-pedal
+    // captures, the cut error was small at x=0.20 (~0.5 dB) but ~5 dB too dark at x=0.35. A
+    // gentler power law 50k*x^1.8 roughly halves the error (grid-search optimum over coeff/exp).
+    // The residual ~2 dB @8k is a treble-INDEPENDENT baseline HF deficit (Stage 2 C11 + bilinear
+    // cap warping near Nyquist), not fixable here. INTERIM: the captures only reach x=0.35 (10:30),
+    // so x>0.5 is unconstrained extrapolation — finalise with a clean low-drive treble sweep.
+    return 50.0e3 * std::pow (x, 1.8);
 }
 
 /** VOLUME divider gain (A25K with R11 7k5 across the upper section). x = rotation 0..1.

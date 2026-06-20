@@ -101,9 +101,11 @@ int main()
             }
             return peak;
         };
-        const double dark = run6k (0.0); // max cut
-        const double bright = run6k (1.0); // min cut
-        std::printf ("[treble effect] 6kHz: treble=0 -> %.4f V | treble=1 -> %.4f V\n", dark, bright);
+        // TREBLE is a CUT control: knob up (x->1) = MORE treble cut = darker. So treble=0 (no cut)
+        // must be BRIGHTER at 6 kHz than treble=1 (max cut).
+        const double bright = run6k (0.0); // x=0: no cut -> brightest
+        const double dark = run6k (1.0);   // x=1: max cut -> darkest
+        std::printf ("[treble effect] 6kHz: treble=0 -> %.4f V | treble=1 -> %.4f V\n", bright, dark);
         if (! (bright > dark * 1.3))
             ++failures;
     }

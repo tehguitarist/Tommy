@@ -2,9 +2,10 @@
 //
 // Drives a clipping sine whose harmonics extend past Nyquist, then measures the aliased
 // (non-harmonic) energy via FFT. Compares 1x/4x/8x oversampling and ADAA off/on, separately
-// for Soft (soft diode clip) and Hard (hard rail clip) modes. Expectation: oversampling cuts
-// aliasing sharply; ADAA helps most on the hard rail clip (Hard mode); Soft aliases less to
-// begin with (soft clip => fast-decaying harmonics).
+// for Soft/Hard (diode clips) and Linear (rail clip). Expectation: oversampling cuts aliasing
+// sharply for all; ADAA helps on the hard RAIL clip, the active nonlinearity in Linear mode at hot
+// drive (Hard's asym diode pair clamps inside the rails, so the rail — hence ADAA — barely engages
+// there). Soft aliases least (soft clip => fast-decaying harmonics).
 
 #include "../src/dsp/ClippingOversampler.h"
 
@@ -115,6 +116,10 @@ int main()
 
     const auto hard = row ("Hard", Stage1::ClipMode::Hard);
     const auto soft = row ("Soft", Stage1::ClipMode::Soft);
+    // ADAA wraps the op-amp RAIL clip. Since Hard is now an asymmetric DIODE pair (clamps ~1.4 V,
+    // well inside the rails), the rail barely engages there — so ADAA is validated in LINEAR mode,
+    // where at this hot drive the rail clip IS the active hard nonlinearity (no diodes in front).
+    const auto lin = row ("Linear", Stage1::ClipMode::Linear);
 
     std::printf ("\nChecks:\n");
 
@@ -125,10 +130,12 @@ int main()
     if (! osWorks)
         ++failures;
 
-    // 2. ADAA further reduces aliasing on the hard rail clip (Hard, 4x+ADAA vs 4x).
-    const bool adaaWorks = (hard[3] < hard[1] - 1.0);
-    std::printf ("  [%s] ADAA further cuts Hard aliasing at 4x (%.1f -> %.1f)\n",
-                 adaaWorks ? "PASS" : "FAIL", hard[1], hard[3]);
+    // 2. ADAA further reduces aliasing on the hard RAIL clip — tested in Linear mode, where the
+    //    rail is the active nonlinearity (Hard's asym diodes clamp before the rail, so ADAA is a
+    //    near-no-op there now; that is expected, not a regression — oversampling handles Hard).
+    const bool adaaWorks = (lin[3] < lin[1] - 1.0);
+    std::printf ("  [%s] ADAA further cuts Linear (rail-clip) aliasing at 4x (%.1f -> %.1f)\n",
+                 adaaWorks ? "PASS" : "FAIL", lin[1], lin[3]);
     if (! adaaWorks)
         ++failures;
 

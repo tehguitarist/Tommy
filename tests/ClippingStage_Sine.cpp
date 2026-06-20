@@ -167,13 +167,15 @@ int main()
         const double railPos = Stage1::kRailPosDefault;  // +V from VREF
         const double railNeg = -Stage1::kRailNegDefault; // -V from VREF
 
-        // (a) Hard-mode unclipped polarity must hard-clamp AT the negative rail (not the ~-77 V
-        //     the ideal op-amp produced). A real op-amp clips hard at the rail.
+        // (a) Hard mode is now an ASYMMETRIC DIODE PAIR (AsymDiodePairT, ~1:2 thresholds), not the
+        //     old one-sided DiodeT. So BOTH polarities are diode-clamped well INSIDE the rails — the
+        //     negative (2-diode) side bounds around ~-1.4 V, nowhere near the -3.4 V rail. Assert it
+        //     clips (not linear) yet stays inside the rail, confirming the diodes clamp before it.
         const auto hard = measure (Stage1::ClipMode::Hard, 1000.0, 0.5, fs, bassR, 1.0e6);
-        std::printf ("  Hard min (hard-clamped at rail): %+.3f V (expect %+.2f)\n", hard.min, railNeg);
-        if (std::abs (hard.min - railNeg) > 0.05)
+        std::printf ("  Hard min (asym diode-clamped, inside rail): %+.3f V (rail %+.2f)\n", hard.min, railNeg);
+        if (! (hard.min > railNeg + 0.3 && hard.min < -0.5))
         {
-            std::fprintf (stderr, "FAIL: Hard unclipped polarity not hard-clamped at the rail\n");
+            std::fprintf (stderr, "FAIL: Hard negative polarity not diode-clamped inside the rail\n");
             ++failures;
         }
 

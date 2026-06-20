@@ -88,6 +88,31 @@ pair's `Good` path both honour the provider. Verify with an audible-band aliasin
 - Consider a **separate render-time OS factor**: in `processBlock`, pick the higher factor when
   `isNonRealtime()` is true (offline bounce) — see architecture.md.
 
+## Top-octave accuracy: bilinear cap warping near Nyquist
+
+Linear stages run at base rate, and chowdsp's trapezoidal capacitor (companion `R = 1/(2 C fs)`) is
+the bilinear transform — it bends the frequency axis, so an analog corner at `f_c` lands at a
+*lower* digital frequency, the error growing toward Nyquist. Symptom: the modelled top octave is
+**too dark** vs the real pedal even with tone controls flat (the reference build was ~−3.8 dB at
+12 kHz / 48 kHz from a ~16 kHz treble corner + a ~7 kHz feedback corner). Diagnose by rendering the
+**same signal at 2× base rate** (resample in, render, resample out) — if the deficit closes and
+matches the real unit, it's warping, not a modelling error.
+
+Two fixes, a real trade-off:
+- **Prewarp the HF caps** (`utils/Prewarp.h`): replace `C` with `C·θ/tan(θ)`, `θ = π·f_c/fs`, pinning
+  the corner where the real circuit has it. Zero CPU, no architecture change, no added coloration —
+  it just relocates corners. Exact at the pinned corner, excellent through ~12–14 kHz, slightly soft
+  right at Nyquist. Recompute per-block for a cap whose corner moves with a pot. Best for low-order,
+  well-separated corners. **Only prewarp BASE-RATE linear caps** — a cap inside the oversampled
+  nonlinear stage is already discretised at the high rate (the oversampler fixes its warp; prewarping
+  it too would over-correct).
+- **Oversample the linear path** (e.g. run the whole chain at 2×): flat to 20 kHz regardless of
+  topology, but ~2× the (cheap) linear CPU and it overrides the "never oversample linear stages"
+  guidance below. Use when you need the top octave demonstrably ruler-flat.
+
+Independent of supply-voltage / rail features (those scale amplitude headroom; prewarp corrects
+frequency) — the two never interact.
+
 ## ADAA (antiderivative anti-aliasing)
 
 - ADAA is **in addition to** oversampling, not instead of it.

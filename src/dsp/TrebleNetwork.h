@@ -1,5 +1,7 @@
 #pragma once
 
+#include "Prewarp.h"
+
 #include <chowdsp_wdf/chowdsp_wdf.h>
 
 namespace tommy::dsp
@@ -28,14 +30,21 @@ public:
 
     void prepare (double sampleRate)
     {
+        fs = sampleRate;
         c5.prepare (sampleRate);
+        updateC5Prewarp();
         reset();
     }
 
     void reset() { c5.reset(); }
 
     /** TREB as an already-mapped series resistance in ohms (~0..25k). */
-    void setParams (double trebResistanceOhms) { trebR.setResistanceValue (trebResistanceOhms); }
+    void setParams (double trebResistanceOhms)
+    {
+        trebRValue = trebResistanceOhms;
+        trebR.setResistanceValue (trebResistanceOhms);
+        updateC5Prewarp();
+    }
 
     /** Processes one sample. vin = node_F (Stage 1 output). Returns node_H (to IC1_B +). */
     double processSample (double vin)
@@ -47,9 +56,22 @@ public:
     }
 
 private:
+    // Prewarp C5 so its low-pass corner — set by (TREB + R5) and C5, and moving with the pot —
+    // lands at the true analog frequency despite bilinear warping near Nyquist. Recomputed whenever
+    // TREB changes (and at prepare). Uses the NOMINAL C5/R5 to find the analog corner.
+    void updateC5Prewarp()
+    {
+        constexpr double kC5Nom = 10.0e-9, kR5 = 1.0e3;
+        const double cornerHz = 1.0 / (2.0 * M_PI * (trebRValue + kR5) * kC5Nom);
+        c5.setCapacitanceValue (prewarpCapacitance (kC5Nom, cornerHz, fs));
+    }
+
+    double fs = 48000.0;
+    double trebRValue = 12.5e3;
+
     chowdsp::wdft::ResistorT<double> trebR { 12.5e3 }; // TREB rheostat (0..~25k); default mid
     chowdsp::wdft::ResistorT<double> r5 { 1.0e3 };     // R5 = 1k
-    chowdsp::wdft::CapacitorT<double> c5 { 10.0e-9 };  // C5 = 10n
+    chowdsp::wdft::CapacitorT<double> c5 { 10.0e-9 };  // C5 = 10n (prewarped at runtime)
 
     chowdsp::wdft::WDFSeriesT<double, decltype (r5), decltype (c5)> r5c5 { r5, c5 };
     chowdsp::wdft::WDFSeriesT<double, decltype (trebR), decltype (r5c5)> trebR5C5 { trebR, r5c5 };

@@ -1,5 +1,7 @@
 #pragma once
 
+#include "Prewarp.h"
+
 #include <chowdsp_wdf/chowdsp_wdf.h>
 
 #include <cmath>
@@ -45,6 +47,11 @@ public:
     void prepare (double sampleRate)
     {
         c11.prepare (sampleRate);
+        // Prewarp C11 so the HF feedback corner f = 1/(2*pi*R6*C11) ~= 7.2 kHz lands correctly
+        // despite bilinear warping near Nyquist (fixed corner — R6 and C11 are constant).
+        constexpr double kC11Nom = 2.2e-9, kR6 = 10.0e3;
+        const double cornerHz = 1.0 / (2.0 * M_PI * kR6 * kC11Nom);
+        c11.setCapacitanceValue (prewarpCapacitance (kC11Nom, cornerHz, sampleRate));
         reset();
     }
 

@@ -2,8 +2,9 @@
 //
 // Expected behaviour:
 //  - High-pass corner from C2 (39n) + R2 (510k): f = 1/(2*pi*510k*39n) ~= 8 Hz
-//  - HF shunt from R1 (2m2) + C12 (47p) is far above the audio band (~GHz),
-//    so the network should be flat (0 dB) through the audio range.
+//  - R1 (2m2 = 2.2 MΩ) is an input PULLDOWN to GND, transparent with a low-Z source.
+//  - HF shunt from the series source impedance (rSrc) + C12 (47p) is far above the audio band
+//    (~GHz), so the network should be flat (0 dB) through the audio range.
 
 #include "../src/dsp/InputBuffer.h"
 

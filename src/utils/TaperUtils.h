@@ -49,7 +49,14 @@ inline double bassResistance (double x)
 {
     if (x <= 0.0)
         return 0.0;
-    return 50.0e3 * std::pow (x, 1.43);
+    // BATCH-3 RE-FIT (2026-06-21, PRIMARY pedal). The 50k*x^1.43 law over-cut bass by ~2x: at the
+    // measured points it wanted ~half the resistance (x=0.6 -> ~12k not 23.8k; x=0.8 -> ~24k not
+    // 36.3k), i.e. the plugin cut ~1-1.8 dB too much LF. Back-fitting BASS_R to the real 60/120 Hz
+    // cut (normalised @250 Hz, so drive/level cancels) over the clean-drive G3 captures gives
+    // 41k*x^2.41 (matches 60 & 120 Hz to ~±0.5 dB at x=0.6 and ~±1 dB at x=0.8). Only two distinct
+    // bass settings (0.6, 0.8) were available and the x=0.8 captures scatter ~22-30k, so the
+    // exponent is loosely constrained — this is a best-estimate, not a tight fit. See NEXT STEPS.
+    return 41.0e3 * std::pow (x, 2.41);
 }
 
 /** DRIVE knob up => more gain => LARGER feedback resistance. Rmax = 1M (A1M pot).
@@ -85,19 +92,23 @@ inline double trebleResistance (double x)
 {
     if (x <= 0.0)
         return 0.0;
-    // BATCH 3+4 RE-FIT (2026-06-20, PRIMARY pedal). The real Timmy treble is a GENTLE high-cut
-    // across its whole rotation, NOT the dramatic darkening a convex audio taper produces. Earlier
-    // convex power laws were wrong in SHAPE: 70k*x^1.43 over-cut by ~5 dB @8k by x=0.35; 50k*x^1.8
-    // under-cut at x=0.20 (+4 dB) yet still over-cut at the top. Two reliable measurements pin it:
-    //   - batch 4 (clock matrix): real TREB_R ≈ flat ~7k across x=0.20..0.35 (drive-independent
-    //     Soft-mode 8k shelf: real +0.5 dB @0.20, -1.1 dB @0.35).
-    //   - batch 3 MATCHED PAIR (G3 V4 B8, only treble differs T5->T8): real adds only ~2 dB more
-    //     cut @8k from x=0.5->0.8, vs ~7 dB for the old taper -> taper far too steep up top.
-    // A CONCAVE law 12k*x^0.4 (fast rise to ~6k by x=0.2, then ~flat to 12k at full) matches both:
-    // batch-4 8k within ~0.85 dB at 0.20 & 0.35, batch-3 pair incremental within ~0.4 dB. Max cut
-    // ~12k (corner ~1.2 kHz) is musical, not the old 50k/612 Hz over-cut. (A treble-INDEPENDENT
-    // baseline ~-3.8 dB @12k deficit remains — Stage 2 C11 + bilinear cap warp near Nyquist.)
-    return 12.0e3 * std::pow (x, 0.4);
+    // BATCH-3 RE-FIT (2026-06-21, PRIMARY pedal) — SUPERSEDES the 12k*x^0.4 "gentle concave" law,
+    // which was WRONG (it left the plugin +6..+12 dB too BRIGHT at 4 kHz vs the real pedal). The
+    // 2026-06-20 fit confused the small INCREMENTAL cut from the matched pair (T5->T8 only adds
+    // ~2.5 dB @8k) with a gentle taper -- but a 1st-order LP's 8 kHz attenuation SATURATES once the
+    // corner drops below ~800 Hz, so that same small increment occurs at HIGH R too. The ABSOLUTE
+    // level disambiguates: real 8k = -16 dB at x=0.5 needs TREB_R ~20k, not ~9k.
+    //   Back-fitting TREB_R to the real 4k & 8k cut (normalised @250 Hz) over the consistent-drive
+    //   G3 captures gives monotonic points: x=0.4->16k, x=0.5->20k, x=0.8->25k. (The x=0.2 point is
+    //   excluded -- it's at a different drive, G4, and is the "non-monotonic treble" outlier flagged
+    //   earlier.) Log-log fit -> 29k*x^0.625. This matches 60 Hz..8 kHz to ~±1-2 dB.
+    //   LIMITATION: matching 4k/8k forces a low corner (~530-750 Hz), which then over-darkens 12 kHz
+    //   by ~5-8 dB -- the real pedal's top octave rolls off GENTLER than the plugin's (treble LP +
+    //   Stage 2 C11 + bilinear warp) single-pole-ish stack. That is an HF-SHAPE (circuit-model)
+    //   limit, NOT a taper limit; no single R fixes it. Top octave is the least audible band and was
+    //   accepted as "close, not perfect". The 29k at x=1 slightly exceeds the ideal A50k rheostat
+    //   max (~25k) -- it's an EFFECTIVE value absorbing the total measured HF rolloff. See NEXT STEPS.
+    return 29.0e3 * std::pow (x, 0.625);
 }
 
 /** VOLUME divider gain (A25K with R11 7k5 across the upper section). x = rotation 0..1.

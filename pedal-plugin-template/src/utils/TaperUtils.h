@@ -46,13 +46,24 @@ inline double audioTaperR0 (double x, double rMax)
  *  corner-vs-knob from pedal captures gave a clean power law with rMax ~= the SCHEMATIC pot value
  *  (the pot/cap were right — only the taper CURVE was wrong).
  *
- *  ** FIT THE SHAPE (p), NOT JUST THE MAGNITUDE. ** p > 1 is CONVEX (slow start, fast end — the
- *  usual "audio" feel). But a real control can be CONCAVE (p < 1: fast rise then ~flat) — e.g. a
- *  subtle "trim"-style tone cut that engages early and barely deepens after. In the reference build
- *  the treble cut was concave (~12k * x^0.4): convex laws were wrong in SHAPE no matter the coeff —
- *  they under-cut at low settings AND over-cut wildly at the top. Symptom of wrong shape: you can
- *  match one knob position but not two. So sample at least TWO knob points and fit p to both; don't
- *  assume convex. p~1.4 is a fine STARTING point for an audio pot, p=1 linear, p<1 concave. */
+ *  ** FIT TO ABSOLUTE LEVEL, NOT THE INCREMENTAL DIFFERENCE BETWEEN TWO KNOB SETTINGS. ** This is
+ *  the subtlest taper trap and it cost the reference build a whole wrong fit. A 1st-order LP's
+ *  attenuation at a FIXED high frequency SATURATES once the corner drops well below it: e.g. at
+ *  8 kHz, moving a tone-cut corner from 800 Hz to 600 Hz changes the 8 kHz level by only ~2 dB —
+ *  the SAME tiny change you'd see moving a much gentler corner. So a small measured cut between two
+ *  knob positions is consistent with BOTH a gentle low-R taper AND an aggressive high-R one. If you
+ *  fit to that increment you can land on a taper that's ~2x off and 6-12 dB wrong in absolute terms.
+ *  Always anchor to the ABSOLUTE response at each knob point (normalise each capture at a frequency
+ *  BELOW all the corners — e.g. 250 Hz — so overall drive/level cancels but the corner position
+ *  shows), then back out R per point and fit. Sanity-check the fitted R against the schematic pot's
+ *  range; if it wildly exceeds it, your data is confounded (clipping, wrong direction, mixed drive).
+ *
+ *  ** FIT THE SHAPE (p), NOT JUST ONE POINT. ** p > 1 is CONVEX (slow start, fast end — the usual
+ *  "audio" feel); p < 1 is CONCAVE (fast rise then ~flat); p = 1 linear. Sample >= 2 knob points and
+ *  fit p; don't assume a value. Symptom of wrong shape: you can match one knob position but not two.
+ *  p~1.4 is a fine STARTING point for an audio pot. (Watch confounds when collecting points: hold
+ *  drive constant and low enough not to clip the test sweep, and confirm knob DIRECTION from a
+ *  matched pair that differs in only that one control — clipping cancels in the differential.) */
 inline double powerLawTaper (double x, double rMax, double p = 1.43)
 {
     if (x <= 0.0)
@@ -69,11 +80,14 @@ inline double powerLawTaper (double x, double rMax, double p = 1.43)
 inline double driveResistanceExample (double x) { return audioTaperR0 (x, 1.0e6); }
 
 /** EXAMPLE: a tone-CUT control (knob up = more cut). Cut-only controls map x->R directly
- *  (x=0 = no cut). Prefer the power-law taper fit to captures over the audio approximation. Fit the
- *  SHAPE p to >=2 knob points (see powerLawTaper note): the reference build's treble cut turned out
- *  CONCAVE (~12k * x^0.4), not the convex p~1.4 first assumed — a gentle high-cut that engages early
- *  then plateaus. p shown as 1.43 here only as a placeholder; measure it. */
-inline double cutControlExample (double x) { return powerLawTaper (x, 12.0e3, 0.4); }
+ *  (x=0 = no cut). Prefer the power-law taper fit to captures over the audio approximation, and fit
+ *  to ABSOLUTE level at >=2 knob points (see the powerLawTaper SATURATION-TRAP note — the reference
+ *  build first mis-fit this control to the incremental cut and landed ~2x off / 6-12 dB too bright,
+ *  then corrected by anchoring to absolute 4k/8k levels). p/coeff here are only a placeholder;
+ *  measure them. NOTE the residual lesson: once the corner is right, a 1st-order LP still won't match
+ *  a real pedal's top-octave SHAPE (it rolls off gentler) — that's a circuit-model limit (add the
+ *  recovery-stage HF cap, prewarp), not something the taper can fix. */
+inline double cutControlExample (double x) { return powerLawTaper (x, 29.0e3, 0.625); }
 
 /** EXAMPLE: a passive output volume pot as a voltage divider (returns 0..1 gain).
  *  Generic shape: split Rtotal into upper/lower arms by the (tapered) wiper fraction, optionally

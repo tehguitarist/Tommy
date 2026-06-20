@@ -68,8 +68,14 @@ All three are in `schematics/` at the repo root. Load them when verifying any ci
 >   clipping ~9 dB and caused the "harsh/fizzy" tone). Cancels in the linear path; only sets clip onset.
 > - `kOutputMakeup = 0.9f` (honest 1.0 minus ~1 dB headroom pad; worst case full-drive/full-vol ≈ −0.6 dBFS).
 > - **Tapers (`utils/TaperUtils.h`) — the generic `10^(2x-2)` audio approx was too aggressive.** Refit
->   to measured power laws: BASS `50k·x^1.43`, TREBLE `70k·x^1.43`, DRIVE `1e6·x^2.2`. BASS/TREBLE are
->   CUT controls: **knob up = MORE cut** (confirmed by user). VOLUME = A25K + R11 7.5k divider, unchanged.
+>   to measured laws: BASS `50k·x^1.43`, DRIVE `1e6·x^2.2`, TREBLE **`12k·x^0.4` (CONCAVE — batch 3+4,
+>   2026-06-20)**: the real Timmy treble is a gentle cut, not a convex audio taper; down-mode 8k delta
+>   now ±1 dB across the matrix (was −5.8). BASS/TREBLE are CUT controls: **knob up = MORE cut**.
+>   VOLUME = A25K + R11 7.5k divider, unchanged.
+> - **Top-octave prewarp (`dsp/Prewarp.h`, 2026-06-20):** base-rate linear caps warp near Nyquist
+>   (bilinear), leaving 12k ~3.8 dB too dark; prewarp C5 (dynamic, tracks TREB) + C11 (fixed) → clean
+>   12k −3.8→−2.0 dB. Stage-1 caps NOT prewarped (already oversampled). Residual = chosen prewarp-vs-OS
+>   trade. Test suite 7/7 green (fixed 3 stale assertions). FLAG: InputBuffer R1=2.2Ω vs circuit.md 2m2.
 > - **Asymmetric (Hard) clip mode:** reworked from one-sided `DiodeT` to `AsymDiodePairT` (per-polarity
 >   Vt, 1:2 ratio) in `Stage1.h` — a mild 2-sided asymmetry matching the captured even/odd balance.
 >
@@ -79,15 +85,19 @@ All three are in `schematics/` at the repo root. Load them when verifying any ci
 > non-monotonic treble, excluded). NOTE: batch 1 = PRIMARY pedal; batch 2 = MXR Timmy (SECONDARY ref,
 > opposite knob direction — used for cut DEPTH/curve only, not direction).
 >
-> **NEXT STEPS (Step 9 remaining — awaiting user audio samples):**
->   1. Re-validate THD-vs-drive across ALL three clip modes (Asym/Open/Sym) over the full drive range —
->      confirm gain reacts identically across clip styles. (User requested; needs a mode×gain matrix:
->      up/mid/down at ~9:00/12:00/3:00 drive, bass/treble/vol fixed at noon, on the PRIMARY pedal.)
->   2. Investigate the high-drive clipping-character ceiling (plugin THD caps ~3-4% below real at full
->      drive — suspected ideal-op-amp + ideal-diode limit, not gain). Needs a HOT-input pass (~6 dB
->      hotter reamp at highest drive) to diagnose.
->   3. Re-fit BASS/TREBLE tapers against the PRIMARY pedal if clean sweeps are provided (currently fit
->      to MXR secondary). Confirm WITH USER which pedal is the primary reference.
->   4. Then: subjective full-control sweep (Step 9 gate) — no instability/clicks/NaN; finalise kOutputMakeup.
+> **NEXT STEPS (Step 9 remaining):**
+>   1. **Re-check GAIN & BASS tapers** now treble is fixed (treble is post-clip so shouldn't disturb
+>      them, but BASS is in the Stage-1 gain-set leg → coupled to gain; verify vs batch 4).
+>   2. **Null-test investigation (user, after tapers):** plugin-vs-pedal null cancels well <2 kHz but
+>      WORSE 2–6 kHz, and **Asym clip nulls worse than Sym/Open** (sounds similar by ear; user suspects
+>      asym slightly too loud — matches batch-4 data: asym LEVEL ran +1.5–4 dB hot at low drive though
+>      even/odd balance matched ±1 dB). Dig into overdrive harmonics/phase in 2–6 kHz + the asym level.
+>   3. Clean LOW-DRIVE treble+bass sweeps on the PRIMARY pedal to finalise those tapers past noon
+>      (x>0.5 currently extrapolated; batch 3/4 only reach ~0.35–0.8 and are clipping-confounded).
+>   4. High-drive clipping-character ceiling (plugin THD ~1–3% under real at 3–5:00 — ideal-op-amp +
+>      ideal-diode limit, may live in the 2–6 kHz null gap). Needs a HOT-input pass (~6 dB hotter) to diagnose.
+>   5. Then: subjective full-control sweep (Step 9 gate) — no instability/clicks/NaN; finalise kOutputMakeup.
+>   - FUTURE FEATURE (user): selectable 9/12/18 V supply = rail-voltage scaler (`setRailVoltages`),
+>     orthogonal to tapers/prewarp.
 >   - Open items: RT-safety (oversampling `setFactor` allocates on audio thread — pre-allocate if
 >     tightening); VST3 still deferred (AU passes auval).**

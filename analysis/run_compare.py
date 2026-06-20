@@ -6,12 +6,12 @@ import os, re, glob, subprocess, numpy as np
 from scipy.io import wavfile
 import analyze as A   # reuse aligned transfer / level / thd helpers
 
+import os as _os
 REND = "build/OfflineRender_artefacts/Release/OfflineRender"
 ORIG = "analysis/tommy_test_signal_48k.wav"
-NAMDIR = "analysis/pedal_results"
+NAMDIR = _os.environ.get("NAMDIR", "analysis/pedal_results")
 OSLOG2 = 3  # 8x — take aliasing off the table
-import os as _os
-KIN = _os.environ.get("KIN", "")  # override kInputRef; empty = plugin default (3.27)
+KIN = _os.environ.get("KIN", "")  # override kInputRef; empty = plugin default
 
 def clock_to_x(hhmm):
     s = str(int(hhmm))

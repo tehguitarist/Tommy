@@ -51,7 +51,43 @@ All three are in `schematics/` at the repo root. Load them when verifying any ci
 
 > Update this line at the **start** of each session to reflect where work is resuming,
 > and again when a step completes. Do not rely on conversation history to infer progress.
-> **CURRENT: Step 8 — UI implementation (see ui.md). Steps 3–7 COMPLETE & validated (details in git history + project memory). Full DSP chain done: `src/dsp/` InputBuffer (Stage0) → Stage1+SW1 clipping (oversampled, ADAA on rail clip, AccurateOmega) → TrebleNetwork → Stage2, wired via `TommyDSP.h`; `utils/TaperUtils.h` A-tapers; `PluginProcessor` has APVTS, smoothed gains, 5ms bypass crossfade, oversampling switching, trims, metering atomics (getInputLevel/getOutputLevel/isBypassed for the editor). auval PASSES; 7 test exes all pass (SmokeTest_RC, Stage0/Stage1/Stage2_Treble freq, ClippingStage_Sine, Step6_Aliasing, Step7_Integration). Editor is still the blank Step-2 scaffold — build the real UI now.
-> UI DESIGN CONFIRMED 2026-06-17: 480×480px fixed window (setSize(480,480)). Three-column layout: left panel (74px, Input label + 70px halo trim knob SVG + VU bar fills rest), centre pedal face (flex-1, mottled dark navy/black with blue sparkle dots, white knobs), right panel (74px, Output label + halo trim + VU bar). Pedal face contains: 9V label, Row1 Bass+SW1+Gain, LED, Row2 Volume+Treble, italic Tommy logo, dome bypass button. Oversampling segmented strip (10px gap) below. Full colour palette in ui.md. SW1 labels right of switch body (Soft/Med/Hard top-to-bottom).
-> CALIBRATION: input float = volts; `kOutputMakeup`=0.25 (PluginProcessor.h) → ~unity out; refine at Step 9.
-> KEY CARRY-FORWARDS to Step 9: (a) DONE 2026-06-17 — IC1_B (Stage 2) output rails NOW modelled (same parabolic-knee+ADAA clamp as Stage 1, `tests/Stage2_RailProbe` confirmed node_J hit impossible ~6.2V in Hard mode = 2× Stage 1 −rail; fixes Hard-louder-than-Soft/Med). ALSO fixed: ADAA was never actually enabled in the plugin (only in Step6 test) — now `setAdaaEnabled(true)` in prepareToPlay routes to both rail clips. Rail values nudged +2.2/−3.1 → +2.5/−3.4 (datasheet ~2V headroom@RL≥2k, light load ~1.2V; NO published Timmy measurement exists, web-searched); (b) RT-safety: oversampling `setFactor` allocates on the audio thread — pre-allocate 4 oversamplers if tightening; (c) refine kOutputMakeup + taper curves/directions + rail voltages by ear. Step 2: AU passes auval. VST3 deferred.**
+> **CURRENT: Step 9 — calibration & final sweep (IN PROGRESS). Steps 3–8 COMPLETE. Full DSP chain
+> + real UI built and validated; now A/B-ing against NAM captures of the real pedal and tuning
+> calibration/tapers to match. Currently PAUSED awaiting more audio samples from the user (see NEXT).**
+>
+> **DSP chain (done):** `src/dsp/` InputBuffer (Stage0) → Stage1+SW1 clipping (oversampled, ADAA on
+> rail clip, AccurateOmega) → TrebleNetwork → Stage2, wired via `TommyDSP.h`. IC1_A & IC1_B output
+> rails modelled (parabolic-knee + ADAA clamp). auval PASSES; 7 stage tests + Stage2_RailProbe pass.
+>
+> **UI (Step 8, done):** 480×480 fixed window, three-column layout (Input panel / mottled pedal face /
+> Output panel) + oversampling strip with LIVE/RENDER OS ComboBoxes + UI-size selector. Custom
+> `TommyLookAndFeel`, halo trim knobs, VU meters, dome bypass. Full design in ui.md.
+>
+> **CALIBRATION (Step 9, current values in `PluginProcessor.h`):**
+> - `kInputRef = 1.2f` (volts per full-scale; re-calibrated from NAM A/B — was 3.27 which over-drove
+>   clipping ~9 dB and caused the "harsh/fizzy" tone). Cancels in the linear path; only sets clip onset.
+> - `kOutputMakeup = 0.9f` (honest 1.0 minus ~1 dB headroom pad; worst case full-drive/full-vol ≈ −0.6 dBFS).
+> - **Tapers (`utils/TaperUtils.h`) — the generic `10^(2x-2)` audio approx was too aggressive.** Refit
+>   to measured power laws: BASS `50k·x^1.43`, TREBLE `70k·x^1.43`, DRIVE `1e6·x^2.2`. BASS/TREBLE are
+>   CUT controls: **knob up = MORE cut** (confirmed by user). VOLUME = A25K + R11 7.5k divider, unchanged.
+> - **Asymmetric (Hard) clip mode:** reworked from one-sided `DiodeT` to `AsymDiodePairT` (per-polarity
+>   Vt, 1:2 ratio) in `Stage1.h` — a mild 2-sided asymmetry matching the captured even/odd balance.
+>
+> **Analysis harness (`analysis/`):** `offline_render.cpp` (OfflineRender exe — runs the real DSP +
+> processBlock gain staging; many override args for fitting) + Python tools (run_compare, sweep_kinput,
+> treble_fit/xcheck, harmonics, analyze). NAM captures in `pedal_results{,2,3}` (batch 3 unreliable —
+> non-monotonic treble, excluded). NOTE: batch 1 = PRIMARY pedal; batch 2 = MXR Timmy (SECONDARY ref,
+> opposite knob direction — used for cut DEPTH/curve only, not direction).
+>
+> **NEXT STEPS (Step 9 remaining — awaiting user audio samples):**
+>   1. Re-validate THD-vs-drive across ALL three clip modes (Asym/Open/Sym) over the full drive range —
+>      confirm gain reacts identically across clip styles. (User requested; needs a mode×gain matrix:
+>      up/mid/down at ~9:00/12:00/3:00 drive, bass/treble/vol fixed at noon, on the PRIMARY pedal.)
+>   2. Investigate the high-drive clipping-character ceiling (plugin THD caps ~3-4% below real at full
+>      drive — suspected ideal-op-amp + ideal-diode limit, not gain). Needs a HOT-input pass (~6 dB
+>      hotter reamp at highest drive) to diagnose.
+>   3. Re-fit BASS/TREBLE tapers against the PRIMARY pedal if clean sweeps are provided (currently fit
+>      to MXR secondary). Confirm WITH USER which pedal is the primary reference.
+>   4. Then: subjective full-control sweep (Step 9 gate) — no instability/clicks/NaN; finalise kOutputMakeup.
+>   - Open items: RT-safety (oversampling `setFactor` allocates on audio thread — pre-allocate if
+>     tightening); VST3 still deferred (AU passes auval).**

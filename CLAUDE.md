@@ -76,8 +76,11 @@ All three are in `schematics/` at the repo root. Load them when verifying any ci
 >   (bilinear), leaving 12k ~3.8 dB too dark; prewarp C5 (dynamic, tracks TREB) + C11 (fixed) → clean
 >   12k −3.8→−2.0 dB. Stage-1 caps NOT prewarped (already oversampled). Residual = chosen prewarp-vs-OS
 >   trade. Test suite 7/7 green (fixed 3 stale assertions). FLAG: InputBuffer R1=2.2Ω vs circuit.md 2m2.
-> - **Asymmetric (Hard) clip mode:** reworked from one-sided `DiodeT` to `AsymDiodePairT` (per-polarity
->   Vt, 1:2 ratio) in `Stage1.h` — a mild 2-sided asymmetry matching the captured even/odd balance.
+> - **Asymmetric (Hard) clip mode (2026-06-20):** `AsymDiodePairT` is a SYMMETRIC pair (Medium
+>   threshold) shifted by a lateral wave-domain **bias** (`kAsymBias=0.18`) — mild even harmonics
+>   WITHOUT the level boost the old per-polarity 1:2 threshold gave (it ran ~3.9 dB hot, coupled to
+>   the harmonic match). Now level ≈ Sym and Asym NULLS as well as Sym/Open across drive. Added **C6
+>   (1µ ~6 Hz) output DC-block in `TommyDSP`** for the asym clip's signal-dependent DC.
 >
 > **Analysis harness (`analysis/`):** `offline_render.cpp` (OfflineRender exe — runs the real DSP +
 > processBlock gain staging; many override args for fitting) + Python tools (run_compare, sweep_kinput,
@@ -86,17 +89,17 @@ All three are in `schematics/` at the repo root. Load them when verifying any ci
 > opposite knob direction — used for cut DEPTH/curve only, not direction).
 >
 > **NEXT STEPS (Step 9 remaining):**
->   1. **Re-check GAIN & BASS tapers** now treble is fixed (treble is post-clip so shouldn't disturb
->      them, but BASS is in the Stage-1 gain-set leg → coupled to gain; verify vs batch 4).
->   2. **Null-test investigation (user, after tapers):** plugin-vs-pedal null cancels well <2 kHz but
->      WORSE 2–6 kHz, and **Asym clip nulls worse than Sym/Open** (sounds similar by ear; user suspects
->      asym slightly too loud — matches batch-4 data: asym LEVEL ran +1.5–4 dB hot at low drive though
->      even/odd balance matched ±1 dB). Dig into overdrive harmonics/phase in 2–6 kHz + the asym level.
->   3. Clean LOW-DRIVE treble+bass sweeps on the PRIMARY pedal to finalise those tapers past noon
->      (x>0.5 currently extrapolated; batch 3/4 only reach ~0.35–0.8 and are clipping-confounded).
->   4. High-drive clipping-character ceiling (plugin THD ~1–3% under real at 3–5:00 — ideal-op-amp +
+>   1. **EQ taper tightening — user goal ±0.3 dB across the sweep.** Refine TREBLE (`12k·x^0.4`) +
+>      BASS (`50k·x^1.43`) tapers to ±0.3 dB. Bass ~1.5× too sensitive (matched pair B0.4→0.6: real
+>      −1.1 vs plug −1.64 dB). They interact (both cut; bass in gain leg) → extrapolate best-fit.
+>      NEEDS clean low-drive treble + bass sweeps on the PRIMARY pedal (one knob stepped 7→5 o'clock,
+>      others noon); batches so far reach only ~x=0.35–0.8 and are clipping-confounded above low drive.
+>   2. **Asym level/null — DONE** (bias-offset model + C6). Remaining null gap: 2–6 kHz residual is
+>      harmonic PHASE decorrelation in ALL modes (level-matched: <2k nulls −5/−6 dB, 2–6k ≈ 0) —
+>      partly inherent to nulling vs a NAM capture (magnitude/feel, not exact phase). Magnitude matches.
+>   3. High-drive clipping-character ceiling (plugin THD ~1–3% under real at 3–5:00 — ideal-op-amp +
 >      ideal-diode limit, may live in the 2–6 kHz null gap). Needs a HOT-input pass (~6 dB hotter) to diagnose.
->   5. Then: subjective full-control sweep (Step 9 gate) — no instability/clicks/NaN; finalise kOutputMakeup.
+>   4. Then: subjective full-control sweep (Step 9 gate) — no instability/clicks/NaN; finalise kOutputMakeup.
 >   - FUTURE FEATURE (user): selectable 9/12/18 V supply = rail-voltage scaler (`setRailVoltages`),
 >     orthogonal to tapers/prewarp.
 >   - Open items: RT-safety (oversampling `setFactor` allocates on audio thread — pre-allocate if

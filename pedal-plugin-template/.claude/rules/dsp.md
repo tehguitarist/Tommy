@@ -55,18 +55,30 @@ wdft::DiodeT<double, decltype(next), wdft::DiodeQuality::Best, AccurateOmega> d 
 - chowdsp diodes have no series-Rs parameter; add an explicit `ResistorT` in series if Rs is
   audibly significant (usually negligible at guitar levels).
 
-### Asymmetric clip modes — don't reach for the single `DiodeT`
+### Asymmetric clip modes — bias a symmetric pair, don't use threshold asymmetry
 
-`DiodePairT` is **symmetric** (same threshold both ways); `DiodeT` is **one-sided** (clips one
-polarity, the other runs to the rail). A pedal's "asymmetric" switch position is usually NOT
-one-sided — it's a **mild 2-sided asymmetry** (both polarities clip, at slightly different
-thresholds, e.g. 1 diode one way vs 2 in series the other). The captures tell you: a one-sided
-clip is strongly **even-dominant** (H2 is the biggest harmonic); a real "asym" mode is
-**odd-dominant with moderate even** (H3 biggest, H2 ~6 dB below). Using `DiodeT` here gave H2 > H3
-and was too loud/bright — wrong. Implement an **asymmetric antiparallel pair**: copy `DiodePairT`'s
-"Good" path (Werner eqn 18) but use a different effective `Vt` per polarity (pick by `sign(a)`).
-Tune the diode-count ratio to match the captured even/odd balance (1:2 matched in the reference
-build). It still honours the OmegaProvider, so no omega4 floor.
+`DiodePairT` is **symmetric**; `DiodeT` is **one-sided** (clips one polarity, the other runs to the
+rail → strongly **even-dominant**, too loud/bright — wrong for most "asym" switches). A real "asym"
+position is usually **odd-dominant with moderate even** (H3 biggest, H2 below it) at **roughly the
+same level as the symmetric modes**.
+
+The trap (learned the hard way): making the asymmetry from a **per-polarity threshold** (e.g. 1 diode
+one way, 2 in series the other) matches the even/odd balance ONLY by clipping the loose side ~4 dB
+louder — and level is then **coupled** to the asymmetry, so you can't fix the level without losing the
+harmonics. Null tests exposed it (asym ~4 dB hot, nulled worse than the symmetric modes even after
+level-matching).
+
+The fix that **decouples level from asymmetry**: take a SYMMETRIC pair (same threshold as the
+medium/symmetric mode) and shift it by a small **lateral bias** in the wave domain —
+`b(a) = symPair(a + bias) − symPair(bias)` (subtract `symPair(bias)` so `b(0)=0`, no static DC). The
+shift makes the clip mildly asymmetric (even harmonics) while both sides still clip at the same
+threshold (level unchanged). Tune `bias` to the captured even/odd. In the reference build this put the
+asym level back on top of the symmetric modes and its null depth matched them across the whole drive
+range. Two caveats: (1) an asymmetric clip produces **signal-dependent DC** — model the output
+coupling cap (a ~6 Hz DC-block highpass) or it leaks DC; (2) a fixed bias perturbs the **small-signal
+gain** by ~0.2 dB (it's not bit-identical to clean), and over-asymmetrises at very low drive — fine if
+the nulls hold, but use a signal-scaled bias if you need clean transparency. Still honours the
+OmegaProvider, so no omega4 floor.
 
 ### Omega accuracy gotcha (do NOT use the default omega)
 

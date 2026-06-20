@@ -41,9 +41,8 @@ int main (int argc, char** argv)
     // Optional bass taper override: BASS_R = coeff * bassX^exp (argv[13], argv[14]).
     const double bassCoeff = (argc > 13) ? std::atof (argv[13]) : -1.0;
     const double bassExp = (argc > 14) ? std::atof (argv[14]) : 1.43;
-    // Optional asym-mode diode counts per polarity (argv[15]=nPos, argv[16]=nNeg).
-    const double asymNpos = (argc > 15) ? std::atof (argv[15]) : -1.0;
-    const double asymNneg = (argc > 16) ? std::atof (argv[16]) : -1.0;
+    // Optional asym-mode lateral bias override (argv[15]); argv[16] unused (kept for arg layout).
+    const double asymBias = (argc > 15) ? std::atof (argv[15]) : -1.0;
     // Optional drive taper override: DRIVE_R = coeff * driveX^exp (argv[17], argv[18]).
     const double driveCoeff = (argc > 17) ? std::atof (argv[17]) : -1.0;
     const double driveExp = (argc > 18) ? std::atof (argv[18]) : 1.0;
@@ -71,8 +70,8 @@ int main (int argc, char** argv)
     const double driveR = (driveCoeff > 0.0) ? driveCoeff * std::pow (driveX, driveExp)
                                              : tp::driveResistance (driveX);
     dsp.setControls (bassR, driveR, trebR, mode);
-    if (asymNpos > 0.0 && asymNneg > 0.0)
-        dsp.setAsymCounts (asymNpos, asymNneg);
+    if (asymBias >= 0.0)
+        dsp.setAsymBias (asymBias);
     dsp.setAdaaEnabled (true);
 
     const double outGain = kOutputMakeup * tp::volumeGain (volX) / kInputRef;

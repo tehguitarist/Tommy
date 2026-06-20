@@ -46,18 +46,29 @@ template <typename T, typename Next, typename OmegaProvider>
 class AsymDiodePairT final : public chowdsp::wdft::RootWDF
 {
 public:
-    AsymDiodePairT (Next& n, T is, T vt, T nPos, T nNeg) : next (n)
+    AsymDiodePairT (Next& n, T is, T vt, T nDiodes, T bias) : next (n)
     {
         n.connectToParent (this);
-        setParams (is, vt, nPos, nNeg);
+        setParams (is, vt, nDiodes, bias);
     }
 
-    /** nPos/nNeg = effective series-diode count (incl. ideality) for each polarity. */
-    void setParams (T is, T vt, T nPos, T nNeg)
+    /** A SYMMETRIC antiparallel pair (single Vt = nDiodes*vt) shifted LATERALLY by `bias` in the
+     *  wave domain. The lateral shift makes the clip asymmetric → mild EVEN harmonics — WITHOUT the
+     *  level/saturation boost a per-polarity-threshold asymmetry (1:2 diodes) produced: both sides
+     *  still clip at the same threshold, so the level stays ~equal to the symmetric (Medium) mode.
+     *  The static no-signal DC is cancelled here (b(0)=0); the residual signal-dependent DC of an
+     *  asymmetric clip is removed downstream by the C6 output coupling cap (Stage 2). */
+    void setParams (T is, T vt, T nDiodes, T bias)
     {
         Is = is;
-        VtP = nPos * vt;
-        VtN = nNeg * vt;
+        Vt = nDiodes * vt;
+        aBias = bias;
+        calcImpedance();
+    }
+
+    void setBias (T bias)
+    {
+        aBias = bias;
         calcImpedance();
     }
 
@@ -65,33 +76,33 @@ public:
     {
         using std::log;
         R_Is = next.wdf.R * Is;
-        oneOverVtP = (T) 1 / VtP;
-        R_Is_overVtP = R_Is * oneOverVtP;
-        logP = log (R_Is_overVtP);
-        oneOverVtN = (T) 1 / VtN;
-        R_Is_overVtN = R_Is * oneOverVtN;
-        logN = log (R_Is_overVtN);
+        oneOverVt = (T) 1 / Vt;
+        R_Is_overVt = R_Is * oneOverVt;
+        logR = log (R_Is_overVt);
+        bConst = symReflect (aBias); // no-signal reflection at the bias point -> subtracted so b(0)=0
     }
 
     inline void incident (T x) noexcept { wdf.a = x; }
 
     inline T reflected() noexcept
     {
-        // Werner eqn (18), per-polarity Vt: a>=0 uses the n_pos branch, a<0 the n_neg branch.
-        if (wdf.a >= (T) 0)
-            wdf.b = wdf.a + (T) 2 * (R_Is - VtP * OmegaProvider::omega (logP + wdf.a * oneOverVtP + R_Is_overVtP));
-        else
-            wdf.b = wdf.a - (T) 2 * (R_Is - VtN * OmegaProvider::omega (logN - wdf.a * oneOverVtN + R_Is_overVtN));
+        wdf.b = symReflect (wdf.a + aBias) - bConst;
         return wdf.b;
     }
 
     chowdsp::wdft::WDFMembers<T> wdf;
 
 private:
-    T Is = 1.0e-9, VtP = 1.0, VtN = 1.0;
-    T oneOverVtP = 1.0, R_Is_overVtP = 0.0, logP = 0.0;
-    T oneOverVtN = 1.0, R_Is_overVtN = 0.0, logN = 0.0;
-    T R_Is = 0.0;
+    // Symmetric antiparallel-pair reflection (Werner eqn 18, single Vt).
+    inline T symReflect (T a) const noexcept
+    {
+        if (a >= (T) 0)
+            return a + (T) 2 * (R_Is - Vt * OmegaProvider::omega (logR + a * oneOverVt + R_Is_overVt));
+        return a - (T) 2 * (R_Is - Vt * OmegaProvider::omega (logR - a * oneOverVt + R_Is_overVt));
+    }
+
+    T Is = 1.0e-9, Vt = 1.0, aBias = 0.0, bConst = 0.0;
+    T oneOverVt = 1.0, R_Is_overVt = 0.0, logR = 0.0, R_Is = 0.0;
     const Next& next;
 };
 
@@ -128,7 +139,7 @@ public:
         Linear, // no diodes (Step-4 validation reference)
         Soft,   // 4 diodes: two antiparallel pairs (2*Is)
         Medium, // 2 diodes: one antiparallel pair (Is)
-        Hard    // 1 diode: asymmetric single (DiodeT)
+        Hard    // "Asymmetric": symmetric pair + lateral bias (AsymDiodePairT) — mild even harmonics
     };
 
     // 1N4148 datasheet/Shockley params. nDiodes folds the ideality factor (n=1.752) into Vt
@@ -153,11 +164,13 @@ public:
     static constexpr double kRailKneeW = 0.35;      // knee half-width (V): linear until rail-W,
                                                     // parabolic knee, then HARD clamp at rail+W
 
-    // SW1 "Asymmetric" position: effective series-diode count each polarity (× ideality kN).
-    // The captures show a MILD 2-sided asymmetry (not circuit.md's one-sided single diode) —
-    // tuned to match the measured H2/H3 balance at the "switch up" setting.
-    static constexpr double kAsymNpos = 1.0; // forward branch: 1 diode
-    static constexpr double kAsymNneg = 2.0; // reverse branch: 2 diodes
+    // SW1 "Asymmetric" position: a SYMMETRIC pair (same threshold as Medium) shifted by a small
+    // lateral BIAS in the wave domain. The bias makes the clip mildly asymmetric (the captures'
+    // odd-dominant + moderate-even profile) WITHOUT raising the level — unlike a per-polarity
+    // 1:2 threshold, which matched the harmonics only by clipping ~3.9 dB louder than the real
+    // pedal (null tests, 2026-06-20). Tuned to the measured H2/H3 balance at the "switch up" setting.
+    static constexpr double kAsymBias = 0.18; // wave-domain bias; fit to real asym even/odd (-11 dB
+                                              // @220Hz) at level=Medium, null −4.2 dB (2026-06-20)
 
     Stage1() = default;
 
@@ -200,11 +213,9 @@ public:
         nortonA.setResistanceValue (rfb);
     }
 
-    /** Tune the Asymmetric-mode diode counts (effective series diodes per polarity, × ideality). */
-    void setAsymCounts (double nPos, double nNeg)
-    {
-        diodeA.setParams (kIs, kVt, nPos * kN, nNeg * kN);
-    }
+    /** Tune the Asymmetric-mode lateral bias (wave-domain offset; more bias = more even harmonics,
+     *  level ~unchanged). For calibration sweeps. */
+    void setAsymBias (double bias) { diodeA.setBias (bias); }
 
     void setMode (ClipMode m)
     {
@@ -389,6 +400,6 @@ private:
     chowdsp::wdft::ResistiveCurrentSourceT<double> nortonA { 503.3e3 };
     Cap c1A { 100.0e-12 };
     Parallel<decltype (nortonA), decltype (c1A)> zfA { nortonA, c1A };
-    AsymDiodePairT<double, decltype (zfA), AccurateOmega> diodeA { zfA, kIs, kVt, kAsymNpos * kN, kAsymNneg * kN };
+    AsymDiodePairT<double, decltype (zfA), AccurateOmega> diodeA { zfA, kIs, kVt, kN, kAsymBias };
 };
 } // namespace tommy::dsp

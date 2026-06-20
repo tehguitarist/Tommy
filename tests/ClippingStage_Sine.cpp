@@ -83,9 +83,14 @@ int main()
             const double pk = measure (m, f, amp, fs, bassR, drive).max;
             const double relErr = std::abs (pk - lin) / std::abs (lin);
             const char* name = m == Stage1::ClipMode::Soft ? "Soft" : m == Stage1::ClipMode::Medium ? "Medium" : "Hard";
+            // Soft/Medium: diodes off at tiny signal => match Linear tightly. Hard ("Asymmetric")
+            // is a symmetric pair shifted by a fixed lateral BIAS, which perturbs the small-signal
+            // GAIN by ~0.2 dB (the bias moves the operating point on the diode curve) — so it is
+            // intentionally NOT bit-identical to Linear. Allow that offset, still catch gross errors.
+            const double tol = (m == Stage1::ClipMode::Hard) ? 0.05 : 0.02;
             std::printf ("  %-6s peak %.6f vs Linear %.6f  (rel err %.4f) %s\n",
-                         name, pk, lin, relErr, relErr > 0.02 ? " <-- FAIL" : "");
-            if (relErr > 0.02)
+                         name, pk, lin, relErr, relErr > tol ? " <-- FAIL" : "");
+            if (relErr > tol)
                 ++failures;
         }
     }

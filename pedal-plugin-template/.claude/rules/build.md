@@ -8,6 +8,15 @@
 - Optional but recommended: **xsimd** (accelerates R-type adaptor matrix multiplies). Add it
   before chowdsp_wdf and `#include <xsimd/xsimd.hpp>` before `<chowdsp_wdf/chowdsp_wdf.h>`.
 - `-Wall -Wextra`; treat warnings as errors in CI.
+- **Mark third-party headers (chowdsp_wdf, etc.) as SYSTEM includes.** `juce_recommended_warning_flags`
+  enables `-Wshadow-field-in-constructor`, which fires harmlessly on chowdsp_wdf's header-only
+  constructors (param/field name reuse — not a bug). Don't silence it globally (you'd blind yourself
+  to real shadowing). Instead, after `add_subdirectory(libs/chowdsp_wdf)`, re-declare its includes as
+  SYSTEM so its noise vanishes while your code stays fully warned (CMake 3.15-compatible):
+  ```cmake
+  get_target_property(_chowdsp_inc chowdsp_wdf INTERFACE_INCLUDE_DIRECTORIES)
+  set_target_properties(chowdsp_wdf PROPERTIES INTERFACE_SYSTEM_INCLUDE_DIRECTORIES "${_chowdsp_inc}")
+  ```
 
 ## Submodule setup
 

@@ -17,6 +17,10 @@ def clock_to_x(hhmm):
     s = str(int(hhmm))
     if len(s) == 5:        # 'G10300' typo -> 1030
         s = s[:4]
+    # 3-digit values are H:MM only for single-digit hours 7/8/9 ("700","900"). A 3-digit value
+    # starting with '1' (e.g. "120") is a missing-trailing-zero typo for noon-ish -> "1200".
+    if len(s) == 3 and s[0] == "1":
+        s = s + "0"
     v = int(s)
     h, m = v // 100, v % 100
     return max(0.0, min(1.0, (h + m / 60.0 - 7.0) / 10.0))

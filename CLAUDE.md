@@ -111,11 +111,17 @@ All three are in `schematics/` at the repo root. Load them when verifying any ci
 >   1. **EQ tapers — best-estimate DONE 2026-06-21** (`29k·x^0.625` treble, `41k·x^2.41` bass; musical
 >      band now ~1 dB mean error). ±0.3 dB NOT reached and not reachable from current data — the
 >      residual is HF-SHAPE (12k over-dark, 1–4k bright at high cut), a circuit-model limit, not the
->      taper. To go further would need EITHER (a) clean low-drive single-knob sweeps on the PRIMARY
->      pedal (one knob 7→5 o'clock, others noon, drive low enough to not clip the −30 dBFS sweep —
->      current batches clip-confound above ~x=0.35 and only span x≈0.4–0.8 with 2 bass / 3 treble
->      points), OR (b) a higher-order/shape correction to the treble+C11 HF rolloff to match the real
->      pedal's gentler top octave (would also help the 12k deficit). Tone stack is committed as-is.
+>      taper. **TAPER-TYPE RESEARCH (2026-06-21, web — see `timmy-pot-taper-research` memory):**
+>      values & cut-direction CONFIRMED right; but the tone pots are A-pots wired in REVERSE to mimic a
+>      C-taper (so effective taper is reverse-log/CONCAVE, NOT the forward-audio `10^(2x-2)` we'd
+>      documented), AND **TREBLE taper is VERSION-DEPENDENT: early = A-reverse (concave); later "V4" =
+>      LINEAR (B).** Our concave treble fits an early unit and the data fits linear-with-offset about
+>      as well → **need the physical pedal's version/era to pin treble taper TYPE before tuning more.**
+>      To go further: (a) IDENTIFY the pedal version, (b) clean low-drive single-knob sweeps on the
+>      PRIMARY pedal (one knob 7→5 o'clock, others noon, drive low enough not to clip the −30 dBFS
+>      sweep — current batches clip-confound above ~x=0.35, span only x≈0.4–0.8, 2 bass / 3 treble pts),
+>      (c) a higher-order HF-shape correction to the treble+C11 rolloff (also helps the 12k deficit).
+>      Tone stack committed as-is; do NOT over-tune the exponents until taper TYPE is known.
 >   2. **Asym level/null — DONE** (bias-offset model + C6). Remaining null gap: 2–6 kHz residual is
 >      harmonic PHASE decorrelation in ALL modes (level-matched: <2k nulls −5/−6 dB, 2–6k ≈ 0) —
 >      partly inherent to nulling vs a NAM capture (magnitude/feel, not exact phase). Magnitude matches.

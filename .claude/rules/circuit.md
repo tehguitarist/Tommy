@@ -158,14 +158,29 @@ IC1_A and IC1_B are both **JRC4559** (= NJM4559, equivalent to RC4559).
 
 ## Pot Tapers (all must be correct — wrong taper = wrong feel/sound)
 
-| Control | Designation | Taper |
-|---------|------------|-------|
-| BASS    | A50k       | Audio (log) |
-| DRIVE   | A1m        | Audio (log) |
-| TREB    | A50k       | Audio (log) |
-| VOL     | A25K       | Audio (log) |
+| Control | Designation | Physical pot | Effective taper (in-circuit R vs rotation) |
+|---------|------------|-------------|--------------------------------------------|
+| BASS    | 50k        | A (audio), **reverse-wired** | reverse-log / C-like (concave) |
+| DRIVE   | A1M        | A (audio) | forward audio |
+| TREB    | 50k        | **VERSION-DEPENDENT**: early = A reverse-wired; later "V4" = B (linear) | concave OR linear |
+| VOL     | 25k (+~18k input→output) | A (audio) | forward audio + R11/18k shaping |
 
-Audio taper approximation: `R = R_max * pow(10.0, 2.0 * x - 2.0)` where x ∈ [0,1].
+> **⚠ The old "audio taper approximation `R = R_max·10^(2x-2)`" (a FORWARD audio/convex curve) was
+> WRONG for the tone controls and is superseded** (web-verified 2026-06-21, see the
+> `timmy-pot-taper-research` memory). Paul Cochrane wanted reverse-log (C-taper) BASS/TREBLE but
+> couldn't source C pots, so he used **A pots wired in REVERSE** to mimic a C-taper. The in-circuit
+> resistance vs knob rotation (in the CUT direction) is therefore REVERSE-LOG ≈ CONCAVE (fast rise
+> early, flattening) — the opposite concavity to a forward audio taper. Direction is a CUT: fully CCW
+> (x=0) = no cut / full band; CW (x=1) = max cut.
+>
+> **TREBLE taper is version-dependent:** early units use the A-reverse (concave) pot; later "V4" units
+> changed TREBLE to **linear (B)** to remove a 7–10 o'clock dead spot. Identify the physical pedal's
+> version before trusting either taper shape. MXR reissues may differ again.
+>
+> The shipped empirical laws live in `src/utils/TaperUtils.h` (TREBLE `29k·x^0.625` concave — fits an
+> early reverse-log unit; BASS `41k·x^2.41` — convex, but only 2 fit points constrain it and the
+> gain-leg network complicates R→cut, so its shape is unconfirmed; DRIVE `1e6·x^2.2`; VOL divider).
+> These are best-estimates from clipping-confounded captures, NOT a clean-sweep fit — see NEXT STEPS.
 
 ---
 

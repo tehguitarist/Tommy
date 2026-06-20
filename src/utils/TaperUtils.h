@@ -85,14 +85,19 @@ inline double trebleResistance (double x)
 {
     if (x <= 0.0)
         return 0.0;
-    // BATCH-4 RE-FIT (2026-06-20, PRIMARY pedal): the previous 70k*x^1.43 cut treble far too
-    // aggressively above ~9 o'clock. Against the drive-independent HF shelf of the primary-pedal
-    // captures, the cut error was small at x=0.20 (~0.5 dB) but ~5 dB too dark at x=0.35. A
-    // gentler power law 50k*x^1.8 roughly halves the error (grid-search optimum over coeff/exp).
-    // The residual ~2 dB @8k is a treble-INDEPENDENT baseline HF deficit (Stage 2 C11 + bilinear
-    // cap warping near Nyquist), not fixable here. INTERIM: the captures only reach x=0.35 (10:30),
-    // so x>0.5 is unconstrained extrapolation — finalise with a clean low-drive treble sweep.
-    return 50.0e3 * std::pow (x, 1.8);
+    // BATCH 3+4 RE-FIT (2026-06-20, PRIMARY pedal). The real Timmy treble is a GENTLE high-cut
+    // across its whole rotation, NOT the dramatic darkening a convex audio taper produces. Earlier
+    // convex power laws were wrong in SHAPE: 70k*x^1.43 over-cut by ~5 dB @8k by x=0.35; 50k*x^1.8
+    // under-cut at x=0.20 (+4 dB) yet still over-cut at the top. Two reliable measurements pin it:
+    //   - batch 4 (clock matrix): real TREB_R ≈ flat ~7k across x=0.20..0.35 (drive-independent
+    //     Soft-mode 8k shelf: real +0.5 dB @0.20, -1.1 dB @0.35).
+    //   - batch 3 MATCHED PAIR (G3 V4 B8, only treble differs T5->T8): real adds only ~2 dB more
+    //     cut @8k from x=0.5->0.8, vs ~7 dB for the old taper -> taper far too steep up top.
+    // A CONCAVE law 12k*x^0.4 (fast rise to ~6k by x=0.2, then ~flat to 12k at full) matches both:
+    // batch-4 8k within ~0.85 dB at 0.20 & 0.35, batch-3 pair incremental within ~0.4 dB. Max cut
+    // ~12k (corner ~1.2 kHz) is musical, not the old 50k/612 Hz over-cut. (A treble-INDEPENDENT
+    // baseline ~-3.8 dB @12k deficit remains — Stage 2 C11 + bilinear cap warp near Nyquist.)
+    return 12.0e3 * std::pow (x, 0.4);
 }
 
 /** VOLUME divider gain (A25K with R11 7k5 across the upper section). x = rotation 0..1.

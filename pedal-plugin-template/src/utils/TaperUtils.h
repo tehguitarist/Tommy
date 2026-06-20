@@ -43,10 +43,16 @@ inline double audioTaperR0 (double x, double rMax)
  *  The 10^(2x-2) audio approximation above is frequently TOO AGGRESSIVE — it puts only ~10% of R
  *  at the midpoint, where a real audio pot sits nearer ~35-40%. In the reference build this made
  *  the tone controls (which set audible corner frequencies) far too shallow. Fitting the measured
- *  corner-vs-knob from pedal captures gave a clean power law with p~1.4 and rMax ~= the SCHEMATIC
- *  pot value (the pot/cap were right — only the taper CURVE was wrong). When you have captures,
- *  fit p and rMax to them (see docs/calibration-and-gain-staging.md); p~1.4 is a good starting
- *  point for an "audio" pot, p=1 is linear. */
+ *  corner-vs-knob from pedal captures gave a clean power law with rMax ~= the SCHEMATIC pot value
+ *  (the pot/cap were right — only the taper CURVE was wrong).
+ *
+ *  ** FIT THE SHAPE (p), NOT JUST THE MAGNITUDE. ** p > 1 is CONVEX (slow start, fast end — the
+ *  usual "audio" feel). But a real control can be CONCAVE (p < 1: fast rise then ~flat) — e.g. a
+ *  subtle "trim"-style tone cut that engages early and barely deepens after. In the reference build
+ *  the treble cut was concave (~12k * x^0.4): convex laws were wrong in SHAPE no matter the coeff —
+ *  they under-cut at low settings AND over-cut wildly at the top. Symptom of wrong shape: you can
+ *  match one knob position but not two. So sample at least TWO knob points and fit p to both; don't
+ *  assume convex. p~1.4 is a fine STARTING point for an audio pot, p=1 linear, p<1 concave. */
 inline double powerLawTaper (double x, double rMax, double p = 1.43)
 {
     if (x <= 0.0)
@@ -63,9 +69,11 @@ inline double powerLawTaper (double x, double rMax, double p = 1.43)
 inline double driveResistanceExample (double x) { return audioTaperR0 (x, 1.0e6); }
 
 /** EXAMPLE: a tone-CUT control (knob up = more cut). Cut-only controls map x->R directly
- *  (x=0 = no cut). Prefer the power-law taper fit to captures over the audio approximation — the
- *  latter under-cuts badly. Reference build used ~50k * x^1.43 (schematic pot value, fitted curve): */
-inline double cutControlExample (double x) { return powerLawTaper (x, 50.0e3, 1.43); }
+ *  (x=0 = no cut). Prefer the power-law taper fit to captures over the audio approximation. Fit the
+ *  SHAPE p to >=2 knob points (see powerLawTaper note): the reference build's treble cut turned out
+ *  CONCAVE (~12k * x^0.4), not the convex p~1.4 first assumed — a gentle high-cut that engages early
+ *  then plateaus. p shown as 1.43 here only as a placeholder; measure it. */
+inline double cutControlExample (double x) { return powerLawTaper (x, 12.0e3, 0.4); }
 
 /** EXAMPLE: a passive output volume pot as a voltage divider (returns 0..1 gain).
  *  Generic shape: split Rtotal into upper/lower arms by the (tapered) wiper fraction, optionally

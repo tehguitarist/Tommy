@@ -109,9 +109,19 @@ pair's `Good` path both honour the provider. Verify with an audible-band aliasin
 - See `utils/TaperUtils.h` and calibration doc §3 for the **audio-taper floor trap** on large pots.
 - **The `10^(2x-2)` audio approximation is too aggressive** (only ~10% R at midpoint vs ~35-40% for
   a real audio pot) — it makes tone controls far too shallow. Prefer fitting a **power-law taper**
-  (`R = Rmax * x^p`, p≈1.4) to captures, with Rmax ≈ the schematic pot value. See calibration
-  doc §3b. Tone pots inside a feedback gain-set leg are coupled to gain — re-check levels after
-  retapering them.
+  (`R = Rmax * x^p`) to captures, with Rmax ≈ the schematic pot value. See calibration doc §3b. Tone
+  pots inside a feedback gain-set leg are coupled to gain — re-check levels after retapering them.
+- **Fit the taper SHAPE (p), and don't assume convex.** p≈1.4 (convex) is only a starting guess. A
+  subtle "trim"-style tone cut can be **concave** (p<1: fast rise to a moderate R, then ~flat) — the
+  reference build's treble was `~12k·x^0.4`. Tell-tale of a wrong shape (not just wrong coeff): you
+  can match ONE knob position but the error flips sign at another (e.g. too bright at 9 o'clock yet
+  too dark at 3 o'clock). So constrain p with **at least two** knob points across the full range.
+- **Isolate a coupled control with a MATCHED-PAIR capture.** When a control only appears in captures
+  alongside clipping/other controls (so the linear EQ is confounded), capture two settings that
+  differ in **only that one knob**, everything else identical. The clipping/other effects are then
+  identical in both and **cancel in the difference**, giving a clean differential measurement of
+  that control's contribution — even from driven captures. (This rescued a treble fit that raw
+  per-capture transfers couldn't, because the clean sweep wasn't actually clean at drive.)
 
 ## Signal calibration
 

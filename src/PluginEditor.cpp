@@ -45,7 +45,11 @@ TommyAudioProcessorEditor::TommyAudioProcessorEditor(TommyAudioProcessor& p)
       // Clipping mode — ParameterAttachment drives SW1Switch position
       clipAttach (*p.apvts.getParameter("clipping_mode"),
                   [this](float v) { sw1Switch.setPosition(juce::roundToInt(v)); },
-                  nullptr)
+                  nullptr),
+      // Supply voltage — ParameterAttachment drives the SupplyControl display
+      supplyAttach (*p.apvts.getParameter("supply_voltage"),
+                    [this](float v) { supplyControl.setIndex(juce::roundToInt(v)); },
+                    nullptr)
 {
     setLookAndFeel(&laf);
 
@@ -73,8 +77,16 @@ TommyAudioProcessorEditor::TommyAudioProcessorEditor(TommyAudioProcessor& p)
 
     addAndMakeVisible(outputVU);
 
-    // ── Pedal face: power label ──────────────────────────────────────────────
-    configureLabel(powerLabel, 8.0f, TommyLookAndFeel::cPowerLabel);
+    // ── Pedal face: supply-voltage selector (interactive "(+) 9V (-)") ───────
+    supplyControl.onChange = [this](int idx)
+    {
+        auto* param = audioProcessor.apvts.getParameter("supply_voltage");
+        param->beginChangeGesture();
+        param->setValueNotifyingHost(param->convertTo0to1((float) idx));
+        param->endChangeGesture();
+    };
+    addAndMakeVisible(supplyControl);
+    supplyAttach.sendInitialUpdate();
 
     // ── SW1 switch — added BEFORE knobs so knobs render on top of its label overlap area ──
     sw1Switch.onChange = [this](int pos)
@@ -316,8 +328,8 @@ void TommyAudioProcessorEditor::resized()
     {
         auto pp = pedalBounds.reduced(i(10), i(10));
 
-        powerLabel.setBounds(pp.removeFromTop(i(18)));
-        sepLineY = powerLabel.getBottom() + i(5);
+        supplyControl.setBounds(pp.removeFromTop(i(18)));
+        sepLineY = supplyControl.getBottom() + i(5);
         pp.removeFromTop(i(6));
 
         // Row 1: Bass · SW1 · Gain
@@ -401,7 +413,7 @@ void TommyAudioProcessorEditor::refreshFonts(float sc)
     outputPanelLabel.setFont(bold(8.0f  * sc).withExtraKerningFactor(0.20f));
     inputTrimLabel  .setFont(bold(7.5f  * sc));
     outputTrimLabel .setFont(bold(7.5f  * sc));
-    powerLabel      .setFont(bold(8.0f  * sc));
+    supplyControl   .setFontSize(8.0f  * sc);
     bypassLabel     .setFont(bold(7.0f  * sc).withExtraKerningFactor(0.20f));
     osLabel         .setFont(bold(8.0f  * sc).withExtraKerningFactor(0.18f));
     osLiveLabel     .setFont(bold(7.0f  * sc).withExtraKerningFactor(0.15f));

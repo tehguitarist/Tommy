@@ -46,6 +46,8 @@ int main (int argc, char** argv)
     // Optional drive taper override: DRIVE_R = coeff * driveX^exp (argv[17], argv[18]).
     const double driveCoeff = (argc > 17) ? std::atof (argv[17]) : -1.0;
     const double driveExp = (argc > 18) ? std::atof (argv[18]) : 1.0;
+    // Optional supply voltage (argv[19]): 9/12/18 V scales the op-amp rails. Default 9 V.
+    const double supplyV = (argc > 19) ? std::atof (argv[19]) : 9.0;
 
     static const Stage1::ClipMode modes[] = { Stage1::ClipMode::Hard, Stage1::ClipMode::Medium,
                                               Stage1::ClipMode::Soft };
@@ -70,6 +72,7 @@ int main (int argc, char** argv)
     const double driveR = (driveCoeff > 0.0) ? driveCoeff * std::pow (driveX, driveExp)
                                              : tp::driveResistance (driveX);
     dsp.setControls (bassR, driveR, trebR, mode);
+    dsp.setSupplyVoltage (supplyV);
     if (asymBias >= 0.0)
         dsp.setAsymBias (asymBias);
     dsp.setAdaaEnabled (true);

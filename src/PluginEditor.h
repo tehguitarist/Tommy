@@ -4,6 +4,7 @@
 #include "ui/TommyLookAndFeel.h"
 #include "ui/VUMeter.h"
 #include "ui/SW1Switch.h"
+#include "ui/SupplyControl.h"
 #include "ui/LEDIndicator.h"
 
 #include <juce_audio_processors/juce_audio_processors.h>
@@ -46,7 +47,7 @@ private:
     VUMeter      outputVU;
 
     // ── Pedal face ───────────────────────────────────────────────────────────
-    juce::Label  powerLabel   { {}, "(+)  9V  (-)" };
+    SupplyControl supplyControl;
     juce::Slider bassKnob, gainKnob, volumeKnob, trebleKnob;
     juce::Label  bassLabel    { {}, "BASS"   };
     juce::Label  gainLabel    { {}, "GAIN"   };
@@ -72,6 +73,7 @@ private:
     juce::SliderParameterAttachment inTrimAttach, outTrimAttach;
     juce::ButtonParameterAttachment bypassAttach;
     juce::ParameterAttachment       clipAttach;
+    juce::ParameterAttachment       supplyAttach;
 
     // Stored in resized(), used in paint()
     juce::Rectangle<int> pedalBounds;

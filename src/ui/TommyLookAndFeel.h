@@ -19,6 +19,7 @@ public:
     static constexpr juce::uint32 cLEDInactive     = 0xFF091A09u;
     static constexpr juce::uint32 cLabelText       = 0xFFFFFFFFu;
     static constexpr juce::uint32 cPowerLabel      = 0xFF2E4A60u;
+    static constexpr juce::uint32 cPowerLabelLit   = 0xFF6FA8D8u; // active (+)/(-) on the supply selector
     static constexpr juce::uint32 cTrimLabel       = 0xFF5588AAu;
     static constexpr juce::uint32 cTrimArc         = 0xFF2A5898u;
     static constexpr juce::uint32 cTrimArcTrack    = 0xFF101E30u;

@@ -20,6 +20,7 @@ TommyAudioProcessor::TommyAudioProcessor()
     pOversampling  = apvts.getRawParameterValue ("oversampling");
     pRenderOs      = apvts.getRawParameterValue ("render_oversampling");
     pBypass        = apvts.getRawParameterValue ("bypass");
+    pSupply        = apvts.getRawParameterValue ("supply_voltage");
 }
 
 TommyAudioProcessor::~TommyAudioProcessor() = default;
@@ -59,6 +60,9 @@ juce::AudioProcessorValueTreeState::ParameterLayout TommyAudioProcessor::createP
         juce::StringArray { "1x", "2x", "4x", "8x" }, 3)); // default 8x for offline bouncing
 
     params.push_back (std::make_unique<juce::AudioParameterBool> ("bypass", "Bypass", false));
+
+    params.push_back (std::make_unique<juce::AudioParameterChoice> ("supply_voltage", "Supply",
+        juce::StringArray { "9V", "12V", "18V" }, 0)); // default 9V (the stock pedal)
 
     return { params.begin(), params.end() };
 }
@@ -154,8 +158,15 @@ void TommyAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::
     bypassMix.setTargetValue (wantBypass ? 1.0f : 0.0f);
     bypassed.store (wantBypass);
 
+    // Supply voltage: choice index 0/1/2 -> 9/12/18 V (scales the op-amp output rails / headroom).
+    static constexpr double kSupplyVolts[] = { 9.0, 12.0, 18.0 };
+    const double supplyV = kSupplyVolts[juce::jlimit (0, 2, (int) pSupply->load())];
+
     for (auto& ch : dsp)
+    {
         ch.setControls (bassR, driveR, trebR, mode);
+        ch.setSupplyVoltage (supplyV);
+    }
 
     // 3. Per channel: input trim + meter, run the WDF chain in double, crossfade bypass, out meter.
     // Process only actual input channels; if mono-in/stereo-out we copy ch0 to ch1 afterward.

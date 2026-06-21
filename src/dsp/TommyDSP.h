@@ -56,6 +56,24 @@ public:
         treble.setParams (trebR);
     }
 
+    /** Selectable supply voltage (9 / 12 / 18 V). Scales BOTH op-amp output rails — at a higher
+     *  supply the op-amp can swing further before clipping (more headroom / "more open"), exactly as
+     *  the real pedal responds to a higher supply. The diode clip thresholds are supply-INDEPENDENT
+     *  (fixed by the diode I-V), so only the rail headroom changes — most audible in Hard mode and at
+     *  extreme drive, subtle for Soft/Medium (diode-limited). VREF and V+ both rise ~linearly with the
+     *  supply, so the bipolar rail limits (measured from VREF) grow ~linearly too: anchored at the
+     *  validated 9 V values (+2.5 / −3.4 V), with slopes from the R9/R10 VREF divider ratio (~0.549)
+     *  → +0.451 V and +0.549 V per supply volt. */
+    void setSupplyVoltage (double volts)
+    {
+        constexpr double kBaseV = 9.0;
+        const double dv = volts - kBaseV;
+        const double railPos = Stage1::kRailPosDefault + 0.451 * dv;
+        const double railNeg = Stage1::kRailNegDefault + 0.549 * dv;
+        clipper.setRailVoltages (railPos, railNeg); // IC1_A (Stage 1)
+        stage2.setRailVoltages (railPos, railNeg);  // IC1_B (Stage 2)
+    }
+
     void setFactor (int factorLog2)
     {
         clipper.setFactor (factorLog2);

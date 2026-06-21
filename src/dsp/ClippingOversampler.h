@@ -71,6 +71,7 @@ public:
     void setParams (double bassR, double driveR) { stage1.setParams (bassR, driveR); }
     void setAsymBias (double bias) { stage1.setAsymBias (bias); }
     void setRailClampEnabled (bool e) { stage1.setRailClampEnabled (e); }
+    void setRailVoltages (double pos, double negMag) { stage1.setRailVoltages (pos, negMag); }
     void setAdaaEnabled (bool e) { stage1.setAdaaEnabled (e); }
 
     double getLatencySamples() const { return oversampler ? (double) oversampler->getLatencyInSamples() : 0.0; }

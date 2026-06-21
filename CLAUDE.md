@@ -67,21 +67,25 @@ All three are in `schematics/` at the repo root. Load them when verifying any ci
 > - `kInputRef = 1.2f` (volts per full-scale; re-calibrated from NAM A/B — was 3.27 which over-drove
 >   clipping ~9 dB and caused the "harsh/fizzy" tone). Cancels in the linear path; only sets clip onset.
 > - `kOutputMakeup = 0.9f` (honest 1.0 minus ~1 dB headroom pad; worst case full-drive/full-vol ≈ −0.6 dBFS).
-> - **Tapers (`utils/TaperUtils.h`) — RE-FIT 2026-06-21 (batch 3, PRIMARY pedal).** BASS `41k·x^2.41`,
->   DRIVE `1e6·x^2.2`, TREBLE `29k·x^0.625`, VOLUME A25K+R11 7.5k (unchanged). BASS/TREBLE are CUT
->   controls: **knob up = MORE cut**. **The 2026-06-20 TREBLE `12k·x^0.4` "gentle concave" law was
->   WRONG** — it left the plugin +6..+12 dB too BRIGHT @4 kHz. That fit confused the small INCREMENTAL
->   cut of the matched pair (T5→T8 only adds ~2.5 dB @8k) with a gentle taper; but a 1st-order LP's
->   8 kHz attenuation SATURATES once the corner drops below ~800 Hz, so the same small increment occurs
->   at HIGH R. The ABSOLUTE level (real 8k=−16 dB @x=0.5) needs TREB_R ~20k, not ~9k. Back-fitting
->   TREB_R to real 4k & 8k cut (norm @250 Hz, drive cancels) over the consistent-drive G3 captures:
->   x=0.4→16k, 0.5→20k, 0.8→25k → `29k·x^0.625`. BASS similarly over-cut ~2×: real wants x=0.6→12k,
->   0.8→24k → `41k·x^2.41`. **Result: musical-band (60 Hz–8 kHz) error now ~1 dB mean / 2.4 dB max
->   (was 6–12 dB).** Direction confirmed PRIMARY via the B8 matched pair (knob 0.5→0.8 = more cut).
->   LIMITATION: matching 4k/8k forces a low corner that over-darkens 12 kHz by ~5–8 dB and leaves
->   1–4 kHz +1–2.4 dB bright at high cut — an HF-SHAPE (circuit-model) limit, NOT a taper limit (the
->   real top octave rolls off gentler than the plugin's treble-LP + C11 + bilinear stack). ±0.3 dB is
->   NOT reachable from this confounded data; this is the best circuit-informed estimate.
+> - **Tapers (`utils/TaperUtils.h`) — V4 FINAL STATE (2026-06-21, user-chosen; web-verified taper
+>   types, see `timmy-pot-taper-research`).** BASS `41k·x^2.41`, DRIVE `1e6·x^2.2`, TREBLE
+>   `50k·x/(x+1)` (LINEAR-pot rheostat law), VOLUME A25K + **R11 18k**. BASS/TREBLE are CUT controls:
+>   **knob up = MORE cut**.
+>   • **TREBLE — V4 = LINEAR pot.** Real Timmy tone pots are A (audio) pots wired in REVERSE to mimic
+>     C-taper; the documented "forward `10^(2x-2)`" was wrong. But the *later "V4"* unit (which the user
+>     is targeting as final) changed TREBLE to a LINEAR (B) pot. Modelled as the genuine linear-pot
+>     rheostat `50k·x/(x+1)` (R(0)=0, R(1)=25k physical max). ACCURACY TRADE (user-accepted): our
+>     batch-3 captures look like an EARLY reverse-log unit (want concave `29k·x^0.625`, kept in a code
+>     comment for reference), so V4 linear runs ~+1.5..+2.8 dB bright @4 kHz at high cut and over-dark
+>     at very low treble. (The 06-20 `12k·x^0.4` concave law was WRONG — left it +6..+12 dB too bright;
+>     the trap: a 1st-order LP's 8 kHz attenuation SATURATES once the corner < ~800 Hz, so the matched
+>     pair's small T5→T8 increment ≠ a gentle taper; the ABSOLUTE level disambiguates.)
+>   • **BASS — convex, VALIDATED.** `41k·x^2.41`, matches real 60 Hz cut within ±0.6 dB at
+>     x=0.5/0.6/0.8 (batch 4 mined for the extra x=0.5 point). Convex is correct: bass sits in the
+>     Stage 1 gain leg whose R→cut transfer inverts the pot's concavity. Direction confirmed PRIMARY.
+>   • **VOLUME — R11 18k** (V4 spec: 25kA + 18k input→output; repo schematic shows 7k5 = earlier rev).
+>   • Residual HF-SHAPE limit (12k over-dark, 1–4k bright at high cut) is a circuit-model issue, NOT a
+>     taper one; ±0.3 dB not reachable from this confounded data. Tone stack is FINAL for V4.
 > - **Top-octave prewarp (`dsp/Prewarp.h`, 2026-06-20):** base-rate linear caps warp near Nyquist
 >   (bilinear), leaving 12k ~3.8 dB too dark; prewarp C5 (dynamic, tracks TREB) + C11 (fixed) → clean
 >   12k −3.8→−2.0 dB. Stage-1 caps NOT prewarped (already oversampled). Residual = chosen prewarp-vs-OS
@@ -108,20 +112,15 @@ All three are in `schematics/` at the repo root. Load them when verifying any ci
 > R), then fits a power law. batch 4 = PRIMARY clock-matrix (switch up/mid/down × gain).
 >
 > **NEXT STEPS (Step 9 remaining):**
->   1. **EQ tapers — best-estimate DONE 2026-06-21** (`29k·x^0.625` treble, `41k·x^2.41` bass; musical
->      band now ~1 dB mean error). ±0.3 dB NOT reached and not reachable from current data — the
->      residual is HF-SHAPE (12k over-dark, 1–4k bright at high cut), a circuit-model limit, not the
->      taper. **TAPER-TYPE RESEARCH (2026-06-21, web — see `timmy-pot-taper-research` memory):**
->      values & cut-direction CONFIRMED right; but the tone pots are A-pots wired in REVERSE to mimic a
->      C-taper (so effective taper is reverse-log/CONCAVE, NOT the forward-audio `10^(2x-2)` we'd
->      documented), AND **TREBLE taper is VERSION-DEPENDENT: early = A-reverse (concave); later "V4" =
->      LINEAR (B).** Our concave treble fits an early unit and the data fits linear-with-offset about
->      as well → **need the physical pedal's version/era to pin treble taper TYPE before tuning more.**
->      To go further: (a) IDENTIFY the pedal version, (b) clean low-drive single-knob sweeps on the
->      PRIMARY pedal (one knob 7→5 o'clock, others noon, drive low enough not to clip the −30 dBFS
->      sweep — current batches clip-confound above ~x=0.35, span only x≈0.4–0.8, 2 bass / 3 treble pts),
->      (c) a higher-order HF-shape correction to the treble+C11 rolloff (also helps the 12k deficit).
->      Tone stack committed as-is; do NOT over-tune the exponents until taper TYPE is known.
+>   1. **EQ tapers — V4 FINAL, DONE 2026-06-21.** Taper TYPES resolved via web research (see
+>      `timmy-pot-taper-research`): values & cut-direction CONFIRMED right; tone pots are A-pots wired
+>      in REVERSE to mimic C-taper (reverse-log), AND treble is VERSION-DEPENDENT (early = A-reverse;
+>      "V4" = LINEAR). **User chose V4 as final** → TREBLE `50k·x/(x+1)` (linear rheostat), VOLUME R11
+>      18k. BASS `41k·x^2.41` convex VALIDATED ±0.6 dB (batch 3+4). Accepted trade: V4 linear treble
+>      runs +1.5..+2.8 dB bright @4 kHz at high cut vs our (early-unit-looking) captures. Remaining
+>      ±0.3 dB gap is HF-SHAPE (12k over-dark, 1–4k bright at high cut) — a circuit-model limit, NOT a
+>      taper one. To push further (optional, low priority): (a) clean low-drive single-knob sweeps, or
+>      (b) a higher-order treble+C11 HF-shape correction (also helps the 12k deficit). Tone stack FINAL.
 >   2. **Asym level/null — DONE** (bias-offset model + C6). Remaining null gap: 2–6 kHz residual is
 >      harmonic PHASE decorrelation in ALL modes (level-matched: <2k nulls −5/−6 dB, 2–6k ≈ 0) —
 >      partly inherent to nulling vs a NAM capture (magnitude/feel, not exact phase). Magnitude matches.

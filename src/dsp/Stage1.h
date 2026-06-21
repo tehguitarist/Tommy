@@ -169,8 +169,26 @@ public:
     // odd-dominant + moderate-even profile) WITHOUT raising the level — unlike a per-polarity
     // 1:2 threshold, which matched the harmonics only by clipping ~3.9 dB louder than the real
     // pedal (null tests, 2026-06-20). Tuned to the measured H2/H3 balance at the "switch up" setting.
-    static constexpr double kAsymBias = 0.18; // wave-domain bias; fit to real asym even/odd (-11 dB
-                                              // @220Hz) at level=Medium, null −4.2 dB (2026-06-20)
+    static constexpr double kAsymBias = 0.30; // wave-domain bias. RE-CALIBRATED to the batch-5 hot
+                                              // reamp (2026-06-22): real Hard H2 ≈ −34 dB re fund at
+                                              // high drive; 0.30 gives −36 (was 0.18 → −48, too weak).
+                                              // Level/odd harmonics ~unchanged (bias-offset model).
+
+    // GLOBAL diode-mismatch asymmetry (2026-06-22). A real Timmy has measurable EVEN harmonics in
+    // EVERY clip mode — including the nominally symmetric Soft/Medium positions — at ~−47..−55 dB re
+    // fundamental at high drive (hot-reamp captures, batch 5). A perfectly-matched bipolar diode
+    // model produces NONE (even harmonics at the numerical floor). Real 1N4148s have a small
+    // forward-voltage spread between the antiparallel diodes, and the VREF bias sits above
+    // mid-supply, so the real clip thresholds are slightly asymmetric. We model this as a small
+    // lateral wave-domain bias on the Soft/Medium pair too (same mechanism as kAsymBias, just much
+    // smaller) — a component-tolerance effect, not ideal-circuit behaviour. Calibrated to the
+    // measured Soft/Medium H2 (~−50 dB); leaves the validated ODD harmonics + THD unchanged.
+    // Calibrated (batch-5 hot reamp, 2026-06-22) so Soft/Medium H2 ≈ −50 dB re fund at high drive —
+    // the middle of the real −47..−55 dB range (a fixed bias gives ~constant H2 while the real grows
+    // slightly with drive; at this −50 dB level the ±5 dB residual is inaudible). Odd harmonics + THD
+    // + level are unchanged (the bias only adds the missing even content). At bias=0 this is
+    // bit-identical to the old symmetric DiodePairT.
+    static constexpr double kSymBias = 0.15; // Soft/Medium diode-mismatch bias (even-harmonic warmth)
 
     Stage1() = default;
 
@@ -217,15 +235,26 @@ public:
      *  level ~unchanged). For calibration sweeps. */
     void setAsymBias (double bias) { diodeA.setBias (bias); }
 
+    /** Tune the GLOBAL Soft/Medium diode-mismatch bias (small even-harmonic asymmetry). For
+     *  calibration; re-applied on the next setMode (mode reconfigures the pair's Is + bias). */
+    void setSymBias (double bias)
+    {
+        symBias = bias;
+        if (mode == ClipMode::Soft)
+            diodePair.setParams (2.0 * kIs, kVt, kN, symBias);
+        else if (mode == ClipMode::Medium)
+            diodePair.setParams (kIs, kVt, kN, symBias);
+    }
+
     void setMode (ClipMode m)
     {
         if (m == mode)
             return;
         mode = m;
         if (mode == ClipMode::Soft)
-            diodePair.setDiodeParameters (2.0 * kIs, kVt, kN); // two diodes in parallel per side
+            diodePair.setParams (2.0 * kIs, kVt, kN, symBias); // two diodes in parallel per side
         else if (mode == ClipMode::Medium)
-            diodePair.setDiodeParameters (kIs, kVt, kN);
+            diodePair.setParams (kIs, kVt, kN, symBias);
     }
 
     ClipMode getMode() const { return mode; }
@@ -362,6 +391,7 @@ private:
     using Parallel = chowdsp::wdft::WDFParallelT<double, A, B>;
 
     ClipMode mode = ClipMode::Linear;
+    double symBias = kSymBias; // current Soft/Medium diode-mismatch bias (default kSymBias)
     bool railClampOn = true;
     bool adaaOn = false;
     double railPos = kRailPosDefault;
@@ -390,9 +420,11 @@ private:
     chowdsp::wdft::ResistiveCurrentSourceT<double> nortonP { 503.3e3 };
     Cap c1P { 100.0e-12 };
     Parallel<decltype (nortonP), decltype (c1P)> zfP { nortonP, c1P };
-    // DiodeQuality::Good honours the OmegaProvider (Best hardcodes omega4); with AccurateOmega
-    // the eqn-18 antiparallel-pair reflection is accurate, removing the omega4 distortion floor.
-    chowdsp::wdft::DiodePairT<double, decltype (zfP), chowdsp::wdft::DiodeQuality::Good, AccurateOmega> diodePair { zfP, kIs, kVt, kN };
+    // AsymDiodePairT (not chowdsp DiodePairT) so Soft/Medium carry the small global diode-mismatch
+    // bias (kSymBias) — at bias=0 it is bit-identical to DiodePairT's Good/eqn-18 path (symReflect(0)
+    // is exactly 0), so the symmetric behaviour is preserved; a small bias adds the measured even
+    // harmonics. AccurateOmega removes the omega4 distortion floor.
+    AsymDiodePairT<double, decltype (zfP), AccurateOmega> diodePair { zfP, kIs, kVt, kN, kSymBias };
 
     // --- Asymmetric-pair feedback (mode Hard/"Asymmetric"): Norton(R7+DRIVE) || C1, asym pair root.
     // Mild 2-sided asymmetric clip (n_pos vs n_neg diodes) — matches the captures' odd-dominant +

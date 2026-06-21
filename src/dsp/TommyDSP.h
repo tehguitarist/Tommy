@@ -86,6 +86,9 @@ public:
     /** Tune Asymmetric-mode lateral bias (for calibration). */
     void setAsymBias (double bias) { clipper.setAsymBias (bias); }
 
+    /** Tune the global Soft/Medium diode-mismatch bias (even-harmonic warmth; for calibration). */
+    void setSymBias (double bias) { clipper.setSymBias (bias); }
+
     /** ADAA on both op-amp rail clips (Stage 1 inside the oversampler, Stage 2 at base rate). */
     void setAdaaEnabled (bool e)
     {

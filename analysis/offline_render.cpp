@@ -48,6 +48,8 @@ int main (int argc, char** argv)
     const double driveExp = (argc > 18) ? std::atof (argv[18]) : 1.0;
     // Optional supply voltage (argv[19]): 9/12/18 V scales the op-amp rails. Default 9 V.
     const double supplyV = (argc > 19) ? std::atof (argv[19]) : 9.0;
+    // Optional Soft/Medium diode-mismatch bias override (argv[20]; <0 = keep shipped kSymBias).
+    const double symBias = (argc > 20) ? std::atof (argv[20]) : -1.0;
 
     static const Stage1::ClipMode modes[] = { Stage1::ClipMode::Hard, Stage1::ClipMode::Medium,
                                               Stage1::ClipMode::Soft };
@@ -75,6 +77,8 @@ int main (int argc, char** argv)
     dsp.setSupplyVoltage (supplyV);
     if (asymBias >= 0.0)
         dsp.setAsymBias (asymBias);
+    if (symBias >= 0.0)
+        dsp.setSymBias (symBias);
     dsp.setAdaaEnabled (true);
 
     const double outGain = kOutputMakeup * tp::volumeGain (volX) / kInputRef;

@@ -83,11 +83,14 @@ int main()
             const double pk = measure (m, f, amp, fs, bassR, drive).max;
             const double relErr = std::abs (pk - lin) / std::abs (lin);
             const char* name = m == Stage1::ClipMode::Soft ? "Soft" : m == Stage1::ClipMode::Medium ? "Medium" : "Hard";
-            // Soft/Medium: diodes off at tiny signal => match Linear tightly. Hard ("Asymmetric")
-            // is a symmetric pair shifted by a fixed lateral BIAS, which perturbs the small-signal
-            // GAIN by ~0.2 dB (the bias moves the operating point on the diode curve) — so it is
-            // intentionally NOT bit-identical to Linear. Allow that offset, still catch gross errors.
-            const double tol = (m == Stage1::ClipMode::Hard) ? 0.05 : 0.02;
+            // ALL clip modes now carry a deliberate lateral diode-mismatch BIAS (kSymBias for
+            // Soft/Medium, the larger kAsymBias for Hard) that adds the even harmonics a real Timmy
+            // shows in every mode. The bias moves the operating point on the diode curve, so it
+            // intentionally perturbs the NEAR-ZERO-signal gain (more bias = more perturbation: Soft
+            // ~3%, Hard ~21% at this tiny test level). This is a low-level artifact only — at moderate
+            // / playing levels the output level is unchanged (verified) — so tolerances here are
+            // per-mode and loose; they still catch a gross (broken) error.
+            const double tol = (m == Stage1::ClipMode::Hard) ? 0.25 : 0.06;
             std::printf ("  %-6s peak %.6f vs Linear %.6f  (rel err %.4f) %s\n",
                          name, pk, lin, relErr, relErr > tol ? " <-- FAIL" : "");
             if (relErr > tol)
@@ -114,27 +117,36 @@ int main()
         }
     }
 
-    // --- 3. Symmetry: Soft/Medium symmetric, Hard asymmetric ---
+    // --- 3. Asymmetry: all modes carry a small diode-mismatch bias (even harmonics); Hard most ---
     {
         const double amp = 0.5, drive = 1.0e6, f = 1000.0;
-        std::printf ("\n[Symmetry]  (symmetric => max ≈ -min)\n");
+        std::printf ("\n[Asymmetry]  (|max+min| = 0 if perfectly symmetric; all modes carry a small bias)\n");
+        double softMedAsym = 0.0, hardAsym = 0.0;
         for (auto m : { Stage1::ClipMode::Soft, Stage1::ClipMode::Medium, Stage1::ClipMode::Hard })
         {
             const auto mm = measure (m, f, amp, fs, bassR, drive);
-            const double asym = std::abs (mm.max + mm.min); // 0 if perfectly symmetric (odd output)
+            const double asym = std::abs (mm.max + mm.min);
             const char* name = m == Stage1::ClipMode::Soft ? "Soft" : m == Stage1::ClipMode::Medium ? "Medium" : "Hard";
             std::printf ("  %-6s |max+min| = %.4f\n", name, asym);
-            const bool symmetric = (m != Stage1::ClipMode::Hard);
-            if (symmetric && asym > 0.02)
+            // Soft/Medium: a SMALL intentional bias (present but modest, not gross). Hard: clearly more.
+            const bool nearSym = (m != Stage1::ClipMode::Hard);
+            if (nearSym) softMedAsym = std::max (softMedAsym, asym); else hardAsym = asym;
+            if (nearSym && (asym < 0.05 || asym > 0.40))
             {
-                std::fprintf (stderr, "FAIL: %s should be symmetric but isn't\n", name);
+                std::fprintf (stderr, "FAIL: %s asymmetry %.3f outside expected small-bias band [0.05,0.40]\n", name, asym);
                 ++failures;
             }
-            if (! symmetric && asym < 0.05)
+            if (! nearSym && asym < 0.45)
             {
-                std::fprintf (stderr, "FAIL: Hard should be asymmetric but looks symmetric\n");
+                std::fprintf (stderr, "FAIL: Hard should be clearly asymmetric (asym %.3f < 0.45)\n", asym);
                 ++failures;
             }
+        }
+        if (hardAsym <= softMedAsym)
+        {
+            std::fprintf (stderr, "FAIL: Hard asymmetry (%.3f) should exceed Soft/Medium (%.3f)\n",
+                          hardAsym, softMedAsym);
+            ++failures;
         }
     }
 

@@ -51,9 +51,13 @@ All three are in `schematics/` at the repo root. Load them when verifying any ci
 
 > Update this line at the **start** of each session to reflect where work is resuming,
 > and again when a step completes. Do not rely on conversation history to infer progress.
-> **CURRENT: Step 9 — calibration & final sweep (IN PROGRESS). Steps 3–8 COMPLETE. Full DSP chain
-> + real UI built and validated; now A/B-ing against NAM captures of the real pedal and tuning
-> calibration/tapers to match. Currently PAUSED awaiting more audio samples from the user (see NEXT).**
+> **CURRENT: Step 9 — calibration & final sweep (GATE ESSENTIALLY MET, 2026-06-21). Steps 3–8 COMPLETE.
+> Full DSP chain + real UI built and validated; tapers V4-FINAL, top-octave warp fixed, build warning-
+> free. Step 9 gate: (a) SUBJECTIVE sweep — user confirms all controls respond correctly, no issues;
+> (b) OBJECTIVE stability sweep — 144 control corners (bass/treb/vol×drive×3 modes×1x/8x) with a hot
+> 0 dBFS input: 0 NaN/Inf, 0 runaway, all bounded. kOutputMakeup FINALISED at 0.9 (see CALIBRATION).
+> Only remaining item is the high-drive THD ceiling (future polish, BLOCKED on a ~6 dB-hotter reamp
+> pass from the user). The 9/12/18 V supply feature is deferred. Build is effectively SHIPPABLE.**
 >
 > **DSP chain (done):** `src/dsp/` InputBuffer (Stage0) → Stage1+SW1 clipping (oversampled, ADAA on
 > rail clip, AccurateOmega) → TrebleNetwork → Stage2, wired via `TommyDSP.h`. IC1_A & IC1_B output
@@ -66,7 +70,13 @@ All three are in `schematics/` at the repo root. Load them when verifying any ci
 > **CALIBRATION (Step 9, current values in `PluginProcessor.h`):**
 > - `kInputRef = 1.2f` (volts per full-scale; re-calibrated from NAM A/B — was 3.27 which over-drove
 >   clipping ~9 dB and caused the "harsh/fizzy" tone). Cancels in the linear path; only sets clip onset.
-> - `kOutputMakeup = 0.9f` (honest 1.0 minus ~1 dB headroom pad; worst case full-drive/full-vol ≈ −0.6 dBFS).
+> - `kOutputMakeup = 0.9f` — FINALISED (Step 9 sweep, 2026-06-21). Level-matched to the NAM captures
+>   (do NOT lower for headroom — it would make the plugin ~8.7 dB quieter than the real pedal at every
+>   setting, breaking the A/B match). HEADROOM REALITY (measured, hot 0 dBFS in): at NOON volume the
+>   output is a safe ≈ −6 dBFS for any drive; it crosses 0 dBFS at volume ≈ 0.7 and reaches ≈ +8 dBFS
+>   at full drive + full volume + no tone cut. That upper-third "boost zone" is FAITHFUL (a real Timmy
+>   cranked overloads an interface the same way), NOT a bug — the −12 dB output trim + the volume knob
+>   manage it. (The earlier "worst case ≈ −0.6 dBFS" note was WRONG — untested at full volume/hot input.)
 > - **Tapers (`utils/TaperUtils.h`) — V4 FINAL STATE (2026-06-21, user-chosen; web-verified taper
 >   types, see `timmy-pot-taper-research`).** BASS `50k·x^2.41`, DRIVE `1e6·x^2.2`, TREBLE
 >   `50k·x/(x+1)` (LINEAR-pot rheostat law), VOLUME A25K + **R11 18k**. BASS/TREBLE are CUT controls:

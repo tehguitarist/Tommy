@@ -91,9 +91,13 @@ pair's `Good` path both honour the provider. Verify with an audible-band aliasin
 
 ## Oversampling
 
-- Apply oversampling to the **nonlinear stage only** — never the linear stages.
+- Oversample for the **nonlinear stage** (the aliasing source), but let the region SPAN any
+  downstream linear stages that have audible-band HF caps (tone/recovery) — see Top-octave below.
+  Only leave OUT linear stages with no audible HF caps (e.g. an input ~8 Hz HP). Pattern: give the
+  oversampler a per-OS-sample `postFn` overload that runs those downstream stages, and prepare them
+  at the oversampled rate.
 - `juce::dsp::Oversampling`; minimum 4×, prefer 8× for clipping. Expose 1×/2×/4×/8× in the UI.
-- Re-discretise the nonlinear stage's caps at the oversampled rate so its response is preserved.
+- Re-discretise every oversampled stage's caps at the oversampled rate so its response is preserved.
 - Glitch-free factor switching: detect a pending change via `std::atomic<int>`, and at block start
   `reset()` + `initProcessing(maxBlock)` then update the factor (one-block gap is acceptable; do
   NOT try to crossfade an OS change).
@@ -118,9 +122,18 @@ Two fixes, a real trade-off:
   well-separated corners. **Only prewarp BASE-RATE linear caps** — a cap inside the oversampled
   nonlinear stage is already discretised at the high rate (the oversampler fixes its warp; prewarping
   it too would over-correct).
-- **Oversample the linear path** (e.g. run the whole chain at 2×): flat to 20 kHz regardless of
-  topology, but ~2× the (cheap) linear CPU and it overrides the "never oversample linear stages"
-  guidance below. Use when you need the top octave demonstrably ruler-flat.
+- **Oversample the downstream linear HF stages** (extend the nonlinear oversampling region to cover
+  tone + recovery): flat to 20 kHz regardless of topology, mode-INDEPENDENT (it's a pure
+  discretisation fix, so it behaves identically in every clip mode — the right answer when you need
+  the top octave correct in ALL modes), and the OS factor then actually improves the top octave.
+  Costs ~N× the (cheap, linear) tone/recovery CPU. Implementation: a templated `processBlock(data, n,
+  postFn)` on the oversampler runs `postFn` (the downstream linear stages) per OS-sample; prepare
+  those stages at `getOversampledRate()` and re-prepare on factor change. In the reference build this
+  recovered ~+8 dB at 12 kHz (heavy-cut setting) and pulled 12 kHz from ~8 dB-dark to within ±2 dB of
+  the real unit; at the default 4× it already ≈ the true-analog response, < 4 kHz unchanged.
+  **Keep prewarp as well** — it's what fixes the top octave at the 1× (no-oversampling) setting.
+  Recommended over prewarp-alone whenever the deficit is audible; prewarp-alone is the zero-CPU
+  fallback. (The two are complementary, not exclusive.)
 
 Independent of supply-voltage / rail features (those scale amplitude headroom; prewarp corrects
 frequency) — the two never interact.

@@ -154,12 +154,20 @@ constexpr double n_1N4148  = 1.752;     // ideality factor — passed as nDiodes
 
 ## Oversampling
 
-- Apply oversampling to the SW1 clipping stage **only** — not full chain
+- Apply oversampling to the SW1 clipping stage as the PRIMARY reason (nonlinear → aliasing)
 - Use `juce::dsp::Oversampling`
 - Minimum 4x, prefer **8x** for the clipping stage
 - User-selectable: 1x / 2x / 4x / 8x — expose in UI
 - Oversampling factor change must be glitch-free (handle transition cleanly)
-- Do NOT oversample linear stages
+- **The oversampled region SPANS Stage 1 → Treble → Stage 2 (UPDATED 2026-06-21).** The earlier
+  "oversample the nonlinear stage only / do NOT oversample linear stages" rule was too strict: the
+  downstream linear stages have audible-band HF caps (Treble C5, Stage 2 C11) whose base-rate bilinear
+  discretisation droops the top octave (~2.3 dB @12k even after prewarp; worse above). Running them at
+  the oversampled rate fixes it — a pure linear-discretisation correction, identical in every clip
+  mode. Implemented via `ClippingOversampler::processBlock(data, n, postFn)`: the postFn (treble +
+  Stage 2) runs per oversampled sample; prepare those stages at `getOversampledRate()`. Do NOT
+  oversample stages with NO audible-band HF caps (e.g. the InputBuffer ≈8 Hz HP) — no benefit, just
+  cost. Keep the prewarp (`Prewarp.h`) too: it still helps at the 1x setting.
 
 ## ADAA
 

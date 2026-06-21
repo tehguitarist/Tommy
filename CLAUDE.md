@@ -86,10 +86,17 @@ All three are in `schematics/` at the repo root. Load them when verifying any ci
 >   • **VOLUME — R11 18k** (V4 spec: 25kA + 18k input→output; repo schematic shows 7k5 = earlier rev).
 >   • Residual HF-SHAPE limit (12k over-dark, 1–4k bright at high cut) is a circuit-model issue, NOT a
 >     taper one; ±0.3 dB not reachable from this confounded data. Tone stack is FINAL for V4.
-> - **Top-octave prewarp (`dsp/Prewarp.h`, 2026-06-20):** base-rate linear caps warp near Nyquist
->   (bilinear), leaving 12k ~3.8 dB too dark; prewarp C5 (dynamic, tracks TREB) + C11 (fixed) → clean
->   12k −3.8→−2.0 dB. Stage-1 caps NOT prewarped (already oversampled). Residual = chosen prewarp-vs-OS
->   trade. Test suite 7/7 green.
+> - **Top-octave fix — OVERSAMPLED LINEAR STAGES (2026-06-21).** The base-rate Treble (C5) + Stage 2
+>   (C11) caps warp near Nyquist (bilinear), leaving the top octave too dark EVEN AFTER prewarp
+>   (probe: −2.33 dB @12k, worse above). FIXED by extending the oversampled region to include Treble
+>   + Stage 2: `ClippingOversampler::processBlock` now takes a per-OS-sample `postFn`, and `TommyDSP`
+>   runs treble+stage2 inside it (prepared at `getOversampledRate()`). Pure linear-discretisation fix,
+>   IDENTICAL in every clip mode. Result: 12k now within ±2 dB of the real pedal (was ~5–8 dB dark);
+>   at the default 4x it's already ≈ the true-analog response; below 4 kHz unchanged. The OS factor now
+>   meaningfully improves the top octave (it didn't before). Prewarp (`dsp/Prewarp.h`, C5 dynamic + C11
+>   fixed) is KEPT — it still helps at 1x (no oversampling). InputBuffer (≈8 Hz HP, no audible HF caps)
+>   and the C6 DC block stay at base rate. Residual ±2 dB @12k + ~+2 dB @8k = the HF-SHAPE/measurement
+>   confound (driven captures carry clip harmonics in the top), NOT the bilinear warp. Tests 8/8 green.
 > - **InputBuffer R1 flag — FIXED 2026-06-21.** R1 (`2m2` = 2.2 MΩ) is now correctly modelled as an
 >   input PULLDOWN to GND (was a mislabelled 2.2 Ω series resistor; a 2.2 MΩ *series* element would
 >   lose ~14.5 dB + roll off treble). Added a small explicit series source impedance (`rSrc`) so the
@@ -119,8 +126,10 @@ All three are in `schematics/` at the repo root. Load them when verifying any ci
 >      18k. BASS `41k·x^2.41` convex VALIDATED ±0.6 dB (batch 3+4). Accepted trade: V4 linear treble
 >      runs +1.5..+2.8 dB bright @4 kHz at high cut vs our (early-unit-looking) captures. Remaining
 >      ±0.3 dB gap is HF-SHAPE (12k over-dark, 1–4k bright at high cut) — a circuit-model limit, NOT a
->      taper one. To push further (optional, low priority): (a) clean low-drive single-knob sweeps, or
->      (b) a higher-order treble+C11 HF-shape correction (also helps the 12k deficit). Tone stack FINAL.
+>      taper one. **The 12k bilinear-warp part of that gap is now FIXED** by oversampling Treble +
+>      Stage 2 (see the Top-octave fix above — 12k now within ±2 dB of real). The small residual (~±2 dB
+>      @12k, ~+2 dB @8k) is the HF-SHAPE/measurement confound (driven captures carry clip harmonics up
+>      top), not reachable without a clean low-drive sweep. Tone stack + top-octave handling FINAL.
 >   2. **Asym level/null — DONE** (bias-offset model + C6). Remaining null gap: 2–6 kHz residual is
 >      harmonic PHASE decorrelation in ALL modes (level-matched: <2k nulls −5/−6 dB, 2–6k ≈ 0) —
 >      partly inherent to nulling vs a NAM capture (magnitude/feel, not exact phase). Magnitude matches.

@@ -9,10 +9,21 @@
 namespace tommy::dsp
 {
 /**
- * Oversamples ONLY the nonlinear Stage 1 (SW1 clipping inside IC1_A's feedback). The linear
- * stages (input, treble, Stage 2) stay at base rate — per dsp.md, oversample the nonlinear
- * stage only. Stage 1's WDF caps are (re)discretised at the oversampled rate so its frequency
- * response is preserved at whatever rate it runs.
+ * Owns Stage 1 (SW1 clipping inside IC1_A's feedback) + the oversampler. Stage 1's WDF caps are
+ * (re)discretised at the oversampled rate so its frequency response is preserved at whatever rate
+ * it runs.
+ *
+ * Two processBlock forms:
+ *   - processBlock(data, n)            — runs Stage 1 only inside the OS region (used by the
+ *                                        aliasing test to isolate the clip stage).
+ *   - processBlock(data, n, postFn)    — runs Stage 1 then `postFn` per oversampled sample, so the
+ *                                        caller's downstream LINEAR stages (treble + Stage 2) also
+ *                                        run at the oversampled rate. This is what TommyDSP uses:
+ *                                        it pulls those stages' base-rate bilinear cap warping (which
+ *                                        left ~2.3 dB of top-octave droop at 12 kHz even after
+ *                                        prewarp) up near the OS Nyquist, where it's negligible. The
+ *                                        fix is purely a linear-discretisation correction, identical
+ *                                        in every clip mode. Pass stages prepared at getOversampledRate().
  *
  * factorLog2: 0 = 1x (no oversampling), 1 = 2x, 2 = 4x, 3 = 8x.
  * Mono (single Stage1 instance); the plugin instantiates one per channel.
@@ -65,13 +76,25 @@ public:
     double getLatencySamples() const { return oversampler ? (double) oversampler->getLatencyInSamples() : 0.0; }
     int getFactor() const { return 1 << osLog2; }
 
-    /** Processes one mono block in place at base rate. */
+    /** The rate Stage 1 (and any postFn stages) actually run at = baseRate * 2^factor. Prepare the
+     *  caller's downstream linear stages at THIS rate when using the postFn form of processBlock. */
+    double getOversampledRate() const { return baseRate * (double) (1 << osLog2); }
+
+    /** Processes one mono block in place at base rate — Stage 1 only (clip stage in isolation). */
     void processBlock (double* data, int numSamples)
+    {
+        processBlock (data, numSamples, [] (double s) { return s; });
+    }
+
+    /** As above, but runs `post` on every oversampled sample after Stage 1, so the caller's
+     *  downstream linear stages run at the oversampled rate too (see class doc). */
+    template <typename PostFn>
+    void processBlock (double* data, int numSamples, PostFn&& post)
     {
         if (osLog2 == 0 || oversampler == nullptr)
         {
             for (int i = 0; i < numSamples; ++i)
-                data[i] = stage1.processSample (data[i]);
+                data[i] = post (stage1.processSample (data[i]));
             return;
         }
 
@@ -81,7 +104,7 @@ public:
         auto* d = osBlock.getChannelPointer (0);
         const int n = (int) osBlock.getNumSamples();
         for (int i = 0; i < n; ++i)
-            d[i] = stage1.processSample (d[i]);
+            d[i] = post (stage1.processSample (d[i]));
         oversampler->processSamplesDown (block);
     }
 

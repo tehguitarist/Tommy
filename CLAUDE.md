@@ -57,7 +57,7 @@ All three are in `schematics/` at the repo root. Load them when verifying any ci
 > (b) OBJECTIVE stability sweep — 144 control corners (bass/treb/vol×drive×3 modes×1x/8x) with a hot
 > 0 dBFS input: 0 NaN/Inf, 0 runaway, all bounded. kOutputMakeup FINALISED at 0.9 (see CALIBRATION).
 > Only remaining item is the high-drive THD ceiling (future polish, BLOCKED on a ~6 dB-hotter reamp
-> pass from the user). The 9/12/18 V supply feature is deferred. Build is effectively SHIPPABLE.**
+> pass from the user). The 9/12/18 V supply feature is DONE (see NEXT STEPS). Build is SHIPPABLE.**
 >
 > **DSP chain (done):** `src/dsp/` InputBuffer (Stage0) → Stage1+SW1 clipping (oversampled, ADAA on
 > rail clip, AccurateOmega) → TrebleNetwork → Stage2, wired via `TommyDSP.h`. IC1_A & IC1_B output
@@ -148,7 +148,13 @@ All three are in `schematics/` at the repo root. Load them when verifying any ci
 >   3. High-drive clipping-character ceiling (plugin THD ~1–3% under real at 3–5:00 — ideal-op-amp +
 >      ideal-diode limit, may live in the 2–6 kHz null gap). Needs a HOT-input pass (~6 dB hotter) to diagnose.
 >   4. Then: subjective full-control sweep (Step 9 gate) — no instability/clicks/NaN; finalise kOutputMakeup.
->   - FUTURE FEATURE (user): selectable 9/12/18 V supply = rail-voltage scaler (`setRailVoltages`),
->     orthogonal to tapers/prewarp.
+>   - **Supply-voltage feature — DONE 2026-06-21.** Selectable 9/12/18 V via APVTS `supply_voltage`
+>     (default 9 V) → `TommyDSP::setSupplyVoltage` scales BOTH op-amp rails (Stage1 via
+>     `ClippingOversampler::setRailVoltages`, Stage2 direct); anchored at 9 V = +2.5/−3.4, slopes
+>     +0.451/+0.549 V per supply volt (VREF divider ratio). Diode thresholds unchanged → pure HEADROOM
+>     change: 0 effect at moderate levels, clearly present at high output/Hard mode/hot input (Hard
+>     swing 9 V ±3.3 → 18 V ±7). UI: the "(+) 9V (−)" power label is now an interactive `SupplyControl`
+>     ((+) raises, (−) lowers; lit when that direction is available). offline_render arg[19]=supplyV
+>     for A/B. auval passes; default 9 V keeps all renders/tests byte-identical.
 >   - Open items: RT-safety (oversampling `setFactor` allocates on audio thread — pre-allocate if
 >     tightening); VST3 still deferred (AU passes auval).**

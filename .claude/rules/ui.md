@@ -69,9 +69,15 @@ Background: **mottled dark navy/black**. Implement in `TommyLookAndFeel::drawPed
 
 Border: 2 px, `colourPedalBorder`. Border-radius: 16 px. Drop shadow outward.
 
-### 9V power label
+### Supply-voltage selector (interactive power label)
 
-Small text "⊕ 9V ⊖" centred at top, `colourPowerLabel` (muted dark blue). Thin separator line below.
+Small text "(+) 9V (-)" centred at top — an INTERACTIVE control (`SupplyControl`, header-only
+component), not a static label. Click "(+)" (left third) to raise the supply 9→12→18 V, "(-)" (right
+third) to lower it; the centre shows the current voltage. "(+)" is drawn lit (`cPowerLabelLit`) when a
+higher voltage is available, "(-)" lit when a lower one is; inactive side + the voltage use
+`cPowerLabel` (muted dark blue). Bound to the `supply_voltage` choice parameter via a
+`ParameterAttachment` (same pattern as the SW1 switch). Thin separator line below. (Raises the op-amp
+rail headroom in the DSP — pure headroom, diode clip thresholds unchanged.)
 
 ### Row 1 — Bass · SW1 · Gain
 

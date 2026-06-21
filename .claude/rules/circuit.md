@@ -179,7 +179,7 @@ IC1_A and IC1_B are both **JRC4559** (= NJM4559, equivalent to RC4559).
 >
 > The shipped laws live in `src/utils/TaperUtils.h` — **V4 FINAL (user-chosen, 2026-06-21):** TREBLE
 > `50k·x/(x+1)` (LINEAR-pot rheostat law — V4 changed treble to a B pot; the concave `29k·x^0.625`
-> early-reverse-log fit is kept in a code comment for reference); BASS `41k·x^2.41` (convex, VALIDATED
+> early-reverse-log fit is kept in a code comment for reference); BASS `50k·x^2.41` (convex, VALIDATED
 > ±0.6 dB across batch 3+4 — the gain-leg R→cut transfer inverts the pot's concavity); DRIVE
 > `1e6·x^2.2`; VOLUME A25K + **R11 18k** (V4 spec). Best-estimates from clipping-confounded captures,
 > NOT a clean-sweep fit; the V4 linear treble trades some capture-accuracy for the real V4 pot — see

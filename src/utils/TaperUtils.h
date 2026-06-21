@@ -50,15 +50,17 @@ inline double bassResistance (double x)
     if (x <= 0.0)
         return 0.0;
     // BATCH 3+4 FIT (2026-06-21, PRIMARY pedal). The old 50k*x^1.43 law over-cut bass by ~2x. Back-
-    // fitting BASS_R to the real 60/120 Hz cut (normalised @250 Hz, so drive/level cancels) gives
-    // 41k*x^2.41. CONVEX (p>1) and now VALIDATED across the combined batch-3+4 bass settings — the
-    // real bass cut is ~flat (~1 dB @60 Hz) from x=0..0.65 then ramps to ~3.3 dB by x=0.8, a strongly
-    // convex CUT response. (Physically the bass POT is reverse-log like treble, but it sits in
-    // Stage 1's gain-set leg whose nonlinear R->cut transfer INVERTS the concavity into this convex
-    // cut-vs-rotation — so convex is correct here even though the pot itself isn't.) Plugin now
-    // matches real 60 Hz cut to within ±0.6 dB at x=0.5/0.6/0.8 (was a loose 2-point guess before
-    // batch 4 was mined for the extra x=0.5 point). BASS is unaffected by the V4 treble change.
-    return 41.0e3 * std::pow (x, 2.41);
+    // fitting BASS_R to the real 60/120 Hz cut (normalised @250 Hz, so drive/level cancels) gives the
+    // CONVEX 50k*x^2.41. The real bass cut is ~flat (~1 dB @60 Hz) from x=0..0.65 then ramps to
+    // ~3.3 dB by x=0.8 — a strongly convex CUT response. (Physically the bass POT is reverse-log like
+    // treble, but it sits in Stage 1's gain-set leg whose nonlinear R->cut transfer INVERTS the
+    // concavity into this convex cut-vs-rotation — so convex is correct here even though the pot
+    // itself isn't.) Coefficient is 50k (= the A50k pot's nominal max; bumped from a 41k fit) — it
+    // tightens 60 Hz at x=0.8 from +0.8 to +0.1 dB vs real and shaves the small residual bright bias
+    // seen across the capture set. NOTE the 60 Hz cut is only weakly sensitive to this coefficient
+    // (the deep-LF cut is dominated by C3/C4, not the pot R), so this is a fine trim, not a big lever.
+    // BASS is unaffected by the V4 treble change.
+    return 50.0e3 * std::pow (x, 2.41);
 }
 
 /** DRIVE knob up => more gain => LARGER feedback resistance. Rmax = 1M (A1M pot).

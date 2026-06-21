@@ -68,7 +68,7 @@ All three are in `schematics/` at the repo root. Load them when verifying any ci
 >   clipping ~9 dB and caused the "harsh/fizzy" tone). Cancels in the linear path; only sets clip onset.
 > - `kOutputMakeup = 0.9f` (honest 1.0 minus ~1 dB headroom pad; worst case full-drive/full-vol ≈ −0.6 dBFS).
 > - **Tapers (`utils/TaperUtils.h`) — V4 FINAL STATE (2026-06-21, user-chosen; web-verified taper
->   types, see `timmy-pot-taper-research`).** BASS `41k·x^2.41`, DRIVE `1e6·x^2.2`, TREBLE
+>   types, see `timmy-pot-taper-research`).** BASS `50k·x^2.41`, DRIVE `1e6·x^2.2`, TREBLE
 >   `50k·x/(x+1)` (LINEAR-pot rheostat law), VOLUME A25K + **R11 18k**. BASS/TREBLE are CUT controls:
 >   **knob up = MORE cut**.
 >   • **TREBLE — V4 = LINEAR pot.** Real Timmy tone pots are A (audio) pots wired in REVERSE to mimic
@@ -80,7 +80,9 @@ All three are in `schematics/` at the repo root. Load them when verifying any ci
 >     at very low treble. (The 06-20 `12k·x^0.4` concave law was WRONG — left it +6..+12 dB too bright;
 >     the trap: a 1st-order LP's 8 kHz attenuation SATURATES once the corner < ~800 Hz, so the matched
 >     pair's small T5→T8 increment ≠ a gentle taper; the ABSOLUTE level disambiguates.)
->   • **BASS — convex, VALIDATED.** `41k·x^2.41`, matches real 60 Hz cut within ±0.6 dB at
+>   • **BASS — convex, VALIDATED.** `50k·x^2.41` (coefficient bumped 41k→50k as a fine LF trim:
+>     tightens 60 Hz @x=0.8 from +0.8 to +0.1 dB vs real; the 60 Hz cut is only weakly sensitive to
+>     this coeff — dominated by C3/C4, not the pot R). Matches real 60 Hz cut within ~±0.4 dB at
 >     x=0.5/0.6/0.8 (batch 4 mined for the extra x=0.5 point). Convex is correct: bass sits in the
 >     Stage 1 gain leg whose R→cut transfer inverts the pot's concavity. Direction confirmed PRIMARY.
 >   • **VOLUME — R11 18k** (V4 spec: 25kA + 18k input→output; repo schematic shows 7k5 = earlier rev).
@@ -123,7 +125,7 @@ All three are in `schematics/` at the repo root. Load them when verifying any ci
 >      `timmy-pot-taper-research`): values & cut-direction CONFIRMED right; tone pots are A-pots wired
 >      in REVERSE to mimic C-taper (reverse-log), AND treble is VERSION-DEPENDENT (early = A-reverse;
 >      "V4" = LINEAR). **User chose V4 as final** → TREBLE `50k·x/(x+1)` (linear rheostat), VOLUME R11
->      18k. BASS `41k·x^2.41` convex VALIDATED ±0.6 dB (batch 3+4). Accepted trade: V4 linear treble
+>      18k. BASS `50k·x^2.41` convex VALIDATED ±0.6 dB (batch 3+4). Accepted trade: V4 linear treble
 >      runs +1.5..+2.8 dB bright @4 kHz at high cut vs our (early-unit-looking) captures. Remaining
 >      ±0.3 dB gap is HF-SHAPE (12k over-dark, 1–4k bright at high cut) — a circuit-model limit, NOT a
 >      taper one. **The 12k bilinear-warp part of that gap is now FIXED** by oversampling Treble +

@@ -56,8 +56,9 @@ All three are in `schematics/` at the repo root. Load them when verifying any ci
 > free. Step 9 gate: (a) SUBJECTIVE sweep — user confirms all controls respond correctly, no issues;
 > (b) OBJECTIVE stability sweep — 144 control corners (bass/treb/vol×drive×3 modes×1x/8x) with a hot
 > 0 dBFS input: 0 NaN/Inf, 0 runaway, all bounded. kOutputMakeup FINALISED at 0.9 (see CALIBRATION).
-> Only remaining item is the high-drive THD ceiling (future polish, BLOCKED on a ~6 dB-hotter reamp
-> pass from the user). The 9/12/18 V supply feature is DONE (see NEXT STEPS). Build is SHIPPABLE.**
+> High-drive THD ceiling RESOLVED via batch-5 hot reamp (see CLIPPING below): odd harmonics + THD
+> already matched; added the missing even-harmonic asymmetry. The 9/12/18 V supply feature is DONE.
+> No open modelling items remain. Build is SHIPPABLE.**
 >
 > **DSP chain (done):** `src/dsp/` InputBuffer (Stage0) → Stage1+SW1 clipping (oversampled, ADAA on
 > rail clip, AccurateOmega) → TrebleNetwork → Stage2, wired via `TommyDSP.h`. IC1_A & IC1_B output
@@ -113,11 +114,22 @@ All three are in `schematics/` at the repo root. Load them when verifying any ci
 >   input PULLDOWN to GND (was a mislabelled 2.2 Ω series resistor; a 2.2 MΩ *series* element would
 >   lose ~14.5 dB + roll off treble). Added a small explicit series source impedance (`rSrc`) so the
 >   47 pF RF shunt stays well-posed. Transparent with a low-Z source; Stage0 test still flat in-band.
-> - **Asymmetric (Hard) clip mode (2026-06-20):** `AsymDiodePairT` is a SYMMETRIC pair (Medium
->   threshold) shifted by a lateral wave-domain **bias** (`kAsymBias=0.18`) — mild even harmonics
->   WITHOUT the level boost the old per-polarity 1:2 threshold gave (it ran ~3.9 dB hot, coupled to
->   the harmonic match). Now level ≈ Sym and Asym NULLS as well as Sym/Open across drive. Added **C6
->   (1µ ~6 Hz) output DC-block in `TommyDSP`** for the asym clip's signal-dependent DC.
+> - **CLIPPING — even-harmonic asymmetry, ALL modes (2026-06-22, batch-5 hot reamp).** Diagnosis: at
+>   the matched hot input (kInputRef≈2.4 = +6 dB), the plugin's ODD harmonics + overall THD already
+>   match the real pedal within ~1 dB at high drive — the "high-drive THD ceiling" was largely a
+>   level-calibration artifact, NOT a clipping-model deficiency. The ONE real gap: the real Timmy
+>   shows EVEN harmonics (~−47..−55 dB H2 re fund) in EVERY mode incl. symmetric Soft/Medium; a
+>   perfectly-matched bipolar diode model produces NONE (−141 dB). Cause = 1N4148 forward-voltage
+>   spread between the antiparallel diodes + above-mid-supply VREF bias → slightly asymmetric real
+>   thresholds (a component-tolerance effect a "perfect" model can't show). FIX: Soft/Medium now also
+>   use `AsymDiodePairT` (at bias=0 it's bit-identical to the old `DiodePairT` — `symReflect(0)=0`),
+>   carrying a small global diode-mismatch bias **`kSymBias=0.15`**; Hard's **`kAsymBias` re-calibrated
+>   0.18→0.30** to the hot-pass H2. Result @440 Hz G1500: H2 real/new Soft −55/−50, Medium −49/−51,
+>   Hard −34/−36 — within ~2–5 dB across modes, ODD harmonics + THD + playing-level output UNCHANGED.
+>   Side effect (bias-offset model): near-zero-signal gain perturbed (Soft ~3%, Hard ~21% at a tiny
+>   level) — a LOW-LEVEL artifact only; moderate/playing-level output is identical (verified). C6
+>   (1µ ~6 Hz) output DC-block in `TommyDSP` handles the asymmetric clips' signal-dependent DC.
+>   `offline_render` arg[20]=symBias, arg[15]=asymBias for A/B.
 >
 > **Analysis harness (`analysis/`):** `offline_render.cpp` (OfflineRender exe — runs the real DSP +
 > processBlock gain staging; many override args for fitting) + Python tools (run_compare, sweep_kinput,
@@ -145,9 +157,11 @@ All three are in `schematics/` at the repo root. Load them when verifying any ci
 >   2. **Asym level/null — DONE** (bias-offset model + C6). Remaining null gap: 2–6 kHz residual is
 >      harmonic PHASE decorrelation in ALL modes (level-matched: <2k nulls −5/−6 dB, 2–6k ≈ 0) —
 >      partly inherent to nulling vs a NAM capture (magnitude/feel, not exact phase). Magnitude matches.
->   3. High-drive clipping-character ceiling (plugin THD ~1–3% under real at 3–5:00 — ideal-op-amp +
->      ideal-diode limit, may live in the 2–6 kHz null gap). Needs a HOT-input pass (~6 dB hotter) to diagnose.
->   4. Then: subjective full-control sweep (Step 9 gate) — no instability/clicks/NaN; finalise kOutputMakeup.
+>   3. High-drive clipping-character ceiling — **RESOLVED 2026-06-22** (batch-5 hot reamp). Odd
+>      harmonics + THD already matched at the right input level; the gap was missing EVEN harmonics,
+>      now added via the global diode-mismatch bias (see CLIPPING above). batch 5 = PRIMARY pedal,
+>      +6 dB hot, drive 3:00/5:00 × 3 modes (analysis kInputRef ≈ 2.4 for these).
+>   4. Step 9 gate DONE (subjective + objective stability sweep passed; kOutputMakeup finalised 0.9).
 >   - **Supply-voltage feature — DONE 2026-06-21.** Selectable 9/12/18 V via APVTS `supply_voltage`
 >     (default 9 V) → `TommyDSP::setSupplyVoltage` scales BOTH op-amp rails (Stage1 via
 >     `ClippingOversampler::setRailVoltages`, Stage2 direct); anchored at 9 V = +2.5/−3.4, slopes

@@ -76,9 +76,26 @@ threshold (level unchanged). Tune `bias` to the captured even/odd. In the refere
 asym level back on top of the symmetric modes and its null depth matched them across the whole drive
 range. Two caveats: (1) an asymmetric clip produces **signal-dependent DC** — model the output
 coupling cap (a ~6 Hz DC-block highpass) or it leaks DC; (2) a fixed bias perturbs the **small-signal
-gain** by ~0.2 dB (it's not bit-identical to clean), and over-asymmetrises at very low drive — fine if
-the nulls hold, but use a signal-scaled bias if you need clean transparency. Still honours the
+gain** (more bias = more: ~3 % at a small bias, ~20 % at a large one, measured at near-zero signal) —
+a LOW-LEVEL artifact only (moderate/playing-level output is unchanged), and it over-asymmetrises at
+very low drive; fine if the nulls/levels hold, else use a signal-scaled bias. Still honours the
 OmegaProvider, so no omega4 floor.
+
+### Even harmonics in the "symmetric" modes — model component tolerance, not the ideal circuit
+
+A real pedal's *symmetric* clipper (antiparallel diode pairs) still shows measurable **even
+harmonics** — in the reference build ~−47..−55 dB H2 re fundamental at high drive, in EVERY mode. An
+ideal, perfectly-matched bipolar diode model produces NONE (even harmonics at the numerical floor,
+−140 dB). The cause is **component tolerance**: real diodes have a forward-voltage spread between the
+two antiparallel devices, and an above-mid-supply VREF bias offsets the operating point, so the real
+clip thresholds are slightly asymmetric. A "perfect" analog emulation is therefore *less* faithful
+than one that models the tolerance. Fix: give the symmetric pair the SAME bias-offset mechanism with a
+SMALL global bias (much smaller than the dedicated "asym" mode), calibrated to the captured H2 — at
+bias=0 it's bit-identical to the plain symmetric pair (`symReflect(0)=0`), so a small bias only adds
+the missing even content; odd harmonics, THD, and playing-level output stay put. To DIAGNOSE: at high
+drive, match the input level (a hot-reamp capture is ideal) then compare per-harmonic FFT — if the odd
+harmonics already match, a "THD ceiling" is usually a *level-calibration* artifact, and the only real
+gap is the missing even harmonics. Don't chase it with global EQ; it's a clipping-asymmetry effect.
 
 ### Omega accuracy gotcha (do NOT use the default omega)
 

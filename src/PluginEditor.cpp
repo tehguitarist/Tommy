@@ -431,8 +431,7 @@ void TommyAudioProcessorEditor::showScaleMenu()
     menu.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(scaleBtn),
         [this](int result)
         {
-            static constexpr float kScales[] = { 0.50f, 0.75f, 1.00f, 1.25f, 1.50f,
-                                                  1.75f, 2.00f, 2.25f, 2.50f };
+            // kScales (static constexpr above) is referenced directly — no re-declaration needed.
             if (result >= 1 && result <= 9)
             {
                 setSize(juce::roundToInt(kBaseW * kScales[result - 1]),

@@ -181,7 +181,7 @@ void TommyAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::
             inPeak[c] = juce::jmax (inPeak[c], std::abs (wet));
         }
 
-        dsp[c].processBlock (work, numSamples);
+        dsp[(size_t) c].processBlock (work, numSamples);
 
         // Hard-gate sub-threshold DSP output to prevent inaudible WDF residuals leaking.
         // If every sample is below ~-140 dBFS the whole block is zeroed; early-exit avoids

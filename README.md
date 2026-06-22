@@ -9,6 +9,7 @@ sample, so everycontrol behaves the way the real pedal's electronics would at an
 > with or endorsed by any pedal manufacturer.
 
 ![Tommy plugin UI](image.png)
+<img src="image.png" width="400" />
 
 ## Overview
 

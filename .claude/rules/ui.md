@@ -71,11 +71,18 @@ Each side panel is identical in structure. Top-to-bottom:
    itself is the `vol_trim.png` image (rotated per `drawRotatedImage`), same image-based approach
    as the pedal knobs — not a procedurally drawn gradient disc.
 3. **"TRIM" sub-label** — 7.5 px, muted blue
-4. **VU bar meter** — fills all remaining height (flex:1). 22 segments, `flex-direction: column` (index 0 = top = loud/red), `gap: 2 px`. Segment colours: red (top ~14%), yellow (next ~21%), green (lower ~65%); lit vs unlit variants for each zone. Updated by `juce::Timer`.
+4. **Trim value label** (`inputTrimValueLabel`/`outputTrimValueLabel`) — fixed (always-visible, not
+   a popup) `juce::Label` showing the current trim as `"<value> dB"` to 1 decimal place (e.g.
+   `"+3.0 dB"`), range -12.0–+12.0. Updated live via the slider's `onValueChange` callback, not an
+   APVTS listener — purely a display convenience, the trim knob itself still owns the parameter via
+   `SliderParameterAttachment`. 8.5 px font, same blue (`cTrimLabel`) as the section title.
+5. **VU bar meter** — fills all remaining height (flex:1). 22 segments, `flex-direction: column` (index 0 = top = loud/red), `gap: 2 px`. Segment colours: red (top ~14%), yellow (next ~21%), green (lower ~65%); lit vs unlit variants for each zone. Updated by `juce::Timer`.
 
 JUCE implementation: plain `juce::Slider` members directly on `PluginEditor` (`inputTrimKnob`/
 `outputTrimKnob`, componentID `"trim"` so `TommyLookAndFeel::drawRotarySlider` renders the halo
 style) plus a `VUMeter` (`inputVU`/`outputVU`) — no separate panel or `HaloKnob` component class.
+The trim knobs do NOT get the pedal-knob drag-tooltip (see Controls — Knobs) since the fixed value
+label already shows the dB value at all times.
 
 ## Pedal Face
 
@@ -173,6 +180,18 @@ Pedal knobs are 66 px diameter (`i(66)`); trim knobs are 70 px. Text label below
 weight, 1.5 px letter-spacing, uppercase, white.
 
 Audio taper applied in DSP. APVTS attachment via `juce::SliderParameterAttachment`.
+
+**Drag tooltip (pedal knobs only):** Bass/Gain/Volume/Treble use `Slider::setPopupDisplayEnabled(true,
+false, this)` to show a small bubble with the raw 0.0–1.0 parameter value while dragging. The bubble
+text is set via an explicit `textFromValueFunction` (`juce::String(v, 2)`, e.g. `"0.50"`) rather than
+relying on `setNumDecimalPlacesToDisplay` alone, so the format is always exactly two decimal places
+regardless of the slider's range/interval settings. The two trim knobs do not use this popup — they
+have their own always-visible value label instead (see Side Panels above).
+
+**Defaults:** Bass/Gain/Treble default to `0.0` (fully counter-clockwise / minimum). Volume defaults
+to `0.5 + 30/288 ≈ 0.6042`, which visually lands the knob image at 1 o'clock given the LookAndFeel's
+default JUCE rotary sweep (1.2π→2.8π, 288° total, with `0.5` = noon). See `architecture.md`'s
+parameter table for the authoritative defaults.
 
 ## Oversampling Strip
 

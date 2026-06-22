@@ -30,16 +30,19 @@ juce::AudioProcessorValueTreeState::ParameterLayout TommyAudioProcessor::createP
     std::vector<std::unique_ptr<juce::RangedAudioParameter>> params;
 
     params.push_back (std::make_unique<juce::AudioParameterFloat> ("bass", "Bass",
-        juce::NormalisableRange<float> (0.0f, 1.0f), 0.5f));
+        juce::NormalisableRange<float> (0.0f, 1.0f), 0.0f)); // default: knob at minimum
 
     params.push_back (std::make_unique<juce::AudioParameterFloat> ("drive", "Gain",
-        juce::NormalisableRange<float> (0.0f, 1.0f), 0.5f));
+        juce::NormalisableRange<float> (0.0f, 1.0f), 0.0f)); // default: knob at minimum
 
     params.push_back (std::make_unique<juce::AudioParameterFloat> ("treble", "Treble",
-        juce::NormalisableRange<float> (0.0f, 1.0f), 0.5f));
+        juce::NormalisableRange<float> (0.0f, 1.0f), 0.0f)); // default: knob at minimum
 
+    // Default: knob at 1 o'clock. The JUCE default rotary sweep runs 1.2pi -> 2.8pi (216 deg ->
+    // 504 deg, a 288 deg total sweep) with normalised 0.5 landing on 12 o'clock; 1 o'clock is 30
+    // deg further clockwise, i.e. 0.5 + 30/288.
     params.push_back (std::make_unique<juce::AudioParameterFloat> ("volume", "Volume",
-        juce::NormalisableRange<float> (0.0f, 1.0f), 0.5f));
+        juce::NormalisableRange<float> (0.0f, 1.0f), 0.5f + 30.0f / 288.0f));
 
     // Choices ordered to match physical switch (top→bottom): Asym / Open / Sym.
     // Index 0 = top lever (asymmetric, single diode), 1 = middle (high-headroom symmetric),

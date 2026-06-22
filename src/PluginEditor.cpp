@@ -27,6 +27,11 @@ void TommyAudioProcessorEditor::configureLabel(juce::Label& l, float fontSize,
     addAndMakeVisible(l);
 }
 
+void TommyAudioProcessorEditor::configureTrimValueLabel(juce::Label& l)
+{
+    configureLabel(l, 8.5f, TommyLookAndFeel::cTrimLabel);
+}
+
 // ── Constructor ───────────────────────────────────────────────────────────────
 
 TommyAudioProcessorEditor::TommyAudioProcessorEditor(TommyAudioProcessor& p)
@@ -63,6 +68,14 @@ TommyAudioProcessorEditor::TommyAudioProcessorEditor(TommyAudioProcessor& p)
 
     configureLabel(inputTrimLabel, 7.5f, TommyLookAndFeel::cTrimLabel - 0x001A0000u);
 
+    configureTrimValueLabel(inputTrimValueLabel);
+    inputTrimKnob.onValueChange = [this]
+    {
+        inputTrimValueLabel.setText(juce::String(inputTrimKnob.getValue(), 1) + " dB",
+                                     juce::dontSendNotification);
+    };
+    inputTrimKnob.onValueChange();
+
     addAndMakeVisible(inputVU);
 
     // ── Side panel: Output ───────────────────────────────────────────────────
@@ -74,6 +87,14 @@ TommyAudioProcessorEditor::TommyAudioProcessorEditor(TommyAudioProcessor& p)
     outputTrimKnob.setRange(-12.0, 12.0);
 
     configureLabel(outputTrimLabel, 7.5f, TommyLookAndFeel::cTrimLabel - 0x001A0000u);
+
+    configureTrimValueLabel(outputTrimValueLabel);
+    outputTrimKnob.onValueChange = [this]
+    {
+        outputTrimValueLabel.setText(juce::String(outputTrimKnob.getValue(), 1) + " dB",
+                                      juce::dontSendNotification);
+    };
+    outputTrimKnob.onValueChange();
 
     addAndMakeVisible(outputVU);
 
@@ -101,7 +122,14 @@ TommyAudioProcessorEditor::TommyAudioProcessorEditor(TommyAudioProcessor& p)
 
     // ── Pedal knobs (after sw1Switch so they render on top) ─────────────────
     for (auto* s : { &bassKnob, &gainKnob, &volumeKnob, &trebleKnob })
+    {
         configureKnob(*s);
+        // Small value popup while dragging, showing the raw 0.0-1.0 parameter value fixed to
+        // two decimal places (explicit formatter, not just setNumDecimalPlacesToDisplay, so the
+        // popup text is deterministic regardless of the slider's interval/range settings).
+        s->textFromValueFunction = [](double v) { return juce::String(v, 2); };
+        s->setPopupDisplayEnabled(true, false, this);
+    }
 
     auto kFont = juce::Font(juce::FontOptions(8.5f, juce::Font::bold))
                      .withExtraKerningFactor(0.15f);
@@ -308,7 +336,9 @@ void TommyAudioProcessorEditor::resized()
         inputTrimKnob.setBounds(lp.removeFromTop(i(70)).withSizeKeepingCentre(i(70), i(70)));
         lp.removeFromTop(i(2));
         inputTrimLabel.setBounds(lp.removeFromTop(i(12)));
-        lp.removeFromTop(i(6));
+        lp.removeFromTop(i(2));
+        inputTrimValueLabel.setBounds(lp.removeFromTop(i(12)));
+        lp.removeFromTop(i(4));
         inputVU.setBounds(lp.withSizeKeepingCentre(i(24), lp.getHeight()));
     }
 
@@ -320,7 +350,9 @@ void TommyAudioProcessorEditor::resized()
         outputTrimKnob.setBounds(rp.removeFromTop(i(70)).withSizeKeepingCentre(i(70), i(70)));
         rp.removeFromTop(i(2));
         outputTrimLabel.setBounds(rp.removeFromTop(i(12)));
-        rp.removeFromTop(i(6));
+        rp.removeFromTop(i(2));
+        outputTrimValueLabel.setBounds(rp.removeFromTop(i(12)));
+        rp.removeFromTop(i(4));
         outputVU.setBounds(rp.withSizeKeepingCentre(i(24), rp.getHeight()));
     }
 
@@ -419,6 +451,8 @@ void TommyAudioProcessorEditor::refreshFonts(float sc)
     outputPanelLabel.setFont(bold(8.0f  * sc).withExtraKerningFactor(0.20f));
     inputTrimLabel  .setFont(bold(7.5f  * sc));
     outputTrimLabel .setFont(bold(7.5f  * sc));
+    inputTrimValueLabel .setFont(bold(8.5f * sc));
+    outputTrimValueLabel.setFont(bold(8.5f * sc));
     supplyControl   .setFontSize(10.0f * sc); // 25% bigger than the original 8.0f
     bypassLabel     .setFont(bold(7.0f  * sc).withExtraKerningFactor(0.20f));
     osLabel         .setFont(bold(8.0f  * sc).withExtraKerningFactor(0.18f));

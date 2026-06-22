@@ -32,10 +32,10 @@ TommyAudioProcessor          ← AudioProcessor subclass
 
 | ID | Label | Range | Default | Notes |
 |----|-------|-------|---------|-------|
-| `bass` | Bass | 0.0–1.0 | 0.5 | Linear in APVTS; audio taper applied in DSP |
-| `drive` | Gain | 0.0–1.0 | 0.5 | Linear in APVTS; audio taper applied in DSP |
-| `treble` | Treble | 0.0–1.0 | 0.5 | Linear in APVTS; audio taper applied in DSP |
-| `volume` | Volume | 0.0–1.0 | 0.5 | Linear in APVTS; audio taper applied in DSP (A25K pot + R11 18k, see `circuit.md`) |
+| `bass` | Bass | 0.0–1.0 | 0.0 (knob at minimum) | Linear in APVTS; audio taper applied in DSP |
+| `drive` | Gain | 0.0–1.0 | 0.0 (knob at minimum) | Linear in APVTS; audio taper applied in DSP |
+| `treble` | Treble | 0.0–1.0 | 0.0 (knob at minimum) | Linear in APVTS; audio taper applied in DSP |
+| `volume` | Volume | 0.0–1.0 | 0.5 + 30/288 ≈ 0.6042 (knob at 1 o'clock) | Linear in APVTS; audio taper applied in DSP (A25K pot + R11 18k, see `circuit.md`). The 0.5→noon mapping comes from the LookAndFeel's default 288° rotary sweep; see `ui.md` Controls — Knobs. |
 | `clipping_mode` | Clipping | 0/1/2 | 1 (Open) | `AudioParameterChoice`: "Asymmetric" (top lever, single diode, = Hard) / "Open" (middle, one diode pair, = Medium) / "Symmetric" (bottom, all four diodes, = Soft). UI shows these as A/O/S — see `ui.md` SW1 section. |
 | `input_trim` | Input Trim | -12.0 to +12.0 dB | 0.0 | Linear dB; `AudioParameterFloat` |
 | `output_trim` | Output Trim | -12.0 to +12.0 dB | 0.0 | Linear dB; `AudioParameterFloat` |

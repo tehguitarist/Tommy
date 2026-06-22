@@ -39,11 +39,13 @@ private:
     juce::Label  inputPanelLabel  { {}, "INPUT"  };
     juce::Slider inputTrimKnob;
     juce::Label  inputTrimLabel   { {}, "TRIM"   };
+    juce::Label  inputTrimValueLabel;
     VUMeter      inputVU;
 
     juce::Label  outputPanelLabel { {}, "OUTPUT" };
     juce::Slider outputTrimKnob;
     juce::Label  outputTrimLabel  { {}, "TRIM"   };
+    juce::Label  outputTrimValueLabel;
     VUMeter      outputVU;
 
     // ── Pedal face ───────────────────────────────────────────────────────────
@@ -83,6 +85,7 @@ private:
     void configureTrimKnob(juce::Slider& s);
     void configureLabel(juce::Label& l, float fontSize, juce::uint32 colour,
                         juce::Justification just = juce::Justification::centred);
+    void configureTrimValueLabel(juce::Label& l);
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(TommyAudioProcessorEditor)
 };

@@ -1,10 +1,9 @@
 # Tommy
 
 Tommy is an overdrive plugin (AU, with VST3 planned) modelled on the classic "transparent overdrive"
-pedal circuit popularized by boutique builders in the 2000s. Rather than capturing a
-handful of fixed gain settings, Tommy simulates the actual analog circuit — drive stage,
-diode clipper, passive tone network, and output buffer — sample by sample, so every
-control behaves the way the real pedal's electronics would at any setting in between.
+pedal circuit. Rather than capturing a handful of fixed gain settings, Tommy simulates the actual 
+analog circuit — drive stage,diode clipper, passive tone network, and output buffer — sample by 
+sample, so everycontrol behaves the way the real pedal's electronics would at any setting in between.
 
 > Tommy is an original implementation built from circuit analysis and is not affiliated
 > with or endorsed by any pedal manufacturer.
@@ -14,13 +13,12 @@ control behaves the way the real pedal's electronics would at any setting in bet
 ## Overview
 
 Under the hood, Tommy's signal path is built as a [Wave Digital Filter](https://en.wikipedia.org/wiki/Wave_digital_filter)
-(WDF) network using [`chowdsp_wdf`](https://github.com/Chowdhury-DSP/chowdsp_wdf) —
-the same modelling technique used in circuit-accurate emulations from plugin developers
-like Chowdhury DSP. Every resistor, capacitor, and diode in the original circuit has a
-corresponding WDF element with the real component's value; the nonlinear clipping diodes
-are solved with Newton-Raphson iteration rather than a curve-fit approximation. The result
-responds to the interaction between controls the way the analog circuit does — turning
-up Bass changes how Gain behaves, because on the real pedal they share the same feedback
+(WDF) network using [`chowdsp_wdf`](https://github.com/Chowdhury-DSP/chowdsp_wdf). Every 
+resistor, capacitor, and diode in the original circuit has a corresponding WDF element 
+with the real component's value; the nonlinear clipping diodes are solved with 
+Newton-Raphson iteration rather than a curve-fit approximation. The resultresponds to 
+the interaction between controls the way the analog circuit does — turningup Bass 
+changes how Gain behaves, because on the real pedal they share the same feedback
 network, and that coupling is modelled directly rather than faked with two independent
 EQ curves.
 
@@ -29,9 +27,9 @@ EQ curves.
 - **Circuit-accurate drive stage** — Bass and Gain share a single coupled feedback
   network, modelled as one WDF tree (not two independent controls), matching the
   real pedal's interactive behavior
-- **Three-position clipping switch** (Soft / Medium / Hard) — switches between three
-  precomputed diode network topologies (two antiparallel pairs, one pair, or a single
-  diode), each solved with per-component 1N4148 Shockley diode parameters
+- **Three-position clipping switch** (Symmetrical / Open / Asymmetrical) — switches
+  between three precomputed diode network topologies (two antiparallel pairs, one
+  pair, or a single diode), each solved with per-component 1N4148 Shockley diode parameters
 - **Interactive passive treble network** — modelled as a coupled RC filter rather than
   a generic shelving EQ
 - **Per-polarity diode mismatch modelling** — reproduces the subtle even-harmonic
@@ -62,9 +60,6 @@ ear alone:
   within ±2 dB of the real pedal at the default oversampling factor — extending the
   oversampled region to include the linear stages after the clipper closed most of a
   several-dB gap that a 1x-only fix couldn't
-- A 144-point sweep across every control corner, all three clipping modes, and both
-  oversampling tiers, driven at a hot 0 dBFS input, produces zero NaN/Inf output and
-  stays bounded throughout
 
 None of this is neural-net or sample-based modelling — every stage is an analytic
 circuit solve, so the plugin's behavior generalizes to settings and signal levels that
@@ -78,7 +73,7 @@ were never explicitly captured.
 | Gain | Drive amount / clipping stage input level |
 | Treble | High-frequency cut after the clipping stage |
 | Volume | Output level |
-| Clipping switch (Soft / Medium / Hard) | Selects the diode clipping topology |
+| Clipping switch (Symmetrical / Open / Asymmetrical) | Selects the diode clipping topology |
 | Supply voltage (9V / 12V / 18V) | Op-amp rail headroom; diode thresholds unchanged |
 | Input Trim / Output Trim | ±12 dB trims with VU metering, for level matching |
 | Oversampling (live / render) | 1x / 2x / 4x / 8x, independent factors for playback vs. export |

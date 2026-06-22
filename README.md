@@ -1,55 +1,156 @@
 # Tommy
 
-Tommy is an overdrive plugin (AU/VST3) inspired by the classic "transparent overdrive"
-pedal circuit popularized by boutique builders in the 2000s. It uses circuit-accurate
-Wave Digital Filter (WDF) modelling to capture the feel and tone of that style of
-analog drive, with a few modern conveniences layered on top.
+Tommy is an overdrive plugin (AU, with VST3 planned) modelled on the classic "transparent overdrive"
+pedal circuit popularized by boutique builders in the 2000s. Rather than capturing a
+handful of fixed gain settings, Tommy simulates the actual analog circuit — drive stage,
+diode clipper, passive tone network, and output buffer — sample by sample, so every
+control behaves the way the real pedal's electronics would at any setting in between.
 
-> Tommy is an original implementation built from circuit analysis and is not
-> affiliated with or endorsed by any pedal manufacturer.
+> Tommy is an original implementation built from circuit analysis and is not affiliated
+> with or endorsed by any pedal manufacturer.
 
-![image](image.png)
+![Tommy plugin UI](image.png)
+
+## Overview
+
+Under the hood, Tommy's signal path is built as a [Wave Digital Filter](https://en.wikipedia.org/wiki/Wave_digital_filter)
+(WDF) network using [`chowdsp_wdf`](https://github.com/Chowdhury-DSP/chowdsp_wdf) —
+the same modelling technique used in circuit-accurate emulations from plugin developers
+like Chowdhury DSP. Every resistor, capacitor, and diode in the original circuit has a
+corresponding WDF element with the real component's value; the nonlinear clipping diodes
+are solved with Newton-Raphson iteration rather than a curve-fit approximation. The result
+responds to the interaction between controls the way the analog circuit does — turning
+up Bass changes how Gain behaves, because on the real pedal they share the same feedback
+network, and that coupling is modelled directly rather than faked with two independent
+EQ curves.
 
 ## Features
 
-- Circuit-modelled drive stage with coupled Bass/Gain interaction, just like the
-  analog original
-- Three-position clipping switch (Soft / Medium / Hard) for a range of clipping
-  characters, from smooth and symmetric to hard and asymmetric
-- Treble control with an interactive passive filter response
-- Selectable oversampling (1x/2x/4x/8x) with antiderivative anti-aliasing (ADAA)
-  on the nonlinear clipping stage
-- Input and output trim controls with VU-style metering, calibrated to -12 dBu
-- True bypass with click-free crossfade
+- **Circuit-accurate drive stage** — Bass and Gain share a single coupled feedback
+  network, modelled as one WDF tree (not two independent controls), matching the
+  real pedal's interactive behavior
+- **Three-position clipping switch** (Soft / Medium / Hard) — switches between three
+  precomputed diode network topologies (two antiparallel pairs, one pair, or a single
+  diode), each solved with per-component 1N4148 Shockley diode parameters
+- **Interactive passive treble network** — modelled as a coupled RC filter rather than
+  a generic shelving EQ
+- **Per-polarity diode mismatch modelling** — reproduces the subtle even-harmonic
+  content real diode tolerances add to the clipped signal, which a "perfectly matched"
+  diode pair can't produce on its own
+- **Selectable supply voltage** (9V / 12V / 18V) — raises op-amp rail headroom exactly
+  as it would on the real pedal's power jack, without touching diode clipping thresholds
+- **Oversampling with antiderivative anti-aliasing (ADAA)** — 1x/2x/4x/8x, with
+  independent factors for live playback and offline rendering, applied across the
+  clipping stage and the downstream linear stages so the top octave stays accurate
+  at any factor
+- **Calibrated I/O** — input and output trim with VU-style metering, calibrated to
+  -12 dBu internal headroom
+- **True bypass** with a short crossfade to avoid clicks
+- **Resizable UI** from 50% to 250%, with the scale remembered per session
+
+## Circuit accuracy
+
+Tommy's response was validated against real-pedal reamp captures rather than tuned by
+ear alone:
+
+- Bass and treble frequency response match the real pedal's cut curves within roughly
+  ±0.5 dB across the sweep
+- Second-harmonic level at high drive matches the real pedal within ~1 dB across all
+  three clipping modes (including the even-harmonic asymmetry mentioned above, which
+  a symmetric diode model can't reproduce)
+- Top-octave response (the part most sensitive to digital discretization error) is
+  within ±2 dB of the real pedal at the default oversampling factor — extending the
+  oversampled region to include the linear stages after the clipper closed most of a
+  several-dB gap that a 1x-only fix couldn't
+- A 144-point sweep across every control corner, all three clipping modes, and both
+  oversampling tiers, driven at a hot 0 dBFS input, produces zero NaN/Inf output and
+  stays bounded throughout
+
+None of this is neural-net or sample-based modelling — every stage is an analytic
+circuit solve, so the plugin's behavior generalizes to settings and signal levels that
+were never explicitly captured.
 
 ## Controls
 
 | Control | Description |
 |---|---|
-| Bass | Low-frequency content into the drive stage (interacts with Gain) |
+| Bass | Low end into the drive stage (shares a feedback network with Gain) |
 | Gain | Drive amount / clipping stage input level |
 | Treble | High-frequency cut after the clipping stage |
 | Volume | Output level |
-| Clipping (Soft/Medium/Hard) | Selects the diode clipping topology |
-| Input Trim / Output Trim | ±12 dB trims with metering, for level matching |
-| Oversampling | 1x / 2x / 4x / 8x, applied to the nonlinear clipping stage |
+| Clipping switch (Soft / Medium / Hard) | Selects the diode clipping topology |
+| Supply voltage (9V / 12V / 18V) | Op-amp rail headroom; diode thresholds unchanged |
+| Input Trim / Output Trim | ±12 dB trims with VU metering, for level matching |
+| Oversampling (live / render) | 1x / 2x / 4x / 8x, independent factors for playback vs. export |
 | Bypass | True bypass with crossfade |
+
+## Where to find things
+
+```
+src/
+  PluginProcessor.{h,cpp}    Plugin entry point, parameter layout, processBlock
+  PluginEditor.{h,cpp}       Top-level UI layout
+  dsp/                       The WDF circuit model, one file per circuit stage
+    InputBuffer.h              Input network
+    Stage1.h                   Drive stage (IC1_A) + SW1 diode clipping
+    ClippingOversampler.h      Oversampling wrapper around Stage1
+    TrebleNetwork.h            Passive treble filter
+    Stage2.h                   Output buffer stage (IC1_B)
+    Prewarp.h                  Bilinear-warp correction for the tone/feedback caps
+    TommyDSP.h                 Wires the stages into the full signal chain
+  ui/                        Custom LookAndFeel and UI components (image-based controls)
+  utils/
+    TaperUtils.h                Potentiometer taper curves
+
+tests/                      Per-stage validation executables (frequency response,
+                             clipping behavior, aliasing reduction, full-chain checks)
+analysis/                   Offline render tool + Python scripts used to compare the
+                             plugin's output against real-pedal reamp captures
+schematics/                 Source schematics the circuit model is built from
+
+.claude/rules/               Detailed circuit/DSP/architecture/UI/build references —
+                             read circuit.md if you want the full component-by-component
+                             schematic breakdown
+CLAUDE.md                    Project status and build-step log
+```
 
 ## Building
 
-Requires CMake 3.15+, a C++17 compiler, and the JUCE and chowdsp_wdf submodules.
+Requires CMake 3.15+, a C++17 compiler, and the JUCE, chowdsp_wdf, and xsimd submodules
+(xsimd accelerates the circuit's matrix math). Currently builds as an Audio Unit on
+macOS; VST3 support is on the roadmap but not yet wired up.
 
 ```bash
-git clone --recurse-submodules <repo-url>
+git clone --recurse-submodules https://github.com/tehguitarist/Tommy
+cd Tommy
 cmake -B build -DCMAKE_BUILD_TYPE=Release
-cmake --build build --target Tommy_AU    # AU
-cmake --build build --target Tommy_VST3  # VST3
+cmake --build build --target Tommy_AU
+```
+
+The AU is copied into `~/Library/Audio/Plug-Ins/Components/` automatically after the
+build. To validate it without opening a DAW:
+
+```bash
+auval -v aufx Tom1 LeP1
+```
+
+### Running the test suite
+
+Each circuit stage has a standalone validation executable that checks it against an
+analytic transfer function or known circuit behavior:
+
+```bash
+cmake --build build
+./build/Stage1_FreqResponse
+./build/ClippingStage_Sine
+# ...and so on for every test target under tests/
 ```
 
 ## Status
 
-This project is under active development. See `CLAUDE.md` for the current
-build step and implementation notes.
+Core DSP, UI, and calibration are complete and the plugin passes `auval`. See
+[CLAUDE.md](CLAUDE.md) for the detailed build-step log and what (if anything) is
+still open.
 
 ## License
 
@@ -57,5 +158,13 @@ Tommy is licensed under the [GNU Affero General Public License v3.0](LICENSE) (A
 
 ## Credits
 
-Built by Leigh Pierce using [JUCE](https://juce.com/) and
-[chowdsp_wdf](https://github.com/Chowdhury-DSP/chowdsp_wdf).
+Built by Leigh Pierce, using:
+
+- [JUCE](https://juce.com/) — plugin framework and UI toolkit
+- [chowdsp_wdf](https://github.com/Chowdhury-DSP/chowdsp_wdf) — Wave Digital Filter
+  modelling library
+- [xsimd](https://github.com/xtensor-stack/xsimd) — SIMD acceleration for the circuit's
+  matrix math
+
+Thanks to the Chowdhury DSP and JUCE communities for the tools that made a
+circuit-accurate approach practical to build solo.

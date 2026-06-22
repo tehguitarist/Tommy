@@ -16,7 +16,7 @@ Three-column layout with an oversampling strip below:
 │  [INPUT]          [PEDAL FACE]        [OUTPUT]   │
 │                                                  │
 │  Halo trim    ┌──────────────────┐  Halo trim   │
-│  knob (svg)   │  ⊕ 9V ⊖          │  knob (svg)  │
+│  knob (png)   │  ⊕ 9V ⊖          │  knob (png)  │
 │               │                  │               │
 │  [VU bar]     │ [BASS] ⊣  [GAIN] │  [VU bar]   │
 │  (tall,       │                  │  (tall,       │
@@ -73,7 +73,9 @@ Each side panel is identical in structure. Top-to-bottom:
 3. **"TRIM" sub-label** — 7.5 px, muted blue
 4. **VU bar meter** — fills all remaining height (flex:1). 22 segments, `flex-direction: column` (index 0 = top = loud/red), `gap: 2 px`. Segment colours: red (top ~14%), yellow (next ~21%), green (lower ~65%); lit vs unlit variants for each zone. Updated by `juce::Timer`.
 
-JUCE implementation: `InputTrimPanel` / `OutputTrimPanel` components, each containing a `HaloKnob` (custom `Slider` subclass) and a `VUMeter`.
+JUCE implementation: plain `juce::Slider` members directly on `PluginEditor` (`inputTrimKnob`/
+`outputTrimKnob`, componentID `"trim"` so `TommyLookAndFeel::drawRotarySlider` renders the halo
+style) plus a `VUMeter` (`inputVU`/`outputVU`) — no separate panel or `HaloKnob` component class.
 
 ## Pedal Face
 

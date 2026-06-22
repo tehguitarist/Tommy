@@ -18,7 +18,7 @@ TommyAudioProcessor          ← AudioProcessor subclass
   DriveStage (WDF, oversample wrapper)
     InputBuffer (linear WDF)
     Stage1 (linear WDF, IC1_A ideal op-amp)
-    SW1ClippingStage (nonlinear WDF, 3 precomputed topologies)
+    ClippingOversampler (nonlinear WDF, 3 precomputed topologies)
     TrebleNetwork (linear WDF passive)
     Stage2 (linear WDF, IC1_B ideal op-amp)
   VolumePot (linear)
@@ -35,7 +35,7 @@ TommyAudioProcessor          ← AudioProcessor subclass
 | `bass` | Bass | 0.0–1.0 | 0.5 | Linear in APVTS; audio taper applied in DSP |
 | `drive` | Gain | 0.0–1.0 | 0.5 | Linear in APVTS; audio taper applied in DSP |
 | `treble` | Treble | 0.0–1.0 | 0.5 | Linear in APVTS; audio taper applied in DSP |
-| `volume` | Volume | 0.0–1.0 | 0.5 | Linear in APVTS; audio taper applied in DSP (A10k pot) |
+| `volume` | Volume | 0.0–1.0 | 0.5 | Linear in APVTS; audio taper applied in DSP (A25K pot + R11 18k, see `circuit.md`) |
 | `clipping_mode` | Clipping | 0/1/2 | 1 (Open) | `AudioParameterChoice`: "Asymmetric" (top lever, single diode, = Hard) / "Open" (middle, one diode pair, = Medium) / "Symmetric" (bottom, all four diodes, = Soft). UI shows these as A/O/S — see `ui.md` SW1 section. |
 | `input_trim` | Input Trim | -12.0 to +12.0 dB | 0.0 | Linear dB; `AudioParameterFloat` |
 | `output_trim` | Output Trim | -12.0 to +12.0 dB | 0.0 | Linear dB; `AudioParameterFloat` |
@@ -73,7 +73,7 @@ All of the following must happen in `prepareToPlay(sampleRate, samplesPerBlock)`
 - Reset all smoothed parameter values to current APVTS values (prevents ramp-up artefact on first block)
 - Reset bypass crossfade state
 
-Each DSP stage class (InputBuffer, Stage1, ClippingStage, TrebleNetwork, Stage2) must expose a `prepare(double sampleRate)` method that chains `.prepare(sampleRate)` down to all its capacitors. `prepareToPlay` calls each stage's `prepare()` in signal-chain order. This ensures sample-rate changes between DAW sessions are handled correctly — JUCE calls `prepareToPlay` on every SR change.
+Each DSP stage class (InputBuffer, Stage1, ClippingOversampler, TrebleNetwork, Stage2) must expose a `prepare(double sampleRate)` method that chains `.prepare(sampleRate)` down to all its capacitors. `prepareToPlay` calls each stage's `prepare()` in signal-chain order. This ensures sample-rate changes between DAW sessions are handled correctly — JUCE calls `prepareToPlay` on every SR change.
 
 ## processBlock Structure
 

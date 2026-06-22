@@ -55,47 +55,42 @@ wdft::DiodeT<double, decltype(next), wdft::DiodeQuality::Best, AccurateOmega> d 
 - chowdsp diodes have no series-Rs parameter; add an explicit `ResistorT` in series if Rs is
   audibly significant (usually negligible at guitar levels).
 
-### Asymmetric clip modes — bias a symmetric pair, don't use threshold asymmetry
+### Asymmetric clip modes & even harmonics — use a PER-POLARITY diode mismatch
 
 `DiodePairT` is **symmetric**; `DiodeT` is **one-sided** (clips one polarity, the other runs to the
-rail → strongly **even-dominant**, too loud/bright — wrong for most "asym" switches). A real "asym"
-position is usually **odd-dominant with moderate even** (H3 biggest, H2 below it) at **roughly the
-same level as the symmetric modes**.
+rail → strongly even-dominant). Two real-pedal facts to reproduce: (a) a dedicated "asym" switch
+position is asymmetric (strong-ish even harmonics); (b) even the *nominally symmetric* positions show
+measurable **even harmonics** (in the reference build ~−47..−55 dB H2 re fundamental at high drive) —
+because real diodes have a forward-voltage spread between the two antiparallel devices and the
+above-mid-supply VREF bias offsets the operating point. A perfectly-matched ideal model produces NONE
+(even harmonics at the −140 dB floor), so it is *less* faithful than one that models the tolerance.
 
-The trap (learned the hard way): making the asymmetry from a **per-polarity threshold** (e.g. 1 diode
-one way, 2 in series the other) matches the even/odd balance ONLY by clipping the loose side ~4 dB
-louder — and level is then **coupled** to the asymmetry, so you can't fix the level without losing the
-harmonics. Null tests exposed it (asym ~4 dB hot, nulled worse than the symmetric modes even after
-level-matching).
+**The model that does both, cleanly: a MISMATCHED antiparallel pair** — the +swing diode uses
+`Vt·(1+m)`, the −swing `Vt·(1−m)` (per-polarity effective thermal voltage; same `Is`). Properties:
+- At `m=0` it is bit-identical to the matched `DiodePairT` (each polarity's reflection is 0 at `a=0`).
+- Even harmonics scale with `m`; **odd harmonics, THD, and level are unchanged** (the mismatch is
+  symmetric about the average `Vt`, so one peak grows as the other shrinks — net level preserved, even
+  at large `m`; it does NOT run hot).
+- **No small-signal-gain artifact:** the asymmetry acts only WHERE THE DIODES CONDUCT. At small signal
+  both diodes are high-Z so each polarity reflects ≈ unity → near-zero-signal gain matches the matched
+  pair exactly. Use a small `m` for the symmetric positions (tolerance) and a larger `m` for a "single
+  diode" asym position (a heavily-mismatched pair approximates one-sided clipping). Calibrate each to
+  the captured H2 — ideally from a **hot-reamp** capture (see below).
 
-The fix that **decouples level from asymmetry**: take a SYMMETRIC pair (same threshold as the
-medium/symmetric mode) and shift it by a small **lateral bias** in the wave domain —
-`b(a) = symPair(a + bias) − symPair(bias)` (subtract `symPair(bias)` so `b(0)=0`, no static DC). The
-shift makes the clip mildly asymmetric (even harmonics) while both sides still clip at the same
-threshold (level unchanged). Tune `bias` to the captured even/odd. In the reference build this put the
-asym level back on top of the symmetric modes and its null depth matched them across the whole drive
-range. Two caveats: (1) an asymmetric clip produces **signal-dependent DC** — model the output
-coupling cap (a ~6 Hz DC-block highpass) or it leaks DC; (2) a fixed bias perturbs the **small-signal
-gain** (more bias = more: ~3 % at a small bias, ~20 % at a large one, measured at near-zero signal) —
-a LOW-LEVEL artifact only (moderate/playing-level output is unchanged), and it over-asymmetrises at
-very low drive; fine if the nulls/levels hold, else use a signal-scaled bias. Still honours the
-OmegaProvider, so no omega4 floor.
+**Two traps this avoids.** (1) A per-polarity *RATIO* (e.g. 1 diode one way, 2 in series the other)
+matches the harmonics ONLY by clipping the loose side ~4 dB louder — level then **couples** to the
+asymmetry (it ran hot, nulled worse). A small *symmetric* `±m` mismatch doesn't, because it's centred.
+(2) A **lateral wave-domain bias** (`b(a)=symPair(a+bias)−symPair(bias)`) also adds even harmonics at
+fixed level, but it shifts the operating point at ALL levels, perturbing near-zero-signal gain by up
+to ~20 % at a large bias — an unphysical low-level artifact. The per-polarity mismatch has neither
+problem; prefer it. (Still: an asymmetric clip produces **signal-dependent DC** — model the output
+coupling cap, a ~6 Hz DC-block highpass, or it leaks DC. Still honours the OmegaProvider, no omega4
+floor.)
 
-### Even harmonics in the "symmetric" modes — model component tolerance, not the ideal circuit
-
-A real pedal's *symmetric* clipper (antiparallel diode pairs) still shows measurable **even
-harmonics** — in the reference build ~−47..−55 dB H2 re fundamental at high drive, in EVERY mode. An
-ideal, perfectly-matched bipolar diode model produces NONE (even harmonics at the numerical floor,
-−140 dB). The cause is **component tolerance**: real diodes have a forward-voltage spread between the
-two antiparallel devices, and an above-mid-supply VREF bias offsets the operating point, so the real
-clip thresholds are slightly asymmetric. A "perfect" analog emulation is therefore *less* faithful
-than one that models the tolerance. Fix: give the symmetric pair the SAME bias-offset mechanism with a
-SMALL global bias (much smaller than the dedicated "asym" mode), calibrated to the captured H2 — at
-bias=0 it's bit-identical to the plain symmetric pair (`symReflect(0)=0`), so a small bias only adds
-the missing even content; odd harmonics, THD, and playing-level output stay put. To DIAGNOSE: at high
-drive, match the input level (a hot-reamp capture is ideal) then compare per-harmonic FFT — if the odd
-harmonics already match, a "THD ceiling" is usually a *level-calibration* artifact, and the only real
-gap is the missing even harmonics. Don't chase it with global EQ; it's a clipping-asymmetry effect.
+**Diagnosing a "high-drive THD ceiling".** If the plugin seems to under-distort at high drive, first
+match the INPUT LEVEL (a hot-reamp capture is ideal) and compare a per-harmonic FFT — usually the odd
+harmonics + overall THD already match and the "ceiling" was a level-calibration artifact; the only
+real gap is the missing even harmonics above. Don't chase it with global EQ; it's clipping asymmetry.
 
 ### Omega accuracy gotcha (do NOT use the default omega)
 

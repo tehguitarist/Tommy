@@ -121,15 +121,18 @@ All three are in `schematics/` at the repo root. Load them when verifying any ci
 >   shows EVEN harmonics (~−47..−55 dB H2 re fund) in EVERY mode incl. symmetric Soft/Medium; a
 >   perfectly-matched bipolar diode model produces NONE (−141 dB). Cause = 1N4148 forward-voltage
 >   spread between the antiparallel diodes + above-mid-supply VREF bias → slightly asymmetric real
->   thresholds (a component-tolerance effect a "perfect" model can't show). FIX: Soft/Medium now also
->   use `AsymDiodePairT` (at bias=0 it's bit-identical to the old `DiodePairT` — `symReflect(0)=0`),
->   carrying a small global diode-mismatch bias **`kSymBias=0.15`**; Hard's **`kAsymBias` re-calibrated
->   0.18→0.30** to the hot-pass H2. Result @440 Hz G1500: H2 real/new Soft −55/−50, Medium −49/−51,
->   Hard −34/−36 — within ~2–5 dB across modes, ODD harmonics + THD + playing-level output UNCHANGED.
->   Side effect (bias-offset model): near-zero-signal gain perturbed (Soft ~3%, Hard ~21% at a tiny
->   level) — a LOW-LEVEL artifact only; moderate/playing-level output is identical (verified). C6
->   (1µ ~6 Hz) output DC-block in `TommyDSP` handles the asymmetric clips' signal-dependent DC.
->   `offline_render` arg[20]=symBias, arg[15]=asymBias for A/B.
+>   thresholds (a component-tolerance effect a "perfect" model can't show). FIX (final, 2026-06-22):
+>   `AsymDiodePairT` is a **MISMATCHED antiparallel pair** — +swing diode Vt·(1+m), −swing Vt·(1−m).
+>   ALL diode modes use it (Soft/Medium too; at m=0 bit-identical to matched `DiodePairT`).
+>   **`kSymMismatch=0.06`** (Soft/Medium), **`kAsymMismatch=0.45`** (Hard — large because Hard is
+>   really a single, strongly one-sided diode approximated by a heavily-mismatched pair; symmetric
+>   about Vt so it does NOT run hot). Result @440 Hz G1500 H2 real/plug: Soft −55/−51, Medium −49/−51,
+>   Hard −34/−34 (exact); ODD harmonics + THD + level unchanged. **Per-polarity Vt, NOT a lateral bias
+>   (earlier model):** a lateral bias shifted the operating point at ALL levels, perturbing near-zero-
+>   signal gain up to ~21% (Hard); per-polarity mismatch acts ONLY where the diodes conduct, so small-
+>   signal gain is UNPERTURBED (test rel err 0.0004–0.001, was 0.21) — asymmetry appears only at
+>   clipping, as in reality. C6 (1µ ~6 Hz) output DC-block in `TommyDSP` handles the asymmetric clips'
+>   signal-dependent DC. `offline_render` arg[20]=symMismatch, arg[15]=asymMismatch for A/B.
 >
 > **Analysis harness (`analysis/`):** `offline_render.cpp` (OfflineRender exe — runs the real DSP +
 > processBlock gain staging; many override args for fitting) + Python tools (run_compare, sweep_kinput,

@@ -17,6 +17,20 @@ add_subdirectory(libs/chowdsp_wdf)
 get_target_property(_chowdsp_inc chowdsp_wdf INTERFACE_INCLUDE_DIRECTORIES)
 set_target_properties(chowdsp_wdf PROPERTIES INTERFACE_SYSTEM_INCLUDE_DIRECTORIES "${_chowdsp_inc}")
 
+juce_add_binary_data(TommyUIAssets
+    SOURCES
+        assets/ui/T_Knob.png
+        assets/ui/vol_trim.png
+        assets/ui/tommy_texture.png
+        assets/ui/blue_led_on.png
+        assets/ui/blue_led_off.png
+        assets/ui/footswitch_up.png
+        assets/ui/footswitch_down.png
+        assets/ui/switch_up.png
+        assets/ui/switch_mid.png
+        assets/ui/switch_down.png
+)
+
 juce_add_plugin(Tommy
     COMPANY_NAME "Leigh Pierce"
     BUNDLE_ID com.leighpierce.Tommy
@@ -47,6 +61,7 @@ target_link_libraries(Tommy
         juce::juce_dsp
         chowdsp::chowdsp_wdf
         xsimd
+        TommyUIAssets
     PUBLIC
         juce::juce_recommended_config_flags
         juce::juce_recommended_lto_flags

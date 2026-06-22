@@ -119,7 +119,7 @@ TommyAudioProcessorEditor::TommyAudioProcessorEditor(TommyAudioProcessor& p)
     addAndMakeVisible(led);
 
     // ── Tommy logo — Brush Script MT italic (font set in refreshFonts) ──────
-    tommyLogo.setColour(juce::Label::textColourId, juce::Colour(TommyLookAndFeel::cLabelText));
+    tommyLogo.setColour(juce::Label::textColourId, juce::Colour(TommyLookAndFeel::cLabelText).withAlpha(0.9f));
     tommyLogo.setJustificationType(juce::Justification::centred);
     tommyLogo.setInterceptsMouseClicks(false, false);
     addAndMakeVisible(tommyLogo);
@@ -332,8 +332,9 @@ void TommyAudioProcessorEditor::resized()
         sepLineY = supplyControl.getBottom() + i(5);
         pp.removeFromTop(i(6));
 
-        // Row 1: Bass · SW1 · Gain
-        auto row1 = pp.removeFromTop(i(72));
+        // Row 1: Bass · SW1 · Gain (rows grown again to fit the now-66px knobs: 71px box, same 5px
+        // margin as before; +17px label area unchanged)
+        auto row1 = pp.removeFromTop(i(88));
         pp.removeFromTop(i(8));
         {
             const int secW = row1.getWidth() / 3;
@@ -341,15 +342,18 @@ void TommyAudioProcessorEditor::resized()
             auto gainSection = row1.removeFromRight(secW);
             auto sw1Section  = row1;
 
-            bassKnob.setBounds(bassSection.removeFromTop(i(55)).withSizeKeepingCentre(i(50), i(50)));
+            bassKnob.setBounds(bassSection.removeFromTop(i(71)).withSizeKeepingCentre(i(66), i(66)));
             bassLabel.setBounds(bassSection.withSizeKeepingCentre(bassSection.getWidth(), i(12)));
-            gainKnob.setBounds(gainSection.removeFromTop(i(55)).withSizeKeepingCentre(i(50), i(50)));
+            gainKnob.setBounds(gainSection.removeFromTop(i(71)).withSizeKeepingCentre(i(66), i(66)));
             gainLabel.setBounds(gainSection.withSizeKeepingCentre(gainSection.getWidth(), i(12)));
-            sw1Switch.setBounds(sw1Section.withSizeKeepingCentre(sw1Section.getWidth(), i(65)));
+            // A bit taller (room for the "A"/"S" labels above/below the switch image) and nudged
+            // down within row1.
+            sw1Switch.setBounds(sw1Section.withSizeKeepingCentre(sw1Section.getWidth(), i(78))
+                                           .translated(0, i(10)));
         }
 
         // Row 2: Volume · LED · Treble
-        auto row2 = pp.removeFromTop(i(72));
+        auto row2 = pp.removeFromTop(i(88));
         pp.removeFromTop(i(8));
         {
             const int secW = row2.getWidth() / 3;
@@ -357,11 +361,13 @@ void TommyAudioProcessorEditor::resized()
             auto trebSection = row2.removeFromRight(secW);
             auto ledSection  = row2;
 
-            volumeKnob.setBounds(volSection.removeFromTop(i(55)).withSizeKeepingCentre(i(50), i(50)));
+            volumeKnob.setBounds(volSection.removeFromTop(i(71)).withSizeKeepingCentre(i(66), i(66)));
             volumeLabel.setBounds(volSection.withSizeKeepingCentre(volSection.getWidth(), i(12)));
-            trebleKnob.setBounds(trebSection.removeFromTop(i(55)).withSizeKeepingCentre(i(50), i(50)));
+            trebleKnob.setBounds(trebSection.removeFromTop(i(71)).withSizeKeepingCentre(i(66), i(66)));
             trebleLabel.setBounds(trebSection.withSizeKeepingCentre(trebSection.getWidth(), i(12)));
-            led.setBounds(ledSection.withSizeKeepingCentre(i(18), i(18)));
+            // Oversized vs. the physical LED footprint — blue_led_on.png bakes its glow into the
+            // art, so the component bounds need the extra room (image drawing is clipped to bounds).
+            led.setBounds(ledSection.withSizeKeepingCentre(i(28), i(28)));
         }
 
         // Tommy logo + bypass (built bottom-up)
@@ -370,7 +376,7 @@ void TommyAudioProcessorEditor::resized()
         pp.removeFromBottom(i(5));
         bypassButton.setBounds(pp.removeFromBottom(i(52)).withSizeKeepingCentre(i(52), i(52)));
         pp.removeFromTop(i(4));
-        tommyLogo.setBounds(pp.withSizeKeepingCentre(pp.getWidth(), juce::jmin(i(72), pp.getHeight())));
+        tommyLogo.setBounds(pp.withSizeKeepingCentre(pp.getWidth(), juce::jmin(i(83), pp.getHeight())));
     }
 
     // ── Oversampling strip ────────────────────────────────────────────────
@@ -413,7 +419,7 @@ void TommyAudioProcessorEditor::refreshFonts(float sc)
     outputPanelLabel.setFont(bold(8.0f  * sc).withExtraKerningFactor(0.20f));
     inputTrimLabel  .setFont(bold(7.5f  * sc));
     outputTrimLabel .setFont(bold(7.5f  * sc));
-    supplyControl   .setFontSize(8.0f  * sc);
+    supplyControl   .setFontSize(10.0f * sc); // 25% bigger than the original 8.0f
     bypassLabel     .setFont(bold(7.0f  * sc).withExtraKerningFactor(0.20f));
     osLabel         .setFont(bold(8.0f  * sc).withExtraKerningFactor(0.18f));
     osLiveLabel     .setFont(bold(7.0f  * sc).withExtraKerningFactor(0.15f));
@@ -424,7 +430,7 @@ void TommyAudioProcessorEditor::refreshFonts(float sc)
     for (auto* l : { &bassLabel, &gainLabel, &volumeLabel, &trebleLabel })
         l->setFont(kFont);
 
-    tommyLogo.setFont(juce::Font(juce::FontOptions("Brush Script MT", 81.0f * sc, juce::Font::italic)));
+    tommyLogo.setFont(juce::Font(juce::FontOptions("Brush Script MT", 93.2f * sc, juce::Font::italic))); // 15% bigger than the original 81.0f
 }
 
 void TommyAudioProcessorEditor::showScaleMenu()

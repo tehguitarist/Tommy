@@ -24,35 +24,68 @@ public:
 
     void paint(juce::Graphics& g) override
     {
-        static const char* const volts[] = { "9V", "12V", "18V" };
-        g.setFont(juce::Font(juce::FontOptions(fontPx, juce::Font::bold)));
+        const auto font = juce::Font(juce::FontOptions(fontPx, juce::Font::bold));
+        g.setFont(font);
 
-        const auto r     = getLocalBounds().toFloat();
-        const float third = r.getWidth() / 3.0f;
-        const auto lit   = juce::Colour(TommyLookAndFeel::cPowerLabelLit);
-        const auto dim   = juce::Colour(TommyLookAndFeel::cPowerLabel);
+        const auto layout = computeLayout(font);
+        const auto lit    = juce::Colour(TommyLookAndFeel::cPowerLabelLit);
+        const auto dim    = juce::Colour(TommyLookAndFeel::cPowerLabel);
 
         g.setColour(index < 2 ? lit : dim); // "(+)" lit when a higher voltage is available
-        g.drawText("(+)", juce::Rectangle<float>(r.getX(), r.getY(), third, r.getHeight()),
-                   juce::Justification::centred, false);
+        g.drawText("(+)", layout.plusBounds, juce::Justification::centred, false);
 
         g.setColour(dim);
-        g.drawText(volts[index], juce::Rectangle<float>(r.getX() + third, r.getY(), third, r.getHeight()),
-                   juce::Justification::centred, false);
+        g.drawText(layout.voltsText, layout.voltsBounds, juce::Justification::centred, false);
 
         g.setColour(index > 0 ? lit : dim); // "(-)" lit when a lower voltage is available
-        g.drawText("(-)", juce::Rectangle<float>(r.getX() + 2.0f * third, r.getY(), third, r.getHeight()),
-                   juce::Justification::centred, false);
+        g.drawText("(-)", layout.minusBounds, juce::Justification::centred, false);
     }
 
     void mouseDown(const juce::MouseEvent& e) override
     {
-        const int w = getWidth();
-        if (e.x < w / 3 && index < 2)            { setIndex(index + 1); if (onChange) onChange(index); }
-        else if (e.x >= 2 * w / 3 && index > 0)  { setIndex(index - 1); if (onChange) onChange(index); }
+        const auto font   = juce::Font(juce::FontOptions(fontPx, juce::Font::bold));
+        const auto layout = computeLayout(font);
+        const float padClick = fontPx * 0.6f; // generous invisible click margin either side
+
+        if ((float) e.x < layout.plusBounds.getRight() + padClick && index < 2)
+            { setIndex(index + 1); if (onChange) onChange(index); }
+        else if ((float) e.x >= layout.minusBounds.getX() - padClick && index > 0)
+            { setIndex(index - 1); if (onChange) onChange(index); }
     }
 
 private:
     int   index { 0 };
-    float fontPx { 8.0f };
+    float fontPx { 10.0f };
+
+    struct Layout
+    {
+        const char* voltsText;
+        juce::Rectangle<float> plusBounds, voltsBounds, minusBounds; // tight (text-width) rects
+    };
+
+    // "(+)", the voltage, and "(-)" packed tightly together and centred in the component — rather
+    // than spread across three equal thirds, which left large gaps either side of the short text.
+    Layout computeLayout(const juce::Font& font) const
+    {
+        static const char* const volts[] = { "9V", "12V", "18V" };
+        const char* voltsText = volts[index];
+
+        const float wPlus  = juce::GlyphArrangement::getStringWidth(font, "(+)");
+        const float wVolts = juce::GlyphArrangement::getStringWidth(font, voltsText);
+        const float wMinus = juce::GlyphArrangement::getStringWidth(font, "(-)");
+        const float gap    = fontPx * 0.35f;
+
+        const float total = wPlus + gap + wVolts + gap + wMinus;
+        const auto r = getLocalBounds().toFloat();
+        const float h = r.getHeight();
+        float x = r.getCentreX() - total * 0.5f;
+
+        juce::Rectangle<float> plusB(x, 0.0f, wPlus, h);
+        x += wPlus + gap;
+        juce::Rectangle<float> voltsB(x, 0.0f, wVolts, h);
+        x += wVolts + gap;
+        juce::Rectangle<float> minusB(x, 0.0f, wMinus, h);
+
+        return { voltsText, plusB, voltsB, minusB };
+    }
 };

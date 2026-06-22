@@ -23,9 +23,9 @@ public:
     static constexpr juce::uint32 cTrimLabel       = 0xFF5588AAu;
     static constexpr juce::uint32 cTrimArc         = 0xFF2A5898u;
     static constexpr juce::uint32 cTrimArcTrack    = 0xFF101E30u;
-    static constexpr juce::uint32 cSWLabelActive   = 0xFF90C0E0u;
-    static constexpr juce::uint32 cSWLabelInactive = 0xFF3A5A78u;
-    static constexpr juce::uint32 cBypassLabel     = 0xFF2E4A60u;
+    static constexpr juce::uint32 cSWLabelActive   = 0xFFC0E4FFu;
+    static constexpr juce::uint32 cSWLabelInactive = 0xFF5C84ACu;
+    static constexpr juce::uint32 cBypassLabel     = 0xFF4878A0u;
     static constexpr juce::uint32 cMeterLow        = 0xFF44CC44u;
     static constexpr juce::uint32 cMeterMid        = 0xFFCCBA00u;
     static constexpr juce::uint32 cMeterHigh       = 0xFFDD2222u;
@@ -41,8 +41,21 @@ public:
 
     TommyLookAndFeel();
 
-    // Called by PluginEditor::paint() to draw the mottled pedal face background.
+    // Called by PluginEditor::paint() to draw the pedal face background texture.
     void paintPedalBackground(juce::Graphics& g, juce::Rectangle<int> bounds);
+
+    // Shared image-drawing helpers used by other UI components (LEDIndicator, SW1Switch).
+    // Draws `image` centred in `bounds`, scaled to fit without stretching the aspect ratio.
+    static void drawImageCentredAspect(juce::Graphics& g, const juce::Image& image,
+                                        juce::Rectangle<float> bounds);
+
+    static const juce::Image& getKnobImage();        // T_Knob.png      — pedal knobs (bass/gain/vol/treble)
+    static const juce::Image& getTrimKnobImage();     // vol_trim.png    — input/output trim knobs
+    static const juce::Image& getLedOnImage();        // blue_led_on.png
+    static const juce::Image& getLedOffImage();       // blue_led_off.png
+    static const juce::Image& getFootswitchUpImage();   // footswitch_up.png
+    static const juce::Image& getFootswitchDownImage(); // footswitch_down.png
+    static const juce::Image& getSwitchImage(int position); // 0=up,1=mid,2=down
 
     // ── LookAndFeel overrides ─────────────────────────────────────────────────
     // Rotary sliders: differentiated by componentID — "trim" = halo style, else = pedal knob.

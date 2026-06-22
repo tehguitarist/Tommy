@@ -1,4 +1,93 @@
 #include "TommyLookAndFeel.h"
+#include <BinaryData.h>
+
+// ── Image loading ─────────────────────────────────────────────────────────────
+// All images are PNG with alpha, pre-rotated to "noon" (knobs/switch-up) where relevant.
+// Loaded once (function-local statics) and cached for the process lifetime.
+
+namespace
+{
+    juce::Image loadImg(const void* data, int size)
+    {
+        return juce::ImageCache::getFromMemory(data, size);
+    }
+
+    // Draws `img` centred at (cx, cy), scaled so its larger dimension equals `diameter`, rotated by
+    // `angleRadians` about its centre. Source art is pre-rendered pointing at noon (angle = 0).
+    void drawRotatedImage(juce::Graphics& g, const juce::Image& img, float cx, float cy,
+                           float diameter, float angleRadians)
+    {
+        if (img.isNull()) return;
+
+        const float srcW = (float) img.getWidth(), srcH = (float) img.getHeight();
+        const float scale = diameter / juce::jmax(srcW, srcH);
+
+        const auto transform = juce::AffineTransform::translation(-srcW * 0.5f, -srcH * 0.5f)
+                                    .scaled(scale)
+                                    .rotated(angleRadians)
+                                    .translated(cx, cy);
+        g.drawImageTransformed(img, transform, false);
+    }
+}
+
+const juce::Image& TommyLookAndFeel::getKnobImage()
+{
+    static const juce::Image img = loadImg(BinaryData::T_Knob_png, BinaryData::T_Knob_pngSize);
+    return img;
+}
+
+const juce::Image& TommyLookAndFeel::getTrimKnobImage()
+{
+    static const juce::Image img = loadImg(BinaryData::vol_trim_png, BinaryData::vol_trim_pngSize);
+    return img;
+}
+
+const juce::Image& TommyLookAndFeel::getLedOnImage()
+{
+    static const juce::Image img = loadImg(BinaryData::blue_led_on_png, BinaryData::blue_led_on_pngSize);
+    return img;
+}
+
+const juce::Image& TommyLookAndFeel::getLedOffImage()
+{
+    static const juce::Image img = loadImg(BinaryData::blue_led_off_png, BinaryData::blue_led_off_pngSize);
+    return img;
+}
+
+const juce::Image& TommyLookAndFeel::getFootswitchUpImage()
+{
+    static const juce::Image img = loadImg(BinaryData::footswitch_up_png, BinaryData::footswitch_up_pngSize);
+    return img;
+}
+
+const juce::Image& TommyLookAndFeel::getFootswitchDownImage()
+{
+    static const juce::Image img = loadImg(BinaryData::footswitch_down_png, BinaryData::footswitch_down_pngSize);
+    return img;
+}
+
+const juce::Image& TommyLookAndFeel::getSwitchImage(int position)
+{
+    static const juce::Image up   = loadImg(BinaryData::switch_up_png,   BinaryData::switch_up_pngSize);
+    static const juce::Image mid  = loadImg(BinaryData::switch_mid_png,  BinaryData::switch_mid_pngSize);
+    static const juce::Image down = loadImg(BinaryData::switch_down_png, BinaryData::switch_down_pngSize);
+    if (position <= 0) return up;
+    if (position == 1) return mid;
+    return down;
+}
+
+void TommyLookAndFeel::drawImageCentredAspect(juce::Graphics& g, const juce::Image& image,
+                                               juce::Rectangle<float> bounds)
+{
+    if (image.isNull()) return;
+
+    const float srcW = (float) image.getWidth(), srcH = (float) image.getHeight();
+    const float scale = juce::jmin(bounds.getWidth() / srcW, bounds.getHeight() / srcH);
+    const float drawW = srcW * scale, drawH = srcH * scale;
+
+    g.drawImage(image, juce::Rectangle<float>(bounds.getCentreX() - drawW * 0.5f,
+                                               bounds.getCentreY() - drawH * 0.5f, drawW, drawH));
+}
 
 TommyLookAndFeel::TommyLookAndFeel()
 {
@@ -24,7 +113,7 @@ void TommyLookAndFeel::paintPedalBackground(juce::Graphics& g, juce::Rectangle<i
     auto fb = bounds.toFloat();
     const float W = fb.getWidth(), H = fb.getHeight();
 
-    // Rounded base fill
+    // Rounded base fill (shows at the rounded corners if the texture doesn't quite reach them)
     g.setColour(juce::Colour(cPedalFace));
     g.fillRoundedRectangle(fb, 16.0f);
 
@@ -34,53 +123,18 @@ void TommyLookAndFeel::paintPedalBackground(juce::Graphics& g, juce::Rectangle<i
     clip.addRoundedRectangle(fb.reduced(2.0f), 14.0f);
     g.reduceClipRegion(clip);
 
-    // Mottled overlay: five soft radial blobs for depth variation
-    struct Blob { float cx, cy, rx, ry, a; juce::uint32 col; };
-    const Blob blobs[] = {
-        { 0.18f, 0.15f, 110.f, 90.f, 0.60f, 0xFF19395Fu },
-        { 0.82f, 0.22f, 80.f,  130.f, 0.55f, 0xFF0E203Eu },
-        { 0.50f, 0.68f, 100.f, 80.f, 0.50f, 0xFF12284Eu },
-        { 0.22f, 0.82f, 70.f,  100.f, 0.45f, 0xFF0A1930u },
-        { 0.75f, 0.85f, 90.f,  60.f, 0.40f, 0xFF0C1E37u },
-    };
-    for (auto& b : blobs)
+    // Texture — "cover" fit: scale to fill both dimensions (no stretch), crop the overflow.
     {
-        juce::ColourGradient cg;
-        cg.isRadial = true;
-        cg.point1 = { fb.getX() + b.cx * W, fb.getY() + b.cy * H };
-        cg.point2 = { cg.point1.x + b.rx, cg.point1.y };
-        cg.addColour(0.0, juce::Colour(b.col).withAlpha(b.a));
-        cg.addColour(1.0, juce::Colour(b.col).withAlpha(0.0f));
-        g.setGradientFill(cg);
-        g.fillRoundedRectangle(fb, 14.0f);
+        static const juce::Image texture = loadImg(BinaryData::tommy_texture_png, BinaryData::tommy_texture_pngSize);
+        if (! texture.isNull())
+        {
+            const float srcW = (float) texture.getWidth(), srcH = (float) texture.getHeight();
+            const float scale = juce::jmax(W / srcW, H / srcH);
+            const float drawW = srcW * scale, drawH = srcH * scale;
+            g.drawImage(texture, juce::Rectangle<float>(fb.getCentreX() - drawW * 0.5f,
+                                                          fb.getCentreY() - drawH * 0.5f, drawW, drawH));
+        }
     }
-
-    // Sparkle dots — deterministic RNG for consistent pattern across repaints
-    juce::Random rng(54321);
-    for (int i = 0; i < 220; ++i)
-    {
-        const float px  = fb.getX() + rng.nextFloat() * W;
-        const float py  = fb.getY() + rng.nextFloat() * H;
-        const float rad = rng.nextFloat() * 1.3f + 0.2f;
-        const float a   = rng.nextFloat() * 0.15f + 0.03f;
-        const auto red  = (juce::uint8)(65  + rng.nextInt(45));
-        const auto grn  = (juce::uint8)(95  + rng.nextInt(60));
-        const auto blu  = (juce::uint8)(170 + rng.nextInt(85));
-        const auto alp  = (juce::uint8)(a * 255.0f);
-        g.setColour(juce::Colour(red, grn, blu, alp));
-        g.fillEllipse(px - rad, py - rad, rad * 2.0f, rad * 2.0f);
-    }
-
-    // Subtle top-edge sheen (metallic highlight)
-    juce::ColourGradient sheen;
-    sheen.isRadial = false;
-    sheen.point1 = { fb.getX() + W * 0.15f, fb.getY() + 1.0f };
-    sheen.point2 = { fb.getX() + W * 0.85f, fb.getY() + 1.0f };
-    sheen.addColour(0.0, juce::Colours::transparentWhite);
-    sheen.addColour(0.5, juce::Colour(0x40507088u));
-    sheen.addColour(1.0, juce::Colours::transparentWhite);
-    g.setGradientFill(sheen);
-    g.fillRect(fb.getX() + W * 0.15f, fb.getY(), W * 0.70f, 2.0f);
 
     g.restoreState();
 
@@ -123,58 +177,14 @@ void TommyLookAndFeel::drawRotarySlider(juce::Graphics& g, int x, int y, int w, 
             g.strokePath(arc, juce::PathStrokeType(arcW, juce::PathStrokeType::curved,
                                                     juce::PathStrokeType::rounded));
         }
-        // Knob cap with radial gradient
-        {
-            juce::ColourGradient grad(juce::Colour(cKnobHighlight),
-                                      cx - knobR * 0.3f, cy - knobR * 0.35f,
-                                      juce::Colour(cKnobShadow),
-                                      cx + knobR * 0.7f, cy + knobR * 0.7f,
-                                      true);
-            grad.addColour(0.55, juce::Colour(cKnobMid));
-            // Drop shadow
-            g.setColour(juce::Colours::black.withAlpha(0.45f));
-            g.fillEllipse(cx - knobR + 1.0f, cy - knobR + 3.0f, knobR * 2.0f, knobR * 2.0f);
-            // Cap
-            g.setGradientFill(grad);
-            g.fillEllipse(cx - knobR, cy - knobR, knobR * 2.0f, knobR * 2.0f);
-        }
-        // Indicator line
-        {
-            g.setColour(juce::Colour(cKnobIndicator));
-            const float inner = knobR * 0.18f, outer2 = knobR * 0.78f;
-            g.drawLine(cx + inner  * std::sin(valAngle), cy - inner  * std::cos(valAngle),
-                       cx + outer2 * std::sin(valAngle), cy - outer2 * std::cos(valAngle),
-                       2.5f);
-        }
+        // Knob cap — rotated image only (pre-rendered art, noon = angle 0).
+        drawRotatedImage(g, getTrimKnobImage(), cx, cy, knobR * 2.0f, valAngle);
     }
     else
     {
-        // Standard pedal knob: gradient cap + indicator line
+        // Standard pedal knob — rotated image only.
         const float knobR = juce::jmin(bounds.getWidth(), bounds.getHeight()) * 0.5f - 2.0f;
-
-        // Drop shadow
-        g.setColour(juce::Colours::black.withAlpha(0.5f));
-        g.fillEllipse(cx - knobR + 1.0f, cy - knobR + 4.0f, knobR * 2.0f, knobR * 2.0f);
-
-        // Cap
-        {
-            juce::ColourGradient grad(juce::Colour(cKnobHighlight),
-                                      cx - knobR * 0.3f, cy - knobR * 0.35f,
-                                      juce::Colour(cKnobShadow),
-                                      cx + knobR * 0.6f, cy + knobR * 0.6f,
-                                      true);
-            grad.addColour(0.38, juce::Colour(cKnobMid));
-            g.setGradientFill(grad);
-            g.fillEllipse(cx - knobR, cy - knobR, knobR * 2.0f, knobR * 2.0f);
-        }
-        // Indicator line
-        {
-            g.setColour(juce::Colour(cKnobIndicator));
-            const float inner = knobR * 0.14f, outer2 = knobR * 0.72f;
-            g.drawLine(cx + inner  * std::sin(valAngle), cy - inner  * std::cos(valAngle),
-                       cx + outer2 * std::sin(valAngle), cy - outer2 * std::cos(valAngle),
-                       3.0f);
-        }
+        drawRotatedImage(g, getKnobImage(), cx, cy, knobR * 2.0f, valAngle);
     }
 }
 
@@ -188,96 +198,11 @@ void TommyLookAndFeel::drawButtonBackground(juce::Graphics& g, juce::Button& but
 
     if (button.getComponentID() == "bypass")
     {
-        // Octagonal footswitch nut + circular rubber dome inner button
-        const float cx = b.getCentreX(), cy = b.getCentreY();
-        const float nutR  = juce::jmin(b.getWidth(), b.getHeight()) * 0.5f - 1.0f; // octagon outer radius
-        const float domeR = nutR * 0.60f; // inner circular button radius
-
-        // Helper: build an octagon path with flat top/bottom (start angle = π/8)
-        auto makeOctagon = [&](float radius) -> juce::Path
-        {
-            juce::Path p;
-            for (int i = 0; i < 8; ++i)
-            {
-                const float a  = (float)i / 8.0f * juce::MathConstants<float>::twoPi
-                                 + juce::MathConstants<float>::pi / 8.0f;
-                const float px = cx + radius * std::cos(a);
-                const float py = cy + radius * std::sin(a);
-                if (i == 0) p.startNewSubPath(px, py);
-                else        p.lineTo(px, py);
-            }
-            p.closeSubPath();
-            return p;
-        };
-
-        // Drop shadow beneath nut
-        g.setColour(juce::Colours::black.withAlpha(0.45f));
-        auto shadowPath = makeOctagon(nutR);
-        shadowPath.applyTransform(juce::AffineTransform::translation(1.5f, 3.0f));
-        g.fillPath(shadowPath);
-
-        // Octagonal nut — dark gunmetal gradient
-        {
-            juce::ColourGradient nutGrad(juce::Colour(0xFF8A8E94u),   // light gunmetal top-left
-                                          cx - nutR * 0.4f, cy - nutR * 0.5f,
-                                          juce::Colour(0xFF2E3238u),   // dark gunmetal bottom-right
-                                          cx + nutR * 0.4f, cy + nutR * 0.5f,
-                                          false);
-            nutGrad.addColour(0.30, juce::Colour(0xFF606468u));
-            nutGrad.addColour(0.65, juce::Colour(0xFF404448u));
-            g.setGradientFill(nutGrad);
-            g.fillPath(makeOctagon(nutR));
-        }
-
-        // Nut edge — thin dark stroke to define each face
-        g.setColour(juce::Colour(0xFF1A1C1Eu));
-        g.strokePath(makeOctagon(nutR), juce::PathStrokeType(1.0f));
-
-        // Slight face-facet highlights (one brighter face, top-left)
-        {
-            auto facet = makeOctagon(nutR);
-            g.saveState();
-            g.reduceClipRegion(facet);
-            juce::ColourGradient sheen(juce::Colour(0x30FFFFFFu), cx - nutR * 0.3f, cy - nutR * 0.55f,
-                                       juce::Colours::transparentWhite, cx,           cy - nutR * 0.1f, false);
-            g.setGradientFill(sheen);
-            g.fillPath(facet);
-            g.restoreState();
-        }
-
-        // Recessed socket inside nut (dark ring between nut and dome)
-        g.setColour(juce::Colour(0xFF101214u));
-        g.fillEllipse(cx - domeR - 4.0f, cy - domeR - 4.0f, (domeR + 4.0f) * 2.0f, (domeR + 4.0f) * 2.0f);
-
-        // Inner circular rubber dome button
-        const float pressOff = down ? 1.5f : 0.0f;
-        {
-            // Dome drop shadow
-            g.setColour(juce::Colours::black.withAlpha(0.50f));
-            g.fillEllipse(cx - domeR + 1.0f, cy - domeR + 2.5f + pressOff, domeR * 2.0f, domeR * 2.0f);
-
-            // Dome body — bright silver
-            juce::ColourGradient domeGrad(juce::Colour(0xFFDCE0E4u),   // bright silver highlight
-                                           cx - domeR * 0.28f, cy - domeR * 0.35f - pressOff,
-                                           juce::Colour(0xFF7A8490u),   // darker silver shadow
-                                           cx + domeR * 0.25f, cy + domeR * 0.35f + pressOff,
-                                           true);
-            domeGrad.addColour(0.45, juce::Colour(0xFFAEB8C0u));
-            g.setGradientFill(domeGrad);
-            g.fillEllipse(cx - domeR, cy - domeR + pressOff, domeR * 2.0f, domeR * 2.0f);
-
-            // Dark rim to define dome edge
-            g.setColour(juce::Colour(0xFF303438u));
-            g.drawEllipse(cx - domeR + 0.5f, cy - domeR + pressOff + 0.5f,
-                          domeR * 2.0f - 1.0f, domeR * 2.0f - 1.0f, 1.0f);
-
-            // Specular highlight — bright white oval, top-left of dome
-            if (!down)
-            {
-                g.setColour(juce::Colours::white.withAlpha(0.55f));
-                g.fillEllipse(cx - domeR * 0.50f, cy - domeR * 0.52f, domeR * 0.52f, domeR * 0.28f);
-            }
-        }
+        // Footswitch image swap — position is a press ANIMATION only (mouse-down state), it does
+        // NOT indicate bypass on/off (that's the separate LED).
+        const auto& img = down ? TommyLookAndFeel::getFootswitchDownImage()
+                               : TommyLookAndFeel::getFootswitchUpImage();
+        TommyLookAndFeel::drawImageCentredAspect(g, img, b);
     }
     else if (button.getComponentID() == "os")
     {

@@ -15,34 +15,13 @@ public:
         }
     }
 
+    // NOTE: size this component LARGER than the physical LED footprint when laying it out — the
+    // glow is baked into the "on" art, and a component can't draw outside its own bounds (JUCE
+    // clips paint() to them), so oversizing has to happen at setBounds() time, not in here.
     void paint(juce::Graphics& g) override
     {
-        const auto b  = getLocalBounds().toFloat();
-        const float r = juce::jmin(b.getWidth(), b.getHeight()) * 0.5f - 0.5f;
-        const float cx = b.getCentreX(), cy = b.getCentreY();
-
-        if (isOn)
-        {
-            // Subtle outer glow
-            g.setColour(juce::Colour(0xFF00DD55u).withAlpha(0.2f));
-            g.fillEllipse(cx - r * 1.7f, cy - r * 1.7f, r * 3.4f, r * 3.4f);
-
-            // LED body
-            juce::ColourGradient grad(juce::Colour(0xFF88FFAAu),
-                                       cx - r * 0.3f, cy - r * 0.35f,
-                                       juce::Colour(TommyLookAndFeel::cLEDActive),
-                                       cx + r * 0.5f, cy + r * 0.5f,
-                                       true);
-            g.setGradientFill(grad);
-            g.fillEllipse(cx - r, cy - r, r * 2.0f, r * 2.0f);
-        }
-        else
-        {
-            g.setColour(juce::Colour(TommyLookAndFeel::cLEDInactive));
-            g.fillEllipse(cx - r, cy - r, r * 2.0f, r * 2.0f);
-            g.setColour(juce::Colour(0xFF0E2010u));
-            g.drawEllipse(cx - r, cy - r, r * 2.0f, r * 2.0f, 1.0f);
-        }
+        const auto& img = isOn ? TommyLookAndFeel::getLedOnImage() : TommyLookAndFeel::getLedOffImage();
+        TommyLookAndFeel::drawImageCentredAspect(g, img, getLocalBounds().toFloat());
     }
 
 private:

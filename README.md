@@ -8,7 +8,7 @@ sample, so everycontrol behaves the way the real pedal's electronics would at an
 > Tommy is an original implementation built from circuit analysis and is not affiliated
 > with or endorsed by any pedal manufacturer.
 
-<img src="image.png" width="600" />
+
 
 ## Overview
 

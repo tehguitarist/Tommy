@@ -83,14 +83,13 @@ int main()
             const double pk = measure (m, f, amp, fs, bassR, drive).max;
             const double relErr = std::abs (pk - lin) / std::abs (lin);
             const char* name = m == Stage1::ClipMode::Soft ? "Soft" : m == Stage1::ClipMode::Medium ? "Medium" : "Hard";
-            // ALL clip modes now carry a deliberate lateral diode-mismatch BIAS (kSymBias for
-            // Soft/Medium, the larger kAsymBias for Hard) that adds the even harmonics a real Timmy
-            // shows in every mode. The bias moves the operating point on the diode curve, so it
-            // intentionally perturbs the NEAR-ZERO-signal gain (more bias = more perturbation: Soft
-            // ~3%, Hard ~21% at this tiny test level). This is a low-level artifact only — at moderate
-            // / playing levels the output level is unchanged (verified) — so tolerances here are
-            // per-mode and loose; they still catch a gross (broken) error.
-            const double tol = (m == Stage1::ClipMode::Hard) ? 0.25 : 0.06;
+            // All clip modes carry a deliberate diode-Vf MISMATCH (per-polarity Vt) that adds the
+            // even harmonics a real Timmy shows in every mode. Because the mismatch only affects the
+            // diodes WHERE THEY CONDUCT, the near-zero-signal gain is UNPERTURBED (each polarity
+            // reflects ≈ unity when its diode is off) — so all modes match Linear tightly here, even
+            // Hard. (The earlier lateral-bias model perturbed this by up to ~21%; the per-polarity
+            // mismatch model fixed it — that is the whole point of the rework.)
+            const double tol = 0.02;
             std::printf ("  %-6s peak %.6f vs Linear %.6f  (rel err %.4f) %s\n",
                          name, pk, lin, relErr, relErr > tol ? " <-- FAIL" : "");
             if (relErr > tol)
@@ -131,14 +130,14 @@ int main()
             // Soft/Medium: a SMALL intentional bias (present but modest, not gross). Hard: clearly more.
             const bool nearSym = (m != Stage1::ClipMode::Hard);
             if (nearSym) softMedAsym = std::max (softMedAsym, asym); else hardAsym = asym;
-            if (nearSym && (asym < 0.05 || asym > 0.40))
+            if (nearSym && (asym < 0.02 || asym > 0.15))
             {
-                std::fprintf (stderr, "FAIL: %s asymmetry %.3f outside expected small-bias band [0.05,0.40]\n", name, asym);
+                std::fprintf (stderr, "FAIL: %s asymmetry %.3f outside expected small-mismatch band [0.02,0.15]\n", name, asym);
                 ++failures;
             }
-            if (! nearSym && asym < 0.45)
+            if (! nearSym && asym < 0.30)
             {
-                std::fprintf (stderr, "FAIL: Hard should be clearly asymmetric (asym %.3f < 0.45)\n", asym);
+                std::fprintf (stderr, "FAIL: Hard should be clearly asymmetric (asym %.3f < 0.30)\n", asym);
                 ++failures;
             }
         }

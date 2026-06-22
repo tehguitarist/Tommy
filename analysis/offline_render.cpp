@@ -41,14 +41,14 @@ int main (int argc, char** argv)
     // Optional bass taper override: BASS_R = coeff * bassX^exp (argv[13], argv[14]).
     const double bassCoeff = (argc > 13) ? std::atof (argv[13]) : -1.0;
     const double bassExp = (argc > 14) ? std::atof (argv[14]) : 1.43;
-    // Optional asym-mode lateral bias override (argv[15]); argv[16] unused (kept for arg layout).
+    // Optional asym-mode diode-mismatch override (argv[15]); argv[16] unused (kept for arg layout).
     const double asymBias = (argc > 15) ? std::atof (argv[15]) : -1.0;
     // Optional drive taper override: DRIVE_R = coeff * driveX^exp (argv[17], argv[18]).
     const double driveCoeff = (argc > 17) ? std::atof (argv[17]) : -1.0;
     const double driveExp = (argc > 18) ? std::atof (argv[18]) : 1.0;
     // Optional supply voltage (argv[19]): 9/12/18 V scales the op-amp rails. Default 9 V.
     const double supplyV = (argc > 19) ? std::atof (argv[19]) : 9.0;
-    // Optional Soft/Medium diode-mismatch bias override (argv[20]; <0 = keep shipped kSymBias).
+    // Optional Soft/Medium diode-mismatch override (argv[20]; <0 = keep shipped kSymMismatch).
     const double symBias = (argc > 20) ? std::atof (argv[20]) : -1.0;
 
     static const Stage1::ClipMode modes[] = { Stage1::ClipMode::Hard, Stage1::ClipMode::Medium,
@@ -76,9 +76,9 @@ int main (int argc, char** argv)
     dsp.setControls (bassR, driveR, trebR, mode);
     dsp.setSupplyVoltage (supplyV);
     if (asymBias >= 0.0)
-        dsp.setAsymBias (asymBias);
+        dsp.setAsymMismatch (asymBias);
     if (symBias >= 0.0)
-        dsp.setSymBias (symBias);
+        dsp.setSymMismatch (symBias);
     dsp.setAdaaEnabled (true);
 
     const double outGain = kOutputMakeup * tp::volumeGain (volX) / kInputRef;

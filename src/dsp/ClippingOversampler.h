@@ -69,8 +69,8 @@ public:
 
     void setMode (Stage1::ClipMode m) { stage1.setMode (m); }
     void setParams (double bassR, double driveR) { stage1.setParams (bassR, driveR); }
-    void setAsymBias (double bias) { stage1.setAsymBias (bias); }
-    void setSymBias (double bias) { stage1.setSymBias (bias); }
+    void setAsymMismatch (double m) { stage1.setAsymMismatch (m); }
+    void setSymMismatch (double m) { stage1.setSymMismatch (m); }
     void setRailClampEnabled (bool e) { stage1.setRailClampEnabled (e); }
     void setRailVoltages (double pos, double negMag) { stage1.setRailVoltages (pos, negMag); }
     void setAdaaEnabled (bool e) { stage1.setAdaaEnabled (e); }

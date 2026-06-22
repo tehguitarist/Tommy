@@ -4,6 +4,7 @@
 
 #include <juce_dsp/juce_dsp.h>
 
+#include <array>
 #include <memory>
 
 namespace tommy::dsp
@@ -37,24 +38,37 @@ public:
     {
         baseRate = baseSampleRate;
         maxBlock = maxBlockSize;
+
+        // Pre-build every factor's Oversampling instance up front, off the audio thread, so
+        // setFactor() below never allocates when called live from processBlock (RT-safety; see
+        // CLAUDE.md's former "Open items" note). Index i holds factorLog2 = i + 1 (2x/4x/8x);
+        // 1x needs no oversampler at all.
+        for (int log2 = 1; log2 <= 3; ++log2)
+        {
+            auto os = std::make_unique<OS> ((size_t) 1, (size_t) log2,
+                                            OS::filterHalfBandFIREquiripple, true, false);
+            os->initProcessing ((size_t) maxBlock);
+            oversamplers[(size_t) (log2 - 1)] = std::move (os);
+        }
+
         setFactor (factorLog2);
     }
 
-    /** Rebuilds the oversampler and re-prepares Stage 1 at the new oversampled rate. Causes a
-     *  one-block gap (acceptable per architecture.md) — call from the audio thread when the
-     *  pending factor changes. */
+    /** Switches the active (already-built) oversampler and re-prepares Stage 1 at the new
+     *  oversampled rate. RT-safe: every factor was constructed and initialised in prepare() above,
+     *  so this only swaps a pointer and resets filter state — no allocation. Causes a one-block
+     *  gap (acceptable per architecture.md) — call from the audio thread when the pending factor
+     *  changes. */
     void setFactor (int factorLog2)
     {
         osLog2 = factorLog2 < 0 ? 0 : (factorLog2 > 3 ? 3 : factorLog2);
         if (osLog2 == 0)
         {
-            oversampler.reset();
+            oversampler = nullptr;
         }
         else
         {
-            oversampler = std::make_unique<OS> ((size_t) 1, (size_t) osLog2,
-                                                OS::filterHalfBandFIREquiripple, true, false);
-            oversampler->initProcessing ((size_t) maxBlock);
+            oversampler = oversamplers[(size_t) (osLog2 - 1)].get();
             oversampler->reset();
         }
         stage1.prepare (baseRate * (double) (1 << osLog2)); // caps discretised at OS rate
@@ -112,7 +126,8 @@ public:
 
 private:
     Stage1 stage1;
-    std::unique_ptr<OS> oversampler;
+    std::array<std::unique_ptr<OS>, 3> oversamplers; // index = factorLog2 - 1, for 2x/4x/8x
+    OS* oversampler = nullptr; // active oversampler (points into oversamplers[]), or null at 1x
     double baseRate = 48000.0;
     int maxBlock = 512;
     int osLog2 = 3;

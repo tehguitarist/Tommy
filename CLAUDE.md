@@ -173,5 +173,11 @@ All three are in `schematics/` at the repo root. Load them when verifying any ci
 >     swing 9 V ±3.3 → 18 V ±7). UI: the "(+) 9V (−)" power label is now an interactive `SupplyControl`
 >     ((+) raises, (−) lowers; lit when that direction is available). offline_render arg[19]=supplyV
 >     for A/B. auval passes; default 9 V keeps all renders/tests byte-identical.
->   - Open items: RT-safety (oversampling `setFactor` allocates on audio thread — pre-allocate if
->     tightening); VST3 still deferred (AU passes auval).**
+>   - **RT-safety — FIXED 2026-06-23.** `ClippingOversampler::setFactor()` used to `make_unique` +
+>     `initProcessing()` a new `juce::dsp::Oversampling` every time the live/render OS factor changed
+>     — reachable from `processBlock` on the audio thread (user moves the OS dropdown live, or
+>     playback crosses the realtime/non-realtime boundary). Fixed by pre-building all three needed
+>     `Oversampling` instances (2x/4x/8x) up front in `prepare()` (called once from `prepareToPlay`,
+>     off the audio thread); `setFactor()` now only swaps a pointer + resets filter state — zero
+>     allocation. All 8 test executables + auval still pass.
+>   - Open items: VST3 still deferred (AU passes auval).**

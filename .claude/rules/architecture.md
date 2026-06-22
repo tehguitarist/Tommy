@@ -36,11 +36,13 @@ TommyAudioProcessor          ← AudioProcessor subclass
 | `drive` | Gain | 0.0–1.0 | 0.5 | Linear in APVTS; audio taper applied in DSP |
 | `treble` | Treble | 0.0–1.0 | 0.5 | Linear in APVTS; audio taper applied in DSP |
 | `volume` | Volume | 0.0–1.0 | 0.5 | Linear in APVTS; audio taper applied in DSP (A10k pot) |
-| `clipping_mode` | Clipping | 0/1/2 | 0 | `AudioParameterChoice`: "Soft" / "Medium" / "Hard" |
+| `clipping_mode` | Clipping | 0/1/2 | 1 (Open) | `AudioParameterChoice`: "Asymmetric" (top lever, single diode, = Hard) / "Open" (middle, one diode pair, = Medium) / "Symmetric" (bottom, all four diodes, = Soft). UI shows these as A/O/S — see `ui.md` SW1 section. |
 | `input_trim` | Input Trim | -12.0 to +12.0 dB | 0.0 | Linear dB; `AudioParameterFloat` |
 | `output_trim` | Output Trim | -12.0 to +12.0 dB | 0.0 | Linear dB; `AudioParameterFloat` |
-| `oversampling` | Oversampling | 0/1/2/3 | 2 (4x) | `AudioParameterChoice`: "1x" / "2x" / "4x" / "8x" |
+| `oversampling` | Oversampling (live) | 0/1/2/3 | 2 (4x) | `AudioParameterChoice`: "1x" / "2x" / "4x" / "8x" — used during real-time playback |
+| `render_oversampling` | Oversampling (render) | 0/1/2/3 | 3 (8x) | Same choices; independent factor used for offline rendering/export |
 | `bypass` | Bypass | true/false | false | `AudioParameterBool` — APVTS does support bool via this type |
+| `supply_voltage` | Supply | 0/1/2 | 0 (9V) | `AudioParameterChoice`: "9V" / "12V" / "18V" — scales op-amp rail headroom only, diode thresholds unchanged |
 
 Note: APVTS does not accept raw `bool` in `createParameterLayout()`. Use `std::make_unique<AudioParameterBool>("bypass", "Bypass", false)`.
 
@@ -53,9 +55,15 @@ Note: APVTS does not accept raw `bool` in `createParameterLayout()`. Use `std::m
 
 ## Oversampling
 
-- `juce::dsp::Oversampling` around nonlinear stage only
-- Changing oversampling factor: detected via `std::atomic<int> pendingOversamplingFactor` set by UI thread; audio thread checks at the start of each `processBlock`, and if changed: calls `oversampler.reset()` then `oversampler.initProcessing(maxBlockSize)`, then updates the internal factor. This causes a brief gap (one block) which is acceptable — do not attempt sample-accurate crossfading across an oversampling change.
-- Call `oversampler.initProcessing(samplesPerBlock)` in `prepareToPlay`
+- `juce::dsp::Oversampling` spans Stage 1 → Treble → Stage 2 (not the nonlinear stage alone — see
+  `dsp.md`'s Oversampling section for why the linear downstream stages are included too).
+- Two independent factors: `oversampling` (live) and `render_oversampling` (render/offline), both
+  plain APVTS choice parameters — no separate `pendingOversamplingFactor` atomic. `processBlock`
+  picks the live or render parameter via `isNonRealtime()`, compares it against the cached
+  `currentFactorLog2`, and if changed calls `setFactor()` on each channel's DSP chain (which
+  re-inits the oversampler and updates `setLatencySamples()`). This causes a brief gap (one block)
+  on a factor change — acceptable; do not attempt sample-accurate crossfading across it.
+- Call `.prepare()`/init on every oversampler in `prepareToPlay`.
 
 ## prepareToPlay Responsibilities
 

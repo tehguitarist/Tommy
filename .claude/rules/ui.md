@@ -32,32 +32,44 @@ Three-column layout with an oversampling strip below:
 └──────────────────────────────────────────────────┘
 ```
 
-**Column widths (480px window):**
+**Column widths (at base 420×458, `currentScale = 1.0` — all values scale via the `i()` helper,
+see Plugin Window below):**
+- Outer padding: 12 px each side
 - Left side panel (Input): 74 px
 - Gap: 8 px
-- Pedal face: flex-1 (~284 px)
+- Pedal face: remainder of the row
 - Gap: 8 px
 - Right side panel (Output): 74 px
-- Outer padding: 14 px each side
 
 **Row heights:**
 - Main row (side panels + pedal): 400 px
 - Gap: 10 px
-- Oversampling strip: ~46 px
-- Outer padding: 14 px top + bottom
+- Oversampling strip: 24 px
+- Outer padding: 12 px top + bottom
+
+Layout is computed with manual `juce::Rectangle` splitting (`removeFromLeft`/`removeFromTop`/etc.
+in `PluginEditor::resized()`), not `juce::FlexBox` — no FlexBox/FlexItem is used anywhere in
+the codebase.
 
 ## Plugin Window
 
-- Fixed size: **420 × 480 px**
-- Not resizable in v1
-- Set via `setSize(420, 480)` in `PluginEditor` constructor
+- Base size: **420 × 458 px** (`PluginEditor::kBaseW` / `kBaseH`)
+- **Resizable**, 0.5×–2.5× of base, locked to the base aspect ratio (`setResizable` +
+  `setFixedAspectRatio` + `setSizeLimits` in the constructor). A "UI SIZE" button in the
+  oversampling strip opens a preset-scale menu (50%–250%) and can save the current scale as the
+  default (`ApplicationProperties`); the per-session scale is also persisted in `apvts.state`.
+- All layout in `resized()` is computed from `currentScale = getWidth() / kBaseW` via a local
+  `i(px)` helper (`roundToInt(px * currentScale)`) — never hardcode pixel values outside that helper.
 
 ## Side Panels — Input (left) and Output (right)
 
 Each side panel is identical in structure. Top-to-bottom:
 
-1. **Section label** — "INPUT" or "OUTPUT", 8 px, 700 weight, letter-spacing 2 px, blue-tinted (`colourTrimLabel`)
-2. **Halo trim knob** — SVG rotary, 70×70 px. An outer arc track (270° sweep, from 7 o'clock to 5 o'clock) shows the full range; a filled arc shows the current value. Knob body is a 36 px diameter circle with a white/light gradient cap and a dark indicator line. At 0 dB (centre of range) the indicator points to 12 o'clock. Arc colour: `colourTrimArc` (blue).
+1. **Section label** — "INPUT" or "OUTPUT", 8 px, 700 weight, letter-spacing 2 px, blue-tinted (`cTrimLabel`)
+2. **Halo trim knob** — 70×70 px rotary. An outer arc track (drawn procedurally, `cTrimArcTrack`)
+   shows the full range; a filled value arc (`cTrimArc`) shows the current value. The knob cap
+   itself is the `vol_trim.png` image (rotated per `drawRotatedImage`), same image-based approach
+   as the pedal knobs — not a procedurally drawn gradient disc.
 3. **"TRIM" sub-label** — 7.5 px, muted blue
 4. **VU bar meter** — fills all remaining height (flex:1). 22 segments, `flex-direction: column` (index 0 = top = loud/red), `gap: 2 px`. Segment colours: red (top ~14%), yellow (next ~21%), green (lower ~65%); lit vs unlit variants for each zone. Updated by `juce::Timer`.
 
@@ -65,106 +77,158 @@ JUCE implementation: `InputTrimPanel` / `OutputTrimPanel` components, each conta
 
 ## Pedal Face
 
-Background: **mottled dark navy/black**. Implement in `TommyLookAndFeel::drawPedalBackground()` using `juce::Random` to scatter 200–300 small dots (r 0.2–1.5 px, alpha 0.03–0.18, hue blue-navy) over a base fill of `colourPedalFace`. Add 5 soft radial gradient blobs (dark navy, low opacity) to create the mottled depth effect. Add a 1 px horizontal highlight line near the top edge.
+Background: a photographed/rendered texture image (`assets/ui/tommy_texture.png`, embedded via the
+`TommyUIAssets` binary-data CMake target; raw original preserved in `ui/Tommy_Texture.png`), drawn
+in `TommyLookAndFeel::paintPedalBackground()`. **"Cover" fit**: scale to fill both dimensions of the
+pedal-face rect with no stretching (`scale = max(W/srcW, H/srcH)`), centred, overflow cropped by the
+rounded-rect clip — never stretch the image to an aspect ratio it wasn't shot at. Processed once
+offline from the original (resize → `-brightness-contrast -3x-3` → `pngquant`/`optipng`); don't
+re-derive it from the already-processed `assets/ui/` copy if it needs reprocessing.
 
-Border: 2 px, `colourPedalBorder`. Border-radius: 16 px. Drop shadow outward.
+Border: 2 px stroke, `cPedalBorder`. Border-radius: 16 px. No drop shadow.
 
 ### Supply-voltage selector (interactive power label)
 
 Small text "(+) 9V (-)" centred at top — an INTERACTIVE control (`SupplyControl`, header-only
-component), not a static label. Click "(+)" (left third) to raise the supply 9→12→18 V, "(-)" (right
-third) to lower it; the centre shows the current voltage. "(+)" is drawn lit (`cPowerLabelLit`) when a
-higher voltage is available, "(-)" lit when a lower one is; inactive side + the voltage use
-`cPowerLabel` (muted dark blue). Bound to the `supply_voltage` choice parameter via a
-`ParameterAttachment` (same pattern as the SW1 switch). Thin separator line below. (Raises the op-amp
-rail headroom in the DSP — pure headroom, diode clip thresholds unchanged.)
+component), not a static label. Click "(+)" (raise 9→12→18 V) or "(-)" (lower); the centre shows
+the current voltage. "(+)"/"(-)" are lit (`cPowerLabelLit`) only when that direction is available;
+otherwise dim (`cPowerLabel`). The three pieces are packed **tightly together and centred** as one
+group (computed from actual text widths, not divided into equal thirds — equal thirds left large,
+ugly gaps around the short text at most window widths). Font is 25% larger than the base 8px.
+Click hit-testing uses the same tight layout (with a small invisible margin) so it tracks the
+visible text, not arbitrary thirds. Bound to the `supply_voltage` choice parameter via a
+`ParameterAttachment` (same pattern as the SW1 switch). Thin separator line below. (Raises the
+op-amp rail headroom in the DSP — pure headroom, diode clip thresholds unchanged.)
 
 ### Row 1 — Bass · SW1 · Gain
 
-`FlexLayout` (space-between) across pedal width:
-- **Bass knob** (left)
-- **SW1 3-position toggle switch** (centre)
-- **Gain knob** (right)
+Pedal width split into three equal sections (left/centre/right via `removeFromLeft`/
+`removeFromRight`):
+- **Bass knob** (left section)
+- **SW1 3-position toggle switch** (centre section, horizontally centred within it — see below)
+- **Gain knob** (right section)
 
 ### SW1 — 3-Position Clipping Switch
 
-Vertical toggle switch body (18×60 px). A lever (32×17 px, light grey gradient) slides to one of three positions. Labels to the right of the switch body, spaced to align with positions: **Soft** (top) / **Med** (middle) / **Hard** (bottom). Active label colour: `colourSWLabelActive` (light blue-white); inactive: `colourSWLabelInactive` (muted blue). Maps to `clipping_mode` parameter (0=Soft, 1=Med, 2=Hard).
+Rendered as a photographed toggle switch image (`switch_up.png` / `switch_mid.png` /
+`switch_down.png`, via `TommyLookAndFeel::getSwitchImage(position)`), swapped per position rather
+than drawn procedurally — the lever angle is baked into each image. `SW1Switch` (in
+`src/ui/SW1Switch.h`) draws the image horizontally centred in its own bounds (so it sits on the
+pedal's centre line, not in the old left-third/right-third FlexLayout split) with single-letter
+labels: **A** above the image, **O** beside it (right), **S** below — replacing the old
+"Asym"/"Open"/"Sym" text. The bottom margin (for "S") is deliberately tighter than the top margin
+(for "A") so "S" reads as sitting closer to the switch body. Active label colour:
+`cSWLabelActive`; inactive: `cSWLabelInactive`. `mouseDown`/`mouseDrag` both update the position
+from Y so it can be dragged like a real toggle.
 
-Physical switch direction: top = Soft (all diodes), middle = Med (one pair), bottom = Hard (single diode).
+**Position → mode mapping (do not flip this — it must match the DSP):** position **0 = top =
+"A" = Hard** (single diode, asymmetric) → position **1 = middle = "O" = Medium** (one diode
+pair) → position **2 = bottom = "S" = Soft** (all four diodes, symmetric). This is the ground
+truth from `PluginProcessor.cpp`'s `kClipModes[]` array (`// pClip index 0/1/2 maps to ClipMode
+Hard/Medium/Soft respectively`) and `Stage1.h`'s `ClipMode` enum — it is the OPPOSITE of an
+earlier (wrong) version of this doc that had top=Soft/bottom=Hard.
 
 ### LED indicator
 
-9 px diameter circle between rows. Active: `colourLEDActive` (green) with glow. Inactive: `colourLEDInactive` (very dark green). Driven by `isBypassed()` atomic.
+Image swap (`blue_led_on.png` / `blue_led_off.png` via `LEDIndicator`), not a procedurally drawn
+circle. The glow is baked into the "on" art, so the component is given bounds noticeably larger
+than the physical LED footprint (28 px box vs. an ~9 px LED) — JUCE clips all painting to a
+component's own bounds, so the glow needs the extra room at the `setBounds()` call site, not just
+in `paint()`. Driven by `isBypassed()` atomic.
 
-### Row 2 — Volume · (space) · Treble
+### Row 2 — Volume · LED · Treble
 
-`FlexLayout` (space-between):
-- **Volume knob** (left)
-- Empty centre space (where LED sits above)
-- **Treble knob** (right)
+Same three-section split as Row 1:
+- **Volume knob** (left section)
+- **LED indicator** (centre section)
+- **Treble knob** (right section)
 
 ### Tommy logo
 
-Italic serif (Georgia or similar), 26 px, white. Centred. Sits below knob Row 2.
+Italic script (`"Brush Script MT"`), base size 93.2 px (scales with `currentScale`), white at
+90% opacity (`cLabelText.withAlpha(0.9f)`). Centred. Sits below knob Row 2, above the bypass
+footswitch.
 
 ### Bypass footswitch
 
-Large dome button (52 px diameter), centred. Background: dark navy radial gradient. Metal ring effect via layered box-shadow (dark gap ring + lighter outer ring). Small "BYPASS" label below in `colourBypassLabel` (muted blue). Toggles `bypass` parameter; LED and processing update accordingly.
+Image swap (`footswitch_up.png` / `footswitch_down.png` via `drawImageCentredAspect`, keyed off
+the button's `down` mouse state), not a procedurally drawn dome + box-shadow ring. The image
+swap is a **press animation only** — it does not itself indicate bypass on/off; that's the
+separate LED. ~52 px diameter, centred. Small "BYPASS" label below in `cBypassLabel` (muted
+blue). Toggles the `bypass` parameter; LED and processing update accordingly.
 
 ## Controls — Knobs
 
-All four pedal knobs (Bass, Gain, Volume, Treble) are identical:
-- 50 px diameter rotary `Slider`
-- White/light cap: radial gradient from near-white (38% 30%) to mid-grey
-- Dark indicator line (3×15 px) pointing from centre toward 12 o'clock at default, rotated by knob position
-- Drop shadow
-- Text label below: 8.5 px, 600 weight, 1.5 px letter-spacing, uppercase, white
+All four pedal knobs (Bass, Gain, Volume, Treble) and both trim knobs (Input/Output) are rendered
+as a single rotated image (`T_Knob.png` for pedal knobs, `vol_trim.png` for trim knobs) via
+`TommyLookAndFeel::drawRotarySlider()` → `drawRotatedImage()`, not procedurally drawn discs.
+Source art is pre-rendered pointing at noon (so image angle 0 = JUCE's rotary slider default);
+each frame is drawn with an `AffineTransform` (`translate to origin → scale → rotate by
+valAngle → translate to centre`) — no separate gradient cap, indicator line, or drop shadow is
+drawn behind/over the image (a drop shadow was tried and explicitly removed — a dark shadow
+against the near-black pedal face read as transparency on the knob rim rather than as a shadow).
+Pedal knobs are 66 px diameter (`i(66)`); trim knobs are 70 px. Text label below: 8.5 px, 600
+weight, 1.5 px letter-spacing, uppercase, white.
 
 Audio taper applied in DSP. APVTS attachment via `juce::SliderParameterAttachment`.
 
 ## Oversampling Strip
 
-Full-width panel below pedal, separate background (`colourOSBackground`). Contains:
-- "OVERSAMPLING" label (left, 8 px, 700 weight, letter-spacing 1.5 px, muted blue)
-- Four segmented buttons: **1x / 2x / 4x / 8x** (right side)
-- Active button: brighter border + text + subtle glow; inactive: muted
-- Backed by `juce::ComboBox` or custom segmented button component
+Full-width panel below pedal, separate background (`cOSBackground`). Left-to-right (not the old
+single "OVERSAMPLING" label + four 1x/2x/4x/8x segmented buttons — there are now two independent
+oversampling rates plus a UI-scale control):
+- **"OS"** label
+- **"LIVE"** label + `osRealtimeBox` (`juce::ComboBox`, `ComboBoxParameterAttachment` to the
+  `oversampling` parameter) — the factor used during real-time playback
+- **"RENDER"** label + `osRenderBox` (separate `ComboBox` + attachment) — the factor used for
+  offline rendering/export, independent of LIVE
+- **"UI SIZE"** label (`sizeLabel`) + `scaleBtn` (`juce::TextButton`, componentID `"os"`, shows
+  the current scale e.g. `"100%"`) at the far right — opens `showScaleMenu()`, a preset picker
+  (50%–250% in 25% steps) for `currentScale` (see Plugin Window)
+
+`drawButtonBackground`'s `"os"` branch (rounded-rect background + border, brighter + a subtle glow
+when `getToggleState()` is true) currently only styles `scaleBtn`; the ComboBoxes use
+`TommyLookAndFeel::drawComboBox` (dark background, thin border, small chevron arrow).
 
 ## Colour Palette
 
-All colours defined as named constants in `TommyLookAndFeel.h`. Do not hardcode hex values in component code.
+All colours defined as `uint32` named constants on `TommyLookAndFeel` (use as
+`juce::Colour(TommyLookAndFeel::cFoo)` — avoids `constexpr Colour` portability issues). Do not
+hardcode hex values in component code. `cKnobMid`/`cKnobShadow`/`cKnobIndicator` are dead/unused
+now that knobs are drawn from `T_Knob.png` (no procedural cap/shadow/indicator line) — kept for
+now but candidates for removal.
 
 ```cpp
-static constexpr juce::Colour colourBackground    { 0xFF050912 }; // very dark navy-black
-static constexpr juce::Colour colourPedalFace     { 0xFF070D1A }; // dark navy pedal base
-static constexpr juce::Colour colourPedalBorder   { 0xFF18293F }; // pedal border
-static constexpr juce::Colour colourKnob          { 0xFFD8D8D8 }; // light grey knob cap (mid)
-static constexpr juce::Colour colourKnobHighlight { 0xFFF5F5F5 }; // knob highlight (specular)
-static constexpr juce::Colour colourKnobShadow    { 0xFF949494 }; // knob shadow
-static constexpr juce::Colour colourKnobIndicator { 0xFF1A1A30 }; // dark indicator line on knob
-static constexpr juce::Colour colourLEDActive     { 0xFF00DD55 }; // green LED on
-static constexpr juce::Colour colourLEDInactive   { 0xFF091A09 }; // very dark green LED off
-static constexpr juce::Colour colourLabelText     { 0xFFFFFFFF }; // white knob labels
-static constexpr juce::Colour colourPowerLabel    { 0xFF2E4A60 }; // muted dark blue 9V label
-static constexpr juce::Colour colourTrimLabel     { 0xFF5588AA }; // blue section titles (INPUT/OUTPUT)
-static constexpr juce::Colour colourTrimArc       { 0xFF2A5898 }; // halo knob value arc
-static constexpr juce::Colour colourTrimArcTrack  { 0xFF101E30 }; // halo knob background track
-static constexpr juce::Colour colourSWLabelActive { 0xFF90C0E0 }; // SW1 active position label
-static constexpr juce::Colour colourSWLabelInactive{ 0xFF3A5A78 }; // SW1 inactive labels
-static constexpr juce::Colour colourBypassLabel   { 0xFF2E4A60 }; // BYPASS sub-label
-static constexpr juce::Colour colourMeterLow      { 0xFF44CC44 }; // VU green (lit)
-static constexpr juce::Colour colourMeterMid      { 0xFFCCBA00 }; // VU yellow (lit)
-static constexpr juce::Colour colourMeterHigh     { 0xFFDD2222 }; // VU red (lit)
-static constexpr juce::Colour colourMeterLowDim   { 0xFF091A09 }; // VU green (unlit)
-static constexpr juce::Colour colourMeterMidDim   { 0xFF1E1700 }; // VU yellow (unlit)
-static constexpr juce::Colour colourMeterHighDim  { 0xFF220808 }; // VU red (unlit)
-static constexpr juce::Colour colourOSBackground  { 0xFF080E1A }; // oversampling panel
-static constexpr juce::Colour colourOSBorder      { 0xFF101C2E }; // oversampling panel border
-static constexpr juce::Colour colourOSLabel       { 0xFF3A6080 }; // "OVERSAMPLING" label
-static constexpr juce::Colour colourOSBtnInactive { 0xFF3A6080 }; // OS button inactive text
-static constexpr juce::Colour colourOSBtnActive   { 0xFF70A8D8 }; // OS button active text
-static constexpr juce::Colour colourOSBtnActiveBg { 0xFF0C2040 }; // OS button active background
-static constexpr juce::Colour colourOSBtnActiveBorder{ 0xFF2A5890 }; // OS button active border
+static constexpr juce::uint32 cBackground      = 0xFF050912u; // very dark navy-black
+static constexpr juce::uint32 cPedalFace       = 0xFF070D1Au; // dark navy pedal base
+static constexpr juce::uint32 cPedalBorder     = 0xFF18293Fu; // pedal border
+static constexpr juce::uint32 cKnobHighlight   = 0xFFF5F5F5u; // PopupMenu highlighted-text colour only
+static constexpr juce::uint32 cKnobMid         = 0xFFD8D8D8u; // unused — knobs are image-drawn
+static constexpr juce::uint32 cKnobShadow      = 0xFF949494u; // unused — knobs are image-drawn
+static constexpr juce::uint32 cKnobIndicator   = 0xFF1A1A30u; // unused — knobs are image-drawn
+static constexpr juce::uint32 cLEDActive       = 0xFF00DD55u; // unused now (LED is image-drawn)
+static constexpr juce::uint32 cLEDInactive     = 0xFF091A09u; // unused now (LED is image-drawn)
+static constexpr juce::uint32 cLabelText       = 0xFFFFFFFFu; // white labels (Tommy logo at 90% alpha)
+static constexpr juce::uint32 cPowerLabel      = 0xFF2E4A60u; // muted dark blue, inactive (+)/(-)/9V text
+static constexpr juce::uint32 cPowerLabelLit   = 0xFF6FA8D8u; // active (+)/(-) on the supply selector
+static constexpr juce::uint32 cTrimLabel       = 0xFF5588AAu; // blue section titles (INPUT/OUTPUT)
+static constexpr juce::uint32 cTrimArc         = 0xFF2A5898u; // halo knob value arc
+static constexpr juce::uint32 cTrimArcTrack    = 0xFF101E30u; // halo knob background track
+static constexpr juce::uint32 cSWLabelActive   = 0xFFC0E4FFu; // SW1 active position label (A/O/S)
+static constexpr juce::uint32 cSWLabelInactive = 0xFF5C84ACu; // SW1 inactive labels
+static constexpr juce::uint32 cBypassLabel     = 0xFF4878A0u; // BYPASS sub-label
+static constexpr juce::uint32 cMeterLow        = 0xFF44CC44u; // VU green (lit)
+static constexpr juce::uint32 cMeterMid        = 0xFFCCBA00u; // VU yellow (lit)
+static constexpr juce::uint32 cMeterHigh       = 0xFFDD2222u; // VU red (lit)
+static constexpr juce::uint32 cMeterLowDim     = 0xFF091A09u; // VU green (unlit)
+static constexpr juce::uint32 cMeterMidDim     = 0xFF1E1700u; // VU yellow (unlit)
+static constexpr juce::uint32 cMeterHighDim    = 0xFF220808u; // VU red (unlit)
+static constexpr juce::uint32 cOSBackground    = 0xFF080E1Au; // oversampling panel
+static constexpr juce::uint32 cOSBorder        = 0xFF101C2Eu; // oversampling panel border
+static constexpr juce::uint32 cOSLabel         = 0xFF3A6080u; // "OVERSAMPLING" label / inactive OS text
+static constexpr juce::uint32 cOSBtnActive     = 0xFF70A8D8u; // OS button active text
+static constexpr juce::uint32 cOSBtnActiveBg   = 0xFF0C2040u; // OS button active background
+static constexpr juce::uint32 cOSBtnActiveBdr  = 0xFF2A5890u; // OS button active border
 ```
 
 ## VU Meter Spec

@@ -6,15 +6,19 @@
 - C++17 minimum standard
 - JUCE 8+ via CMake submodule or FetchContent
 - `chowdsp_wdf` as CMake submodule (header-only)
-- Targets: AU (primary), VST3 (secondary)
+- `xsimd` as CMake submodule (header-only; SIMD-accelerates the R-type adaptor matrix math)
+- Targets: AU only for now (`FORMATS AU` in `CMakeLists.txt`'s `juce_add_plugin` call). VST3 is
+  planned but not yet wired up — adding it back is just adding `VST3` to `FORMATS`, no DSP/UI
+  changes needed.
 - Author: Leigh Pierce | Company: Leigh Pierce
 
 ## Project Structure
 
 ```
-tommy-pedal/
+Tommy/
 ├── CMakeLists.txt
 ├── CLAUDE.md
+├── README.md
 ├── .claude/
 │   ├── agents/
 │   │   ├── dsp-validator.md
@@ -31,25 +35,35 @@ tommy-pedal/
 │   ├── dsp/
 │   │   ├── InputBuffer.h
 │   │   ├── Stage1.h
-│   │   ├── ClippingStage.h      ← SW1 nonlinear WDF
+│   │   ├── ClippingOversampler.h  ← SW1 nonlinear WDF + oversampling wrapper
 │   │   ├── TrebleNetwork.h
 │   │   ├── Stage2.h
-│   │   └── TommyDSP.h          ← top-level DSP wrapper
+│   │   ├── Prewarp.h              ← bilinear-warp correction for tone/feedback caps
+│   │   └── TommyDSP.h             ← top-level DSP wrapper
 │   ├── ui/
-│   │   ├── TommyLookAndFeel.h / .cpp
-│   │   ├── KnobComponent.h / .cpp
-│   │   ├── SwitchComponent.h / .cpp
-│   │   ├── VUMeter.h / .cpp
-│   │   └── LEDIndicator.h / .cpp
+│   │   ├── TommyLookAndFeel.h / .cpp  ← all procedural drawing lives here
+│   │   ├── SW1Switch.h                ← 3-position clipping switch component
+│   │   ├── SupplyControl.h            ← interactive 9/12/18V power-label control
+│   │   ├── VUMeter.h
+│   │   └── LEDIndicator.h
 │   └── utils/
 │       └── TaperUtils.h        ← pot taper conversion functions
 ├── libs/
 │   ├── JUCE/                   ← git submodule
-│   └── chowdsp_wdf/            ← git submodule
+│   ├── chowdsp_wdf/            ← git submodule
+│   └── xsimd/                  ← git submodule
+├── analysis/                   ← offline render tool + Python A/B comparison scripts
+├── schematics/                 ← source schematics the circuit model is built from
 └── tests/
-    ├── SmokeTest_RC.cpp        ← chowdsp_wdf smoke test (step 3)
+    ├── SmokeTest_RC.cpp            ← chowdsp_wdf smoke test (step 3)
+    ├── Stage0_FreqResponse.cpp
     ├── Stage1_FreqResponse.cpp
-    └── ClippingStage_Sine.cpp
+    ├── ClippingStage_Sine.cpp
+    ├── Stage2_Treble_FreqResponse.cpp
+    ├── Stage2_RailProbe.cpp
+    ├── Step6_Aliasing.cpp
+    ├── Step7_Integration.cpp
+    └── VolumeCal_Probe.cpp
 ```
 
 ## Build Commands
@@ -61,22 +75,26 @@ cmake -B build -DCMAKE_BUILD_TYPE=Release
 # Build AU
 cmake --build build --target Tommy_AU
 
-# Build VST3
-cmake --build build --target Tommy_VST3
-
-# Build all
+# Build all targets (plugin + every test executable)
 cmake --build build
+
+# Validate the AU without opening a DAW
+auval -v aufx Tom1 LeP1
 ```
+
+VST3 has no build target yet — see the CMake note above.
 
 ## Plugin Metadata
 
 ```cmake
 juce_add_plugin(Tommy
     COMPANY_NAME "Leigh Pierce"
+    BUNDLE_ID com.leighpierce.Tommy
     PLUGIN_MANUFACTURER_CODE LeP1
     PLUGIN_CODE Tom1
-    FORMATS AU VST3
+    FORMATS AU
     PRODUCT_NAME "Tommy"
+    COPY_PLUGIN_AFTER_BUILD TRUE
 )
 ```
 
@@ -147,7 +165,8 @@ WarningsAsErrors: ""
 
 ## Validation Gates (do not proceed without)
 
-- Step 2 gate: AU and VST3 both scan and load in a DAW (Logic or Reaper)
+- Step 2 gate: AU scans and loads in a DAW (Logic or Reaper) and passes `auval`. VST3 deferred —
+  re-add `VST3` to `FORMATS` and re-run this gate before shipping a VST3 build.
 - Step 3 gate: RC lowpass smoke test produces correct -3dB point
 - Step 4 gates: each stage verified before next (freq response or sine clipping as appropriate)
 - Step 5 gate: each switch position verified independently

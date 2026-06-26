@@ -1,10 +1,12 @@
 cmake_minimum_required(VERSION 3.15)
 
-project(Tommy VERSION 0.2.1)
+project(Tommy VERSION 0.7.0)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_OSX_DEPLOYMENT_TARGET "10.13" CACHE STRING "Minimum macOS deployment version")
+
+enable_testing()
 
 add_subdirectory(libs/JUCE)
 add_subdirectory(libs/xsimd)
@@ -36,7 +38,7 @@ juce_add_plugin(Tommy
     BUNDLE_ID com.leighpierce.Tommy
     PLUGIN_MANUFACTURER_CODE LeP1
     PLUGIN_CODE Tom1
-    FORMATS AU
+    FORMATS AU VST3
     PRODUCT_NAME "Tommy"
     COPY_PLUGIN_AFTER_BUILD TRUE
 )
@@ -73,22 +75,27 @@ target_compile_options(Tommy PRIVATE -Wall -Wextra)
 add_executable(SmokeTest_RC tests/SmokeTest_RC.cpp)
 target_link_libraries(SmokeTest_RC PRIVATE chowdsp::chowdsp_wdf)
 target_compile_options(SmokeTest_RC PRIVATE -Wall -Wextra)
+add_test(NAME SmokeTest_RC COMMAND SmokeTest_RC)
 
 add_executable(Stage0_FreqResponse tests/Stage0_FreqResponse.cpp)
 target_link_libraries(Stage0_FreqResponse PRIVATE chowdsp::chowdsp_wdf)
 target_compile_options(Stage0_FreqResponse PRIVATE -Wall -Wextra)
+add_test(NAME Stage0_FreqResponse COMMAND Stage0_FreqResponse)
 
 add_executable(Stage1_FreqResponse tests/Stage1_FreqResponse.cpp)
 target_link_libraries(Stage1_FreqResponse PRIVATE chowdsp::chowdsp_wdf)
 target_compile_options(Stage1_FreqResponse PRIVATE -Wall -Wextra)
+add_test(NAME Stage1_FreqResponse COMMAND Stage1_FreqResponse)
 
 add_executable(ClippingStage_Sine tests/ClippingStage_Sine.cpp)
 target_link_libraries(ClippingStage_Sine PRIVATE chowdsp::chowdsp_wdf)
 target_compile_options(ClippingStage_Sine PRIVATE -Wall -Wextra)
+add_test(NAME ClippingStage_Sine COMMAND ClippingStage_Sine)
 
 add_executable(Stage2_Treble_FreqResponse tests/Stage2_Treble_FreqResponse.cpp)
 target_link_libraries(Stage2_Treble_FreqResponse PRIVATE chowdsp::chowdsp_wdf)
 target_compile_options(Stage2_Treble_FreqResponse PRIVATE -Wall -Wextra)
+add_test(NAME Stage2_Treble_FreqResponse COMMAND Stage2_Treble_FreqResponse)
 
 # Step 6 aliasing test needs JUCE (juce::dsp::Oversampling + FFT), so it is a JUCE console app.
 juce_add_console_app(Step6_Aliasing PRODUCT_NAME "Step6_Aliasing")
@@ -101,6 +108,7 @@ target_link_libraries(Step6_Aliasing PRIVATE
     chowdsp::chowdsp_wdf
     juce::juce_dsp
     juce::juce_recommended_config_flags)
+add_test(NAME Step6_Aliasing COMMAND Step6_Aliasing)
 
 # Stage 2 rail probe (measurement, not pass/fail): peak node_J across the operating space.
 juce_add_console_app(Stage2_RailProbe PRODUCT_NAME "Stage2_RailProbe")
@@ -137,3 +145,4 @@ target_link_libraries(Step7_Integration PRIVATE
     chowdsp::chowdsp_wdf
     juce::juce_dsp
     juce::juce_recommended_config_flags)
+add_test(NAME Step7_Integration COMMAND Step7_Integration)

@@ -7,9 +7,11 @@
 - JUCE 8+ via CMake submodule or FetchContent
 - `chowdsp_wdf` as CMake submodule (header-only)
 - `xsimd` as CMake submodule (header-only; SIMD-accelerates the R-type adaptor matrix math)
-- Targets: AU only for now (`FORMATS AU` in `CMakeLists.txt`'s `juce_add_plugin` call). VST3 is
-  planned but not yet wired up — adding it back is just adding `VST3` to `FORMATS`, no DSP/UI
-  changes needed.
+- Targets: AU + VST3 (`FORMATS AU VST3` in `CMakeLists.txt`'s `juce_add_plugin` call — wired up
+  2026-06-27). JUCE's CMake layer only produces AU on macOS regardless of this list, so the same
+  one-line FORMATS change covers macOS/Windows/Linux. Built locally via `Tommy_AU`/`Tommy_VST3`
+  targets; built/packaged for all three OSes via `.github/workflows/ci.yml` (build+test) and
+  `.github/workflows/release.yml` (manual-trigger packaging, one zip per platform).
 - Author: Leigh Pierce | Company: Leigh Pierce
 
 ## Project Structure
@@ -75,14 +77,18 @@ cmake -B build -DCMAKE_BUILD_TYPE=Release
 # Build AU
 cmake --build build --target Tommy_AU
 
+# Build VST3
+cmake --build build --target Tommy_VST3
+
 # Build all targets (plugin + every test executable)
 cmake --build build
+
+# Run the ctest-registered test suite (7 pass/fail executables)
+ctest --test-dir build --output-on-failure
 
 # Validate the AU without opening a DAW
 auval -v aufx Tom1 LeP1
 ```
-
-VST3 has no build target yet — see the CMake note above.
 
 ## Plugin Metadata
 
@@ -92,7 +98,7 @@ juce_add_plugin(Tommy
     BUNDLE_ID com.leighpierce.Tommy
     PLUGIN_MANUFACTURER_CODE LeP1
     PLUGIN_CODE Tom1
-    FORMATS AU
+    FORMATS AU VST3
     PRODUCT_NAME "Tommy"
     COPY_PLUGIN_AFTER_BUILD TRUE
 )
@@ -165,8 +171,9 @@ WarningsAsErrors: ""
 
 ## Validation Gates (do not proceed without)
 
-- Step 2 gate: AU scans and loads in a DAW (Logic or Reaper) and passes `auval`. VST3 deferred —
-  re-add `VST3` to `FORMATS` and re-run this gate before shipping a VST3 build.
+- Step 2 gate: AU scans and loads in a DAW (Logic or Reaper) and passes `auval`. VST3 is built
+  for macOS/Windows/Linux (no `auval`-equivalent exists for VST3 — the CI workflow's successful
+  build + the existing test suite are the gate for it; `auval` still gates the macOS AU build).
 - Step 3 gate: RC lowpass smoke test produces correct -3dB point
 - Step 4 gates: each stage verified before next (freq response or sine clipping as appropriate)
 - Step 5 gate: each switch position verified independently

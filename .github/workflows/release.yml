@@ -1,0 +1,143 @@
+name: Release
+
+# Manual trigger ONLY — this workflow has no push/schedule trigger, so it never runs unless
+# someone explicitly starts it from the Actions tab ("Run workflow") or `gh workflow run
+# release.yml`. Builds VST3 for macOS/Windows/Linux (+ AU on macOS), zips one archive per
+# platform, and publishes them to a GitHub Release tagged from the version in CMakeLists.txt.
+#
+# macOS artifacts are currently UNSIGNED (Apple Developer ID signing + notarization is planned
+# for the 0.8 release — see CLAUDE.md's Roadmap section). Expect a Gatekeeper warning on first
+# launch until that lands.
+
+on:
+  workflow_dispatch:
+    inputs:
+      draft:
+        description: "Create as a draft release (review before publishing)"
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+
+jobs:
+  version:
+    name: Read version
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.read.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: read
+        run: |
+          VERSION=$(grep -oP '(?<=project\(Tommy VERSION )[0-9]+\.[0-9]+\.[0-9]+' CMakeLists.txt)
+          echo "Read version: $VERSION"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+  macos:
+    name: macOS build
+    needs: version
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Configure
+        run: cmake -B build -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build AU + VST3
+        run: cmake --build build --config Release --target Tommy_AU --target Tommy_VST3 --parallel
+
+      - name: Package
+        run: |
+          VERSION="${{ needs.version.outputs.version }}"
+          ditto -c -k --sequesterRsrc --keepParent \
+            build/Tommy_artefacts/Release "Tommy-macOS-v${VERSION}.zip"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Tommy-macOS
+          path: Tommy-macOS-v*.zip
+
+  windows:
+    name: Windows build
+    needs: version
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Configure
+        run: cmake -B build
+
+      - name: Build VST3
+        run: cmake --build build --config Release --target Tommy_VST3 --parallel
+
+      - name: Package
+        shell: pwsh
+        run: |
+          $version = "${{ needs.version.outputs.version }}"
+          Compress-Archive -Path "build/Tommy_artefacts/Release/VST3/Tommy.vst3" `
+            -DestinationPath "Tommy-Windows-v$version.zip"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Tommy-Windows
+          path: Tommy-Windows-v*.zip
+
+  linux:
+    name: Linux build
+    needs: version
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libasound2-dev libjack-jackd2-dev \
+            ladspa-sdk \
+            libcurl4-openssl-dev \
+            libfreetype6-dev \
+            libx11-dev libxcomposite-dev libxcursor-dev libxext-dev \
+            libxinerama-dev libxrandr-dev libxrender-dev \
+            libwebkit2gtk-4.1-dev \
+            libglu1-mesa-dev mesa-common-dev
+
+      - name: Configure
+        run: cmake -B build -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build VST3
+        run: cmake --build build --config Release --target Tommy_VST3 --parallel
+
+      - name: Package
+        run: |
+          VERSION="${{ needs.version.outputs.version }}"
+          (cd build/Tommy_artefacts/Release/VST3 && zip -r "${GITHUB_WORKSPACE}/Tommy-Linux-v${VERSION}.zip" Tommy.vst3)
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Tommy-Linux
+          path: Tommy-Linux-v*.zip
+
+  publish:
+    name: Publish release
+    needs: [version, macos, windows, linux]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Create release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ needs.version.outputs.version }}
+          name: Tommy v${{ needs.version.outputs.version }}
+          draft: ${{ inputs.draft }}
+          files: artifacts/**/*.zip

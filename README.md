@@ -1,6 +1,6 @@
 # Tommy
 
-Tommy is an overdrive plugin (AU, with VST3 planned) modelled on the classic "transparent overdrive"
+Tommy is an overdrive plugin (AU and VST3) modelled on the classic "transparent overdrive"
 pedal circuit. Rather than capturing a handful of fixed gain settings, Tommy simulates the actual 
 analog circuit — drive stage,diode clipper, passive tone network, and output buffer — sample by 
 sample, so everycontrol behaves the way the real pedal's electronics would at any setting in between.
@@ -109,17 +109,29 @@ schematics/                 Source schematics the circuit model is built from
 CLAUDE.md                    Project status and build-step log
 ```
 
+## Installing a release build
+
+Prebuilt zips (one per platform: macOS, Windows, Linux) are published on the
+[Releases page](https://github.com/tehguitarist/Tommy/releases). Each release is built and
+packaged automatically by [GitHub Actions](.github/workflows/release.yml), but only ever on
+a manual trigger — nothing publishes itself on every push.
+
+> **macOS note:** release zips are currently **unsigned** (Apple Developer ID signing and
+> notarization are planned for a future release). Gatekeeper will warn on first launch —
+> right-click the plugin and choose "Open", or allow it in System Settings → Privacy & Security.
+
 ## Building
 
 Requires CMake 3.15+, a C++17 compiler, and the JUCE, chowdsp_wdf, and xsimd submodules
-(xsimd accelerates the circuit's matrix math). Currently builds as an Audio Unit on
-macOS; VST3 support is on the roadmap but not yet wired up.
+(xsimd accelerates the circuit's matrix math). Builds as an Audio Unit + VST3 on macOS, and
+VST3 on Windows/Linux.
 
 ```bash
 git clone --recurse-submodules https://github.com/tehguitarist/Tommy
 cd Tommy
 cmake -B build -DCMAKE_BUILD_TYPE=Release
-cmake --build build --target Tommy_AU
+cmake --build build --target Tommy_AU    # macOS only
+cmake --build build --target Tommy_VST3  # all platforms
 ```
 
 The AU is copied into `~/Library/Audio/Plug-Ins/Components/` automatically after the
@@ -132,13 +144,12 @@ auval -v aufx Tom1 LeP1
 ### Running the test suite
 
 Each circuit stage has a standalone validation executable that checks it against an
-analytic transfer function or known circuit behavior:
+analytic transfer function or known circuit behavior. They're registered with CTest, so
+the whole suite runs as one pass/fail gate (this is also what CI runs on every push/PR):
 
 ```bash
 cmake --build build
-./build/Stage1_FreqResponse
-./build/ClippingStage_Sine
-# ...and so on for every test target under tests/
+ctest --test-dir build --output-on-failure
 ```
 
 ## Status

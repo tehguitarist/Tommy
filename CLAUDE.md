@@ -180,4 +180,30 @@ All three are in `schematics/` at the repo root. Load them when verifying any ci
 >     `Oversampling` instances (2x/4x/8x) up front in `prepare()` (called once from `prepareToPlay`,
 >     off the audio thread); `setFactor()` now only swaps a pointer + resets filter state — zero
 >     allocation. All 8 test executables + auval still pass.
->   - Open items: VST3 still deferred (AU passes auval).**
+>   - **VST3 — DONE 2026-06-27.** Added to `FORMATS` in `CMakeLists.txt` (`AU VST3`); builds for
+>     macOS/Windows/Linux via the new CI/release workflows (see Roadmap below). No DSP/UI changes
+>     needed — JUCE's CMake layer only produces AU on macOS regardless of the FORMATS list.
+>   - Open items: none for the DSP/UI build. See **Roadmap** below for what's left before 1.0.**
+
+## Roadmap
+
+> Tracks what's done per version and what's deliberately deferred, so it survives context
+> resets. Update the version line here, not just "Current Step" above, when a release ships.
+
+- **v0.7 (current release, 2026-06-27):** GitHub Actions CI (`.github/workflows/ci.yml` —
+  build + `ctest` across macOS/Windows/Linux on every push/PR) and a manual-trigger release
+  workflow (`.github/workflows/release.yml` — `workflow_dispatch` only, never runs on push) that
+  builds VST3 for macOS/Windows/Linux (+ AU on macOS) and publishes one zip per platform to a
+  GitHub Release. Plugin version bumped to 0.7.0. **macOS release artifacts are unsigned** —
+  Gatekeeper will warn on first launch until 0.8.
+- **v0.8 TODO:** Full reference-validation pass — frequency response analysis, comprehensive THD
+  analysis per frequency band from 40 Hz–16 kHz, and null tests against the real-pedal
+  references (report the best achievable null depth in the README), all compared directly to the
+  NAM captures already in `analysis/` (batches 1–5). Also: real Apple Developer ID signing +
+  notarization for macOS release artifacts (wire up codesign/notarytool steps in `release.yml`,
+  gated on the relevant secrets — `APPLE_CERTIFICATE_P12`, `APPLE_CERTIFICATE_PASSWORD`,
+  `APPLE_TEAM_ID`, plus notarization credentials).
+- **v0.9 TODO:** Factory presets.
+- **v1.0 TODO:** Simple per-platform installers, if JUCE/CMake tooling supports it without
+  disproportionate effort (e.g. `pkgbuild`/`productbuild` on macOS, NSIS/WiX on Windows,
+  `.deb`/AppImage on Linux) — evaluate feasibility at the time, not committed yet.

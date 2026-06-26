@@ -27,7 +27,7 @@ jobs:
     outputs:
       version: ${{ steps.read.outputs.version }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - id: read
         run: |
           VERSION=$(grep -oP '(?<=project\(Tommy VERSION )[0-9]+\.[0-9]+\.[0-9]+' CMakeLists.txt)
@@ -39,7 +39,7 @@ jobs:
     needs: version
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           submodules: recursive
 
@@ -55,7 +55,7 @@ jobs:
           ditto -c -k --sequesterRsrc --keepParent \
             build/Tommy_artefacts/Release "Tommy-macOS-v${VERSION}.zip"
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         with:
           name: Tommy-macOS
           path: Tommy-macOS-v*.zip
@@ -65,7 +65,7 @@ jobs:
     needs: version
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           submodules: recursive
 
@@ -82,7 +82,7 @@ jobs:
           Compress-Archive -Path "build/Tommy_artefacts/Release/VST3/Tommy.vst3" `
             -DestinationPath "Tommy-Windows-v$version.zip"
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         with:
           name: Tommy-Windows
           path: Tommy-Windows-v*.zip
@@ -92,7 +92,7 @@ jobs:
     needs: version
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           submodules: recursive
 
@@ -120,7 +120,7 @@ jobs:
           VERSION="${{ needs.version.outputs.version }}"
           (cd build/Tommy_artefacts/Release/VST3 && zip -r "${GITHUB_WORKSPACE}/Tommy-Linux-v${VERSION}.zip" Tommy.vst3)
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         with:
           name: Tommy-Linux
           path: Tommy-Linux-v*.zip
@@ -130,12 +130,12 @@ jobs:
     needs: [version, macos, windows, linux]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           path: artifacts
 
       - name: Create release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: v${{ needs.version.outputs.version }}
           name: Tommy v${{ needs.version.outputs.version }}

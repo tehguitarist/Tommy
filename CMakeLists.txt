@@ -8,6 +8,14 @@ set(CMAKE_OSX_DEPLOYMENT_TARGET "10.13" CACHE STRING "Minimum macOS deployment v
 
 enable_testing()
 
+# -Wall/-Wextra are GCC/Clang flags; MSVC's cl.exe misparses "-Wextra" as the /W switch with a
+# non-numeric argument (error D8021). Use /W4 as the MSVC equivalent.
+if (MSVC)
+    set(TOMMY_WARNING_FLAGS /W4)
+else()
+    set(TOMMY_WARNING_FLAGS -Wall -Wextra)
+endif()
+
 add_subdirectory(libs/JUCE)
 add_subdirectory(libs/xsimd)
 add_subdirectory(libs/chowdsp_wdf)
@@ -70,31 +78,31 @@ target_link_libraries(Tommy
         juce::juce_recommended_warning_flags
 )
 
-target_compile_options(Tommy PRIVATE -Wall -Wextra)
+target_compile_options(Tommy PRIVATE ${TOMMY_WARNING_FLAGS})
 
 add_executable(SmokeTest_RC tests/SmokeTest_RC.cpp)
 target_link_libraries(SmokeTest_RC PRIVATE chowdsp::chowdsp_wdf)
-target_compile_options(SmokeTest_RC PRIVATE -Wall -Wextra)
+target_compile_options(SmokeTest_RC PRIVATE ${TOMMY_WARNING_FLAGS})
 add_test(NAME SmokeTest_RC COMMAND SmokeTest_RC)
 
 add_executable(Stage0_FreqResponse tests/Stage0_FreqResponse.cpp)
 target_link_libraries(Stage0_FreqResponse PRIVATE chowdsp::chowdsp_wdf)
-target_compile_options(Stage0_FreqResponse PRIVATE -Wall -Wextra)
+target_compile_options(Stage0_FreqResponse PRIVATE ${TOMMY_WARNING_FLAGS})
 add_test(NAME Stage0_FreqResponse COMMAND Stage0_FreqResponse)
 
 add_executable(Stage1_FreqResponse tests/Stage1_FreqResponse.cpp)
 target_link_libraries(Stage1_FreqResponse PRIVATE chowdsp::chowdsp_wdf)
-target_compile_options(Stage1_FreqResponse PRIVATE -Wall -Wextra)
+target_compile_options(Stage1_FreqResponse PRIVATE ${TOMMY_WARNING_FLAGS})
 add_test(NAME Stage1_FreqResponse COMMAND Stage1_FreqResponse)
 
 add_executable(ClippingStage_Sine tests/ClippingStage_Sine.cpp)
 target_link_libraries(ClippingStage_Sine PRIVATE chowdsp::chowdsp_wdf)
-target_compile_options(ClippingStage_Sine PRIVATE -Wall -Wextra)
+target_compile_options(ClippingStage_Sine PRIVATE ${TOMMY_WARNING_FLAGS})
 add_test(NAME ClippingStage_Sine COMMAND ClippingStage_Sine)
 
 add_executable(Stage2_Treble_FreqResponse tests/Stage2_Treble_FreqResponse.cpp)
 target_link_libraries(Stage2_Treble_FreqResponse PRIVATE chowdsp::chowdsp_wdf)
-target_compile_options(Stage2_Treble_FreqResponse PRIVATE -Wall -Wextra)
+target_compile_options(Stage2_Treble_FreqResponse PRIVATE ${TOMMY_WARNING_FLAGS})
 add_test(NAME Stage2_Treble_FreqResponse COMMAND Stage2_Treble_FreqResponse)
 
 # Step 6 aliasing test needs JUCE (juce::dsp::Oversampling + FFT), so it is a JUCE console app.

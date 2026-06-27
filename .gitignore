@@ -12,3 +12,4 @@ JuceLibraryCode/
 analysis/*.wav
 analysis/**/*.wav
 __pycache__/
+analysis/.venv/

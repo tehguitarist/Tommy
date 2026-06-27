@@ -3,22 +3,14 @@
 For a steady tone f0, extract amplitudes at k*f0 (k=1..8) -> characterises clip type
 (even harmonics = asymmetric, odd = symmetric) and depth (THD). Renders the plugin at the
 capture's settings via OfflineRender. Knob direction: batch-1 = direct (knob-up=cut)."""
-import sys, subprocess, re, os, numpy as np
+import sys, subprocess, os, numpy as np
 import analyze as A
 
 REND = "build/OfflineRender_artefacts/Release/OfflineRender"
 orig = A.load("analysis/tommy_test_signal_48k.wav"); orig.astype(np.float32).tofile("/tmp/o.f32")
 FS = 48000
 
-def cx(v):
-    s = str(v); s = s[:4] if len(s) == 5 else s; vv = int(s)
-    return max(0, min(1, (vv // 100 + (vv % 100) / 60 - 7) / 10))
-
-def parse(n):
-    g = lambda k: int(re.search(rf"{k}(\d+)", n).group(1))
-    sw = re.search(r"switch (\w+)", n)
-    mode = {"up": 0, "mid": 1, "down": 2}[sw.group(1)] if sw else 2  # 'Sym Clip' -> 2
-    return dict(B=cx(g("B")), T=cx(g("T")), V=cx(g("V")), G=cx(g("G")), mode=mode)
+parse = A.parse_filename   # consolidated parser now lives in analyze.py (handles all batches)
 
 def render(k, kin="1.2"):
     subprocess.run([REND, "/tmp/o.f32", "/tmp/p.f32", f"{k['B']}", f"{k['G']}", f"{k['T']}",

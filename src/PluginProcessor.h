@@ -61,16 +61,25 @@ private:
     // matches the NAM capture level — verify by ear with the guitar; nudge 1.0-1.5 to taste.
     static constexpr float kInputRef = 1.2f;
 
-    // Output makeup (dimensionless, applied after 1/kInputRef). The physically-honest value is 1.0
-    // (output voltage measured at the same volts-per-full-scale reference as the input); set to 0.9
-    // as the closest-to-real value that still guarantees no output clipping. Ceiling check: Stage 2's
-    // worst-case rail is 3.4 V, so the loudest possible output (full drive + full volume) peaks at
-    // 3.4 * 0.9 / kInputRef ≈ -0.6 dBFS — just under 0 dBFS. This is a deliberate ~1 dB headroom pad,
-    // NOT a calibration crutch: with the input load anchored (kInputRef) the circuit sets unity on
-    // its own (~1 o'clock at min drive). 1.0 would be exact but can tick ~+0.3 dBFS at the extreme
-    // corner. Re-calibrated 2026-06-18 alongside the DRIVE taper fix (which dropped min-drive gain
-    // 7.7 dB, 8.96x→3.71x — without it this makeup would sit much lower). Tune by ear within 0.8-1.0.
-    static constexpr float kOutputMakeup = 0.9f;
+    // Output makeup (dimensionless, applied after 1/kInputRef).
+    //
+    // RE-CALIBRATED 2026-06-27 to the authoritative batch-3/4/5 NAM captures (user confirmed these
+    // are the reliable reference, batch 5 = +6 dB hot). The comprehensive validation harness
+    // (analysis/knob_tracking.py, run_compare.py) showed the plugin was a ROCK-CONSTANT ~2.6 dB
+    // quieter than the real pedal at every clean (sub-clipping) setting — a pure linear-gain
+    // deficit, independent of input level AND of volume position (the volume-taper SHAPE was
+    // already correct; see analysis decomposition). The cleanest anchor is the pure-linear batch-4
+    // no-drive file (V0.5), whose deficit was -2.62 dB dead-constant across -24/-18/-12 dBFS inputs.
+    // Fix = boost makeup by +2.62 dB: 0.9 * 10^(2.62/20) = 1.217. This took LEVEL agreement from
+    // 0/23 to 16/23 captures. (The earlier 0.9 + its "worst case ≈ -0.6 dBFS" claim were BOTH wrong
+    // — untested against these captures; the real pedal is ~2.6 dB louder, and at full drive+volume
+    // the faithful output is well above 0 dBFS, managed by the -12 dB output trim + volume knob.)
+    //
+    // KNOWN RESIDUALS (deliberately NOT masked with makeup — that would be a calibration crutch):
+    //  - high-drive: ~2 dB quiet at full drive (clip-output scaling, the documented clipping ceiling)
+    //  - V0.4: batch-3 still ~4 dB quiet, hinting the volume taper is too steep below noon — but
+    //    that's confounded (one V0.4 point, varying B/G) and needs the batch-6 Volume reamp to fit.
+    static constexpr float kOutputMakeup = 1.217f;
 
     std::array<tommy::dsp::TommyDSP, 2> dsp;
     juce::AudioBuffer<double> scratch; // double work buffer (WDF is double)

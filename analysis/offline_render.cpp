@@ -16,7 +16,7 @@ using tommy::dsp::Stage1;
 
 // Defaults match PluginProcessor.h; kInputRef overridable via argv[10] for calibration sweeps.
 static constexpr double kInputRefDefault = 1.2;
-static constexpr double kOutputMakeup = 0.9;
+static constexpr double kOutputMakeup = 1.217;
 
 int main (int argc, char** argv)
 {

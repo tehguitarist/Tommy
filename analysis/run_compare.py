@@ -1,10 +1,19 @@
 #!/usr/bin/env python3
-"""For each NAM capture in analysis/pedal_results/, render the plugin at the matched settings
-(via OfflineRender) and compare. Filename format: 'V1200 B1200 T0900 G1030 switch mid ...'.
-Clock 0700=min .. 1200=mid .. 1700=max.  switch up/mid/down -> mode 0/1/2 (Asym/Open/Sym)."""
-import os, re, glob, subprocess, numpy as np
-from scipy.io import wavfile
-import analyze as A   # reuse aligned transfer / level / thd helpers
+"""For each NAM capture in $NAMDIR, render the plugin at the matched settings (via OfflineRender)
+and compare linear EQ, output level, and THD against the real pedal.
+
+Knob notations (both auto-detected by analyze.parse_filename):
+  * clock HHMM  'V1200 B1330 T0900 G1030 switch mid'  (batch 4/5): 0700=min .. 1200=noon .. 1700=max
+  * 0-10 scale  'G3 V4 B6 T4 SYM'                      (batch 3):   plain dial 0..10, /10
+switch up/mid/down (or the Asym/Open/Sym keyword) -> mode 0/1/2.
+
+Env vars:
+  NAMDIR=analysis/pedal_results[3|4|5]   which capture batch to compare against (default batch1)
+  KIN=<float>                            override kInputRef (default: plugin's built-in 1.2)
+  FINE=1                                 print a 1/3-octave EQ table (~30 pts) instead of 9 fixed
+"""
+import os, glob, subprocess, numpy as np
+import analyze as A   # reuse aligned transfer / level / thd helpers + the shared filename parser
 
 import os as _os
 REND = "build/OfflineRender_artefacts/Release/OfflineRender"
@@ -12,25 +21,9 @@ ORIG = "analysis/tommy_test_signal_48k.wav"
 NAMDIR = _os.environ.get("NAMDIR", "analysis/pedal_results")
 OSLOG2 = 3  # 8x — take aliasing off the table
 KIN = _os.environ.get("KIN", "")  # override kInputRef; empty = plugin default
+FINE = _os.environ.get("FINE", "") not in ("", "0")  # 1/3-octave EQ table vs the 9 coarse points
 
-def clock_to_x(hhmm):
-    s = str(int(hhmm))
-    if len(s) == 5:        # 'G10300' typo -> 1030
-        s = s[:4]
-    # 3-digit values are H:MM only for single-digit hours 7/8/9 ("700","900"). A 3-digit value
-    # starting with '1' (e.g. "120") is a missing-trailing-zero typo for noon-ish -> "1200".
-    if len(s) == 3 and s[0] == "1":
-        s = s + "0"
-    v = int(s)
-    h, m = v // 100, v % 100
-    return max(0.0, min(1.0, (h + m / 60.0 - 7.0) / 10.0))
-
-def parse(name):
-    g = lambda k: int(re.search(rf"{k}(\d+)", name).group(1))
-    sw = re.search(r"switch (\w+)", name).group(1).lower()
-    mode = {"up": 0, "mid": 1, "down": 2}[sw]
-    return dict(V=clock_to_x(g("V")), B=clock_to_x(g("B")), T=clock_to_x(g("T")),
-                G=clock_to_x(g("G")), mode=mode, sw=sw)
+parse = A.parse_filename   # consolidated parser now lives in analyze.py (handles all batches)
 
 def render_plugin(p):
     orig = A.load(ORIG)
@@ -46,6 +39,11 @@ def render_plugin(p):
 def report(name):
     p = parse(name)
     nam = A.load(os.path.join(NAMDIR, name))
+    orig_chk = A.load(ORIG)
+    if not A.is_full_length(nam, orig_chk):
+        print("=" * 78); print(f"{name}\n  SKIPPED — truncated capture ({len(nam)/A.FS:.1f}s "
+                                 f"< {len(orig_chk)/A.FS:.1f}s expected); no clean sweep present.\n")
+        return
     plug = render_plugin(p)
     orig = A.load(ORIG)
     nam, _ = A.align(nam, orig)
@@ -57,10 +55,13 @@ def report(name):
     inp = A.seg_of(orig, "sweep_clean")
     fN, mN = A.transfer(A.seg_of(nam, "sweep_clean"), inp)
     fP, mP = A.transfer(A.seg_of(plug, "sweep_clean"), inp)
-    print("\n  LINEAR EQ (dB re input):   NAM(real) | plugin | plug-real")
-    for fq in (60, 120, 250, 500, 1000, 2000, 4000, 8000, 12000):
+    eq_freqs = A.fractional_octave_freqs(20, 20000, 3) if FINE \
+        else (60, 120, 250, 500, 1000, 2000, 4000, 8000, 12000)
+    label = "1/3-oct, 20Hz-20kHz" if FINE else "9 fixed pts"
+    print(f"\n  LINEAR EQ (dB re input, {label}):   NAM(real) | plugin | plug-real")
+    for fq in eq_freqs:
         r, pl = A.gain_at(fN, mN, fq), A.gain_at(fP, mP, fq)
-        print(f"    {fq:>6} Hz:  {r:>7.2f} | {pl:>7.2f} | {pl-r:>+6.2f}")
+        print(f"    {fq:>7.0f} Hz:  {r:>7.2f} | {pl:>7.2f} | {pl-r:>+6.2f}")
     print("\n  OUTPUT LEVEL (dBFS) @ 1 kHz vs input level:   real | plugin | plug-real")
     for db in (-24, -18, -12, -6):
         r, pl = A.rms_db(A.seg_of(nam, f"lvl{db}")), A.rms_db(A.seg_of(plug, f"lvl{db}"))

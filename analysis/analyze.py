@@ -10,7 +10,7 @@ Each render is auto-aligned to the original (cross-correlation, handles plugin l
   - freq steps   -> THD / harmonic content per frequency (clipping character)
 Outputs a text report; saves PNG overlays if matplotlib is present.
 """
-import sys, numpy as np
+import sys, re, numpy as np
 from scipy.io import wavfile
 from scipy import signal as sps
 
@@ -44,6 +44,13 @@ def load(path):
         x = x.mean(axis=1)
     assert sr == FS, f"{path}: expected {FS} Hz, got {sr}"
     return x
+
+def is_full_length(x, orig, frac=0.95):
+    """True if capture `x` spans at least `frac` of the test signal. Guards against the truncated
+    8-second captures (e.g. batch-3's two all-caps 'SYM' files) — without this the segments past a
+    short file's end read as zeros and the transfer/THD numbers come out as garbage (-200 dB nulls,
+    +200 dB 'deltas') rather than an honest skip. The full signal is 37.8 s; truncated ones are 8 s."""
+    return len(x) >= frac * len(orig)
 
 def align(render, orig):
     """Return render shifted so it lines up with orig (via xcorr on the clean sweep region)."""
@@ -87,6 +94,68 @@ def thd(x, f0):
     fund = amp(f0)
     harm = np.sqrt(sum(amp(f0 * k) ** 2 for k in range(2, 9)))
     return 100 * harm / (fund + 1e-20), fund
+
+# --- Shared NAM-capture filename parsing (consolidated 2026-06-27) ---------------------------
+# The capture batches use TWO different knob notations, and this parser auto-detects both so every
+# downstream tool (run_compare, harmonics, swept_thd, null_test, knob_tracking) reads filenames the
+# same way. Previously run_compare.py (clock_to_x) and harmonics.py (cx) had two slightly-divergent
+# copies of this logic — cx() missed the 3-digit-typo fixups, a latent inconsistency bug.
+#
+#   * CLOCK notation (batch 4 & 5): "V1200 B1330 T0900 G1030 switch mid" — values are clock face
+#     positions HHMM, 0700 (7 o'clock = min) .. 1200 (noon) .. 1700 (5 o'clock = max). 3-4 digits.
+#   * 0-10 SCALE (batch 3):          "G3 V4 B6 T4 SYM"  — values are a plain 0..10 knob dial, /10.
+#
+# Detection: a token value >= 100 is clock notation; < 100 is the 0..10 scale. (The 0..10 max is 10;
+# the clock min is 700, or the 3-digit typo "120"->1200 — so 100 separates them cleanly.)
+
+def clock_to_x(hhmm):
+    """Clock-face HHMM (0700=min .. 1200=noon .. 1700=max) -> normalized knob position 0..1."""
+    s = str(int(hhmm))
+    if len(s) == 5:        # 'G10300' typo -> 1030
+        s = s[:4]
+    # 3-digit values are H:MM only for single-digit hours 7/8/9 ("700","900"). A 3-digit value
+    # starting with '1' (e.g. "120") is a missing-trailing-zero typo for noon-ish -> "1200".
+    if len(s) == 3 and s[0] == "1":
+        s = s + "0"
+    v = int(s)
+    h, m = v // 100, v % 100
+    return max(0.0, min(1.0, (h + m / 60.0 - 7.0) / 10.0))
+
+def knob_to_x(raw):
+    """One knob token's integer value -> 0..1, auto-detecting clock vs 0-10 notation (see above)."""
+    v = int(raw)
+    return clock_to_x(v) if v >= 100 else max(0.0, min(1.0, v / 10.0))
+
+def switch_to_mode(name):
+    """Switch position -> clip-mode index 0/1/2 = Asym(up)/Open(mid)/Sym(down). Handles both the
+    'switch up|mid|down' tokens (batch 4/5) and the bare 'SYM'/'Sym Clip'/'Asym'/'Open' words
+    (batch 3, which only ever captured the Sym position)."""
+    m = re.search(r"switch (\w+)", name, re.IGNORECASE)
+    if m:
+        return {"up": 0, "mid": 1, "down": 2}[m.group(1).lower()]
+    low = name.lower()
+    if "asym" in low:
+        return 0
+    if "open" in low:
+        return 1
+    return 2  # 'sym'/'Sym Clip' or unlabelled -> Sym (the batch-3 default)
+
+def parse_filename(name):
+    """NAM capture filename -> dict(B, T, V, G as 0..1 positions, mode 0/1/2, sw label).
+    Works for every batch (clock or 0-10 notation, switch token or sym keyword)."""
+    def g(k):
+        mm = re.search(rf"{k}0*(\d+)", name)  # tolerate a leading zero typo e.g. 'B01200'
+        return int(mm.group(1)) if mm else 0
+    mode = switch_to_mode(name)
+    return dict(B=knob_to_x(g("B")), T=knob_to_x(g("T")), V=knob_to_x(g("V")),
+                G=knob_to_x(g("G")), mode=mode, sw=["up", "mid", "down"][mode])
+
+# --- Fractional-octave frequency grid for fine EQ reporting -----------------------------------
+def fractional_octave_freqs(f_lo=20.0, f_hi=20000.0, frac=3):
+    """Geometric grid at 1/`frac`-octave spacing over [f_lo, f_hi] (default 1/3-octave, ~30 pts)."""
+    import math
+    n = int(math.floor(frac * math.log2(f_hi / f_lo)))
+    return [f_lo * 2.0 ** (i / frac) for i in range(n + 1)]
 
 def main():
     args = dict(a.split("=", 1) for a in sys.argv[1:] if "=" in a)

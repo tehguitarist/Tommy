@@ -55,7 +55,8 @@ All three are in `schematics/` at the repo root. Load them when verifying any ci
 > Full DSP chain + real UI built and validated; tapers V4-FINAL, top-octave warp fixed, build warning-
 > free. Step 9 gate: (a) SUBJECTIVE sweep — user confirms all controls respond correctly, no issues;
 > (b) OBJECTIVE stability sweep — 144 control corners (bass/treb/vol×drive×3 modes×1x/8x) with a hot
-> 0 dBFS input: 0 NaN/Inf, 0 runaway, all bounded. kOutputMakeup FINALISED at 0.9 (see CALIBRATION).
+> 0 dBFS input: 0 NaN/Inf, 0 runaway, all bounded. kOutputMakeup RE-CALIBRATED to 1.217 in v0.8
+> (was 0.9; +2.6 dB to match the authoritative batch-3/4/5 captures — see CALIBRATION).
 > High-drive THD ceiling RESOLVED via batch-5 hot reamp (see CLIPPING below): odd harmonics + THD
 > already matched; added the missing even-harmonic asymmetry. The 9/12/18 V supply feature is DONE.
 > No open modelling items remain. Build is SHIPPABLE.**
@@ -71,13 +72,20 @@ All three are in `schematics/` at the repo root. Load them when verifying any ci
 > **CALIBRATION (Step 9, current values in `PluginProcessor.h`):**
 > - `kInputRef = 1.2f` (volts per full-scale; re-calibrated from NAM A/B — was 3.27 which over-drove
 >   clipping ~9 dB and caused the "harsh/fizzy" tone). Cancels in the linear path; only sets clip onset.
-> - `kOutputMakeup = 0.9f` — FINALISED (Step 9 sweep, 2026-06-21). Level-matched to the NAM captures
->   (do NOT lower for headroom — it would make the plugin ~8.7 dB quieter than the real pedal at every
->   setting, breaking the A/B match). HEADROOM REALITY (measured, hot 0 dBFS in): at NOON volume the
->   output is a safe ≈ −6 dBFS for any drive; it crosses 0 dBFS at volume ≈ 0.7 and reaches ≈ +8 dBFS
->   at full drive + full volume + no tone cut. That upper-third "boost zone" is FAITHFUL (a real Timmy
->   cranked overloads an interface the same way), NOT a bug — the −12 dB output trim + the volume knob
->   manage it. (The earlier "worst case ≈ −0.6 dBFS" note was WRONG — untested at full volume/hot input.)
+> - `kOutputMakeup = 1.217f` — **RE-CALIBRATED 2026-06-27** to the authoritative batch-3/4/5 captures
+>   (user confirmed these are the reliable reference; the old 0.9 was matched to batch 1/2). The v0.8
+>   validation harness (`analysis/knob_tracking.py`) found the plugin was a ROCK-CONSTANT ~2.6 dB
+>   quiet at every CLEAN setting — a pure linear-gain deficit, independent of input level AND volume
+>   position (volume-taper SHAPE was already right). Anchored on the cleanest point: the pure-linear
+>   batch-4 no-drive file, deficit −2.62 dB dead-constant across −24/−18/−12 dBFS. Fix = +2.62 dB:
+>   0.9·10^(2.62/20) = 1.217. LEVEL agreement went 0/23 → 16/23 captures; auval + 7 ctests still pass.
+>   The old "do NOT lower / would be 8.7 dB quiet" and "worst case ≈ −0.6 dBFS" notes were BOTH wrong
+>   (untested vs these captures). HEADROOM REALITY: now ~2.6 dB hotter than before — the upper-third
+>   "boost zone" (a faithful cranked-Timmy overload, managed by the −12 dB output trim + volume knob)
+>   sits correspondingly higher; this MATCHES the real pedal's level, which is the whole point.
+>   KNOWN RESIDUALS (NOT masked with makeup — that's a crutch): ~2 dB quiet at full drive (clip-output
+>   scaling = the documented clipping ceiling); batch-3 V0.4 still ~4 dB quiet (volume taper may be too
+>   steep below noon, but confounded — needs the batch-6 Volume reamp to fit; no volume sweep exists yet).
 > - **Tapers (`utils/TaperUtils.h`) — V4 FINAL STATE (2026-06-21, user-chosen; web-verified taper
 >   types, see `timmy-pot-taper-research`).** BASS `50k·x^2.41`, DRIVE `1e6·x^2.2`, TREBLE
 >   `50k·x/(x+1)` (LINEAR-pot rheostat law), VOLUME A25K + **R11 18k**. BASS/TREBLE are CUT controls:
@@ -164,7 +172,8 @@ All three are in `schematics/` at the repo root. Load them when verifying any ci
 >      harmonics + THD already matched at the right input level; the gap was missing EVEN harmonics,
 >      now added via the global diode-mismatch bias (see CLIPPING above). batch 5 = PRIMARY pedal,
 >      +6 dB hot, drive 3:00/5:00 × 3 modes (analysis kInputRef ≈ 2.4 for these).
->   4. Step 9 gate DONE (subjective + objective stability sweep passed; kOutputMakeup finalised 0.9).
+>   4. Step 9 gate DONE (subjective + objective stability sweep passed; kOutputMakeup was 0.9, now
+>      RE-CALIBRATED to 1.217 in v0.8 to match batch-3/4/5 — see CALIBRATION).
 >   - **Supply-voltage feature — DONE 2026-06-21.** Selectable 9/12/18 V via APVTS `supply_voltage`
 >     (default 9 V) → `TommyDSP::setSupplyVoltage` scales BOTH op-amp rails (Stage1 via
 >     `ClippingOversampler::setRailVoltages`, Stage2 direct); anchored at 9 V = +2.5/−3.4, slopes
@@ -196,13 +205,21 @@ All three are in `schematics/` at the repo root. Load them when verifying any ci
   builds VST3 for macOS/Windows/Linux (+ AU on macOS) and publishes one zip per platform to a
   GitHub Release. Plugin version bumped to 0.7.0. **macOS release artifacts are unsigned** —
   Gatekeeper will warn on first launch until 0.8.
-- **v0.8 TODO:** Full reference-validation pass — frequency response analysis, comprehensive THD
-  analysis per frequency band from 40 Hz–16 kHz, and null tests against the real-pedal
-  references (report the best achievable null depth in the README), all compared directly to the
-  NAM captures already in `analysis/` (batches 1–5). Also: real Apple Developer ID signing +
-  notarization for macOS release artifacts (wire up codesign/notarytool steps in `release.yml`,
-  gated on the relevant secrets — `APPLE_CERTIFICATE_P12`, `APPLE_CERTIFICATE_PASSWORD`,
-  `APPLE_TEAM_ID`, plus notarization credentials).
+- **v0.8 IN PROGRESS:** Full reference-validation pass against the authoritative batch-3/4/5 NAM
+  captures. **DONE (2026-06-27):** comprehensive validation harness built + documented
+  (`analysis/README.md`) — `run_compare.py FINE=1` (1/3-octave EQ 20 Hz–20 kHz), `swept_thd.py`
+  (continuous THD(f) via Farina exponential-sweep harmonic separation, validated vs discrete tones,
+  + `--matrix` THD×drive×mode table), `null_test.py` (sub-sample-aligned null; current best clean
+  null −13.5 dB), `knob_tracking.py` (pass/fail with SHAPE/LEVEL/THD thresholds),
+  `volume_supply_check.py`. Findings: THD tracks well across drive×mode; the big issue was a
+  ~2.6 dB flat LEVEL deficit → **kOutputMakeup re-calibrated 0.9→1.217** (LEVEL 0/23→16/23).
+  **REMAINING for v0.8:** (a) write the best null depth + THD-by-band summary into the README;
+  (b) chase the two documented residuals if desired (full-drive clip-scaling ~2 dB; V0.4 volume
+  taper ~4 dB — the latter needs a **batch-6 Volume-sweep reamp**, the one capture gap, since no
+  batch varies Volume); (c) the EQ-shape SHAPE-fails are the known V4-linear-treble trade.
+  Also still TODO: real Apple Developer ID signing + notarization for macOS release artifacts (wire
+  up codesign/notarytool steps in `release.yml`, gated on the secrets `APPLE_CERTIFICATE_P12`,
+  `APPLE_CERTIFICATE_PASSWORD`, `APPLE_TEAM_ID`, plus notarization credentials).
 - **v0.9 TODO:** Factory presets.
 - **v1.0 TODO:** Simple per-platform installers, if JUCE/CMake tooling supports it without
   disproportionate effort (e.g. `pkgbuild`/`productbuild` on macOS, NSIS/WiX on Windows,

@@ -1,0 +1,96 @@
+# Manual-trigger packaging: builds VST3 (+ AU on macOS) on all three platforms and publishes one
+# zip per platform to a GitHub Release. No push/schedule trigger — it ONLY runs when you start it
+# from the Actions tab or `gh workflow run release.yml`, so a release is never cut accidentally.
+# TEMPLATE: replace <Pedal> (juce target / product name) everywhere. Inert until copied to a repo root.
+#
+# macOS artifacts are UNSIGNED by default — Gatekeeper warns on first launch. To sign + notarize,
+# add codesign/notarytool steps gated on your Apple secrets (APPLE_CERTIFICATE_P12,
+# APPLE_CERTIFICATE_PASSWORD, APPLE_TEAM_ID + notarization credentials).
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      draft:
+        description: "Create as a draft release (review before publishing)"
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+
+jobs:
+  version:
+    name: Read version
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.read.outputs.version }}
+    steps:
+      - uses: actions/checkout@v6
+      - id: read
+        run: |
+          VERSION=$(grep -oP '(?<=project\(<Pedal> VERSION )[0-9]+\.[0-9]+\.[0-9]+' CMakeLists.txt)
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+  macos:
+    needs: version
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v6
+        with: { submodules: recursive }
+      - run: cmake -B build -DCMAKE_BUILD_TYPE=Release
+      - run: cmake --build build --config Release --target <Pedal>_AU --target <Pedal>_VST3 --parallel
+      - run: |
+          ditto -c -k --sequesterRsrc --keepParent \
+            build/<Pedal>_artefacts/Release "<Pedal>-macOS-v${{ needs.version.outputs.version }}.zip"
+      - uses: actions/upload-artifact@v6
+        with: { name: <Pedal>-macOS, path: "<Pedal>-macOS-v*.zip" }
+
+  windows:
+    needs: version
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v6
+        with: { submodules: recursive }
+      - run: cmake -B build
+      - run: cmake --build build --config Release --target <Pedal>_VST3 --parallel
+      - shell: pwsh
+        run: |
+          Compress-Archive -Path "build/<Pedal>_artefacts/Release/VST3/<Pedal>.vst3" `
+            -DestinationPath "<Pedal>-Windows-v${{ needs.version.outputs.version }}.zip"
+      - uses: actions/upload-artifact@v6
+        with: { name: <Pedal>-Windows, path: "<Pedal>-Windows-v*.zip" }
+
+  linux:
+    needs: version
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with: { submodules: recursive }
+      - run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libasound2-dev libjack-jackd2-dev ladspa-sdk libcurl4-openssl-dev \
+            libfreetype6-dev libx11-dev libxcomposite-dev libxcursor-dev libxext-dev \
+            libxinerama-dev libxrandr-dev libxrender-dev libwebkit2gtk-4.1-dev \
+            libglu1-mesa-dev mesa-common-dev
+      - run: cmake -B build -DCMAKE_BUILD_TYPE=Release
+      - run: cmake --build build --config Release --target <Pedal>_VST3 --parallel
+      - run: |
+          (cd build/<Pedal>_artefacts/Release/VST3 && \
+            zip -r "${GITHUB_WORKSPACE}/<Pedal>-Linux-v${{ needs.version.outputs.version }}.zip" <Pedal>.vst3)
+      - uses: actions/upload-artifact@v6
+        with: { name: <Pedal>-Linux, path: "<Pedal>-Linux-v*.zip" }
+
+  publish:
+    needs: [version, macos, windows, linux]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v8
+        with: { path: artifacts }
+      - uses: softprops/action-gh-release@v3
+        with:
+          tag_name: v${{ needs.version.outputs.version }}
+          name: <Pedal> v${{ needs.version.outputs.version }}
+          draft: ${{ inputs.draft }}
+          files: artifacts/**/*.zip

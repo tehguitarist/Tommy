@@ -7,7 +7,10 @@
 - JUCE 8+ and `chowdsp_wdf` (header-only) as submodules under `libs/`.
 - Optional but recommended: **xsimd** (accelerates R-type adaptor matrix multiplies). Add it
   before chowdsp_wdf and `#include <xsimd/xsimd.hpp>` before `<chowdsp_wdf/chowdsp_wdf.h>`.
-- `-Wall -Wextra`; treat warnings as errors in CI.
+- `-Wall -Wextra` on GCC/Clang. **MSVC's `cl.exe` misparses `-Wextra`** (error D8021: `/W` with a
+  non-numeric arg), so gate the flags — `/W4` on MSVC, `-Wall -Wextra` otherwise — via a
+  `PEDAL_WARNING_FLAGS` variable (see `CMakeLists.txt.template`). A hardcoded `-Wextra` breaks the
+  Windows CI build.
 - **Mark third-party headers (chowdsp_wdf, etc.) as SYSTEM includes.** `juce_recommended_warning_flags`
   enables `-Wshadow-field-in-constructor`, which fires harmlessly on chowdsp_wdf's header-only
   constructors (param/field name reuse — not a bug). Don't silence it globally (you'd blind yourself
@@ -76,10 +79,29 @@ AllowShortFunctionsOnASingleLine Inline, SortIncludes false) and a `.clang-tidy`
 (`clang-diagnostic-*,clang-analyzer-*,modernize-*,readability-*,-readability-magic-numbers`) are
 included in the template root.
 
+## CI / release (GitHub Actions)
+
+`.github/workflows/ci.yml` and `release.yml` are included as templates (replace `<Pedal>`/`<Cod1>`/
+`<Mfr1>`). They're inert inside the template folder — GitHub only reads `.github` at a repo root, so
+they activate once you copy the template out.
+
+- **ci.yml** — builds + runs `ctest` on macOS/Windows/Linux on every push/PR. Register each pass/fail
+  test exe with `add_test()` (see `CMakeLists.txt.template`) so the whole suite runs as one gate.
+- **release.yml** — `workflow_dispatch` ONLY (no push trigger, so a release is never cut by accident):
+  builds VST3 (+ AU on macOS) on all three OSes, zips one archive per platform, publishes a draft
+  GitHub Release. macOS artifacts are unsigned until you wire up codesign/notarytool.
+- **auval on CI gotcha:** a freshly-copied `.component` isn't registered with the
+  `AudioComponentRegistrar` on a clean runner, so `auval` fails with "didn't find the component" /
+  `-50`. Bounce the registrar (`killall -9 AudioComponentRegistrar`) and retry — the ci.yml step
+  already does this. If headless `auval` stays flaky, switch to **pluginval** (validates the built
+  bundle directly, no OS registration, cross-platform so it covers the VST3 too).
+
 ## Validation gates (do not skip ahead)
 
-- Both plugin formats scan/load in a DAW.
+- Both plugin formats build + scan/load in a DAW; CI is green on all three platforms.
 - Each linear stage's frequency response verified before the next stage.
 - Each switch position verified independently.
 - Nonlinear aliasing acceptable at the shipped OS default.
+- Reference validation vs real-pedal captures (FR / THD-by-band / null) — see
+  `docs/validation-and-capture.md`.
 - Final: full control sweep — no instability, clicks, or NaN/Inf.

@@ -33,6 +33,24 @@ The reusable harness lives in `analysis/`:
    subtract, report residual dB. **It measures timbre/shape/phase, NOT absolute level** (the gain
    match removes level). Report the BEST null (cleanest linear setting — the README headline) and
    the WORST (honesty). Integer-only alignment is not enough: 1 sample at 20 kHz ≈ 150° phase error.
+   - **Split linear vs nonlinear** with `linear_removed_null()` (coherence-based). The raw null
+     removes only a broadband gain, so its residual is part-linear (EQ/phase) and part-nonlinear.
+     The linear-removed figure is the floor if every linear difference were matched — what's left is
+     the genuinely nonlinear residual (clipping-harmonic phase + the capture's own fidelity). If
+     linear-removed is *much* deeper than raw, the residual is mostly LINEAR (a better taper /
+     less discretization warp could close it); if they're close, you're at the nonlinear floor and
+     tweaking the plugin won't help. (On the reference build: raw ~−11 dB, linear-removed ~−20 dB —
+     so ~half the residual was the deliberate tone-taper trade + WDF phase, and the clipping model
+     itself agreed to ~−20 dB. Report the nonlinear floor separately; it's the real model-accuracy
+     figure.)
+   - **Chasing the deepest null (diagnostic):** a coordinate-descent over the knob params (Bass /
+     Treble / Drive — NOT Volume, which is pure level the gain-match already removes) tells you
+     whether a residual is a small taper-MAPPING offset (deepens with a consistent small tweak
+     across independent captures → worth fixing) or just hand-set knob tolerance / the nonlinear
+     floor (scatters, or barely moves). On the reference build the tweaks were consistent in
+     *direction* but only recovered ~2.5 dB and floored at the same ~−13 dB — confirming the model,
+     not a bug. Note Bass+Drive are often COUPLED (shared feedback network), so their individual
+     offsets trade off in the search and aren't uniquely attributable.
 4. **Knob-tracking pass/fail** — at every captured setting, does the plugin match the real pedal?
    Separate three things with explicit thresholds, because they fail for different reasons:
    - **SHAPE** — EQ compared RELATIVE to 1 kHz (level offset removed) → tone-stack accuracy.
@@ -96,3 +114,22 @@ If the plugin is quieter/louder than the real pedal, find out WHY before touchin
 
 This decomposition is why `calibration-and-gain-staging.md` §2 says **calibrate makeup to the
 captures** rather than pinning it to a "headroom-safe" number — see that section.
+
+### When a measurement contradicts the physics, suspect the capture — not the model
+
+Before reshaping a taper to chase a discrepancy, check it against what the circuit is *physically
+forced* to do. If the captures imply behaviour the topology can't produce, it's almost certainly a
+capture artifact (usually a per-session recording-gain offset — exactly what the bypass anchor and
+fixed-gain rule above prevent). Reshaping the model to match would bake a recording error into the
+plugin and wreck the control's feel.
+
+Worked example (reference build): one volume position read ~3.5 dB quiet vs another, suggesting the
+volume taper was wrong. But the volume divider (audio pot + a fixed resistor across the upper arm)
+is *physically forced* to rise ~+3.3 dB between those two positions **regardless of the pot's taper
+law** (the fixed resistor pins the upper arm ~constant in that range, so the divider just tracks the
+wiper). The captures showing the two positions ~equal is impossible for that circuit — so it was a
+capture-gain discrepancy between the two sessions, not a taper error, and the model was left alone.
+The tell: the deficit ≈ exactly the one physically-correct step. (A separate gotcha from this:
+controls in a feedback gain-set leg invert the pot's concavity vs a plain divider/attenuator, and
+some tone pots are reverse-wired — so "what taper shape is correct" depends on where the pot sits in
+the circuit, not just the pot's own marking. Verify the topology before fitting a taper.)

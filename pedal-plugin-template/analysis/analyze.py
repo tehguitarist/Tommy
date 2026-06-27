@@ -153,11 +153,32 @@ def frac_align(test, ref):
 def null_depth(ref, test):
     """Optimal-gain-match `test` to `ref`, subtract, return (null_dB, applied_gain_dB). The gain
     match means the null measures TIMBRE/shape/phase agreement, NOT absolute level (report level
-    separately). frac_align first."""
+    separately). frac_align first. This is the RAW null — its residual still contains every LINEAR
+    mismatch (EQ-shape, phase) plus the nonlinear part; use linear_removed_null() to split them."""
     g = float(np.dot(ref, test) / (np.dot(test, test) + 1e-30))
     resid = ref - g * test
     null_db = 20 * np.log10((np.sqrt(np.mean(resid ** 2)) + 1e-20) / (np.sqrt(np.mean(ref ** 2)) + 1e-20))
     return null_db, 20 * np.log10(abs(g) + 1e-20)
+
+
+def linear_removed_null(test, ref):
+    """The null floor if EVERY linear (EQ + phase) difference were perfectly matched — i.e. the
+    residual that is genuinely NONLINEAR (clipping-harmonic phase) plus the capture's own fidelity.
+    Computed from the magnitude-squared coherence gamma^2(f) (Welch-averaged, so limited DOF — it
+    does NOT overfit the way a per-bin Y/X division would): residual power fraction = 1 - gamma^2.
+
+    Interpretation vs the raw null_depth():
+      - linear_removed MUCH deeper than raw  -> residual is mostly LINEAR -> a better taper / less
+        discretization warp could deepen the real (shipped-plugin) null toward it.
+      - linear_removed ~= raw                -> residual is mostly nonlinear / capture floor -> you
+        are near the limit; tweaking the plugin won't help.
+    This is a DIAGNOSTIC (it applies a correction not in the plugin) — the shipped plugin's honest
+    null stays the null_depth() number; report this separately as the nonlinear/clipping-match floor."""
+    n = min(len(test), len(ref))
+    f, cxy = sps.coherence(test[:n], ref[:n], FS, nperseg=8192)
+    f, pyy = sps.welch(ref[:n], FS, nperseg=8192)
+    resid_frac = np.sum(pyy * (1.0 - cxy)) / (np.sum(pyy) + 1e-30)
+    return 10.0 * np.log10(resid_frac + 1e-20)
 
 
 # --- Capture-filename parsing -----------------------------------------------------------------

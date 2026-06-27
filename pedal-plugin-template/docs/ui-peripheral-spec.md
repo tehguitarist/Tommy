@@ -1,6 +1,6 @@
-# Tommy-Compatible UI Peripheral Elements
+# Reusable UI Peripheral Elements
 
-This plugin uses JUCE 8+ with a custom `LookAndFeel_V4` subclass. The pedal face layout is unique to this project, but the following peripheral elements must match the Tommy overdrive plugin's look exactly. Implement each section as described.
+This plugin uses JUCE 8+ with a custom `LookAndFeel_V4` subclass. The centre pedal face is unique to each pedal, but the following peripheral elements (side panels, trim knobs, VU meters, switch, LED, footswitch, oversampling strip) are shared across builds and should match this spec exactly. Implement each section as described.
 
 ---
 

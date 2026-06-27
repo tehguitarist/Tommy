@@ -8,6 +8,14 @@ name: Release
 # macOS artifacts are signed with a Developer ID Application certificate and notarized via
 # notarytool, using secrets configured in the repo (APPLE_CERT_P12_BASE64, APPLE_CERT_PASSWORD,
 # APPLE_SIGNING_IDENTITY, APPLE_TEAM_ID, APPLE_ID, APPLE_APP_SPECIFIC_PASSWORD).
+#
+# Each platform also gets a basic installer built from installer/<platform>/ alongside the raw
+# zip: a .pkg on macOS (with an AU/VST3 choice screen, both selected by default), a .exe on
+# Windows (NSIS, VST3 only), and a .deb on Linux (VST3 only). The macOS .pkg wraps the already-
+# signed-and-notarized AU/VST3 bundles, but the .pkg installer itself is NOT signed (that needs
+# a separate "Developer ID Installer" cert, which isn't provisioned here) — Gatekeeper checks the
+# bundles when a host loads them, not the installer wrapper, so this is fine for distribution,
+# though double-clicking the .pkg directly may show an "unidentified developer" prompt.
 
 on:
   workflow_dispatch:
@@ -110,6 +118,11 @@ jobs:
           ditto -c -k --sequesterRsrc --keepParent \
             build/Tommy_artefacts/Release "Tommy-macOS-v${VERSION}.zip"
 
+      - name: Build installer
+        run: |
+          VERSION="${{ needs.version.outputs.version }}"
+          installer/macos/build_installer.sh "$VERSION" build/Tommy_artefacts/Release .
+
       - name: Clean up keychain
         if: always()
         run: security delete-keychain "$KEYCHAIN_PATH" || true
@@ -117,7 +130,9 @@ jobs:
       - uses: actions/upload-artifact@v6
         with:
           name: Tommy-macOS
-          path: Tommy-macOS-v*.zip
+          path: |
+            Tommy-macOS-v*.zip
+            Tommy-macOS-v*.pkg
 
   windows:
     name: Windows build
@@ -141,10 +156,18 @@ jobs:
           Compress-Archive -Path "build/Tommy_artefacts/Release/VST3/Tommy.vst3" `
             -DestinationPath "Tommy-Windows-v$version.zip"
 
+      - name: Build installer
+        shell: pwsh
+        run: |
+          $version = "${{ needs.version.outputs.version }}"
+          makensis /DVERSION=$version /DARTEFACTS_DIR="$PWD\build\Tommy_artefacts\Release\VST3" installer\windows\Tommy.nsi
+
       - uses: actions/upload-artifact@v6
         with:
           name: Tommy-Windows
-          path: Tommy-Windows-v*.zip
+          path: |
+            Tommy-Windows-v*.zip
+            Tommy-Windows-v*.exe
 
   linux:
     name: Linux build
@@ -179,10 +202,17 @@ jobs:
           VERSION="${{ needs.version.outputs.version }}"
           (cd build/Tommy_artefacts/Release/VST3 && zip -r "${GITHUB_WORKSPACE}/Tommy-Linux-v${VERSION}.zip" Tommy.vst3)
 
+      - name: Build installer
+        run: |
+          VERSION="${{ needs.version.outputs.version }}"
+          installer/linux/build_deb.sh "$VERSION" build/Tommy_artefacts/Release .
+
       - uses: actions/upload-artifact@v6
         with:
           name: Tommy-Linux
-          path: Tommy-Linux-v*.zip
+          path: |
+            Tommy-Linux-v*.zip
+            Tommy-Linux-v*.deb
 
   publish:
     name: Publish release
@@ -199,4 +229,8 @@ jobs:
           tag_name: v${{ needs.version.outputs.version }}
           name: Tommy v${{ needs.version.outputs.version }}
           draft: ${{ inputs.draft }}
-          files: artifacts/**/*.zip
+          files: |
+            artifacts/**/*.zip
+            artifacts/**/*.pkg
+            artifacts/**/*.exe
+            artifacts/**/*.deb

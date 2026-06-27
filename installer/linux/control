@@ -1,0 +1,9 @@
+Package: tommy
+Version: __VERSION__
+Section: sound
+Priority: optional
+Architecture: amd64
+Maintainer: Leigh Pierce <leighpierce@me.com>
+Description: Tommy overdrive plugin (VST3)
+ Circuit-level emulation of the Cochrane/MXR Timmy overdrive pedal, built with
+ JUCE and chowdsp_wdf WDF circuit modelling.

@@ -28,9 +28,16 @@ Put the schematic images in `schematics/` and load them whenever verifying a cir
 
 ## Essential reading (template learnings — do not skip)
 
-- **`docs/calibration-and-gain-staging.md`** — input-load (`kInputRef`) calibration, the output
-  makeup (~0.9) reasoning, the DRIVE taper-floor bug, output-load (negligible), internal-vs-output
-  clipping, op-amp rails, VU idle gate. This is where the non-obvious time-sinks are documented.
+- **`docs/calibration-and-gain-staging.md`** — input-load (`kInputRef`) calibration, output-makeup
+  calibration (level-match to captures — NOT a ~0.9 headroom pad; see §2), the DRIVE taper-floor
+  bug, output-load (negligible), internal-vs-output clipping, op-amp rails, VU idle gate. This is
+  where the non-obvious time-sinks are documented.
+- **`docs/validation-and-capture.md`** — how to measure how close the plugin is to the real pedal
+  (1/3-oct FR, continuous Farina swept-THD, sub-sample null, knob-tracking pass/fail) and how to
+  CAPTURE the pedal so the measurement is trustworthy (bypass anchor, one-knob-at-a-time, sweep
+  Volume, no truncation). The capture MATRIX, not the signal, is the usual limitation.
+- **`analysis/`** — the reusable harness: `gen_test_signal.py` (comprehensive A/B signal) +
+  `analyze.py` (load/align, FR, THD, Farina swept-THD, sub-sample null, filename parser).
 - **`docs/ui-peripheral-spec.md`** — full visual spec for the reusable UI elements.
 - **`src/ui/`** — drop-in `PedalLookAndFeel`, `VUMeter`, `ThreePositionSwitch`, `LEDIndicator`.
 - **`src/utils/TaperUtils.h`** — taper helpers (note `audioTaperR0` for large gain pots).
@@ -48,9 +55,15 @@ Put the schematic images in `schematics/` and load them whenever verifying a cir
 6. **Oversampling + ADAA** on the nonlinear stage — verify aliasing reduction. Use AccurateOmega
    (not chowdsp's default omega4). Add a separate render-time OS factor.
 7. **Full-chain integration + level calibration** — anchor `kInputRef` from a real measurement;
-   set output makeup ≈ 0.9; verify no >0 dBFS at the loudest setting.
+   **calibrate output makeup to the reference captures** (may exceed 1.0; don't pad for headroom —
+   calibration doc §2). Build an `OfflineRender` console exe mirroring `processBlock` for A/B.
 8. **UI** — reuse the peripheral elements; design the centre pedal face per this pedal.
-9. **Final sweep** — all controls full range: no instability, clicks, NaN/Inf, or output clipping.
+9. **Reference validation** — generate the comprehensive signal (`analysis/gen_test_signal.py`),
+   capture the pedal per `docs/validation-and-capture.md`, and A/B with the harness: FR (1/3-oct),
+   continuous swept-THD, null depth, knob-tracking pass/fail. Decompose any level deficit (§4)
+   before changing constants.
+10. **Final sweep** — all controls full range: no instability, clicks, or NaN/Inf. (Output > 0 dBFS
+    at extreme drive+volume is faithful, not a fault — the output trim manages it.)
 
 ## Current step
 

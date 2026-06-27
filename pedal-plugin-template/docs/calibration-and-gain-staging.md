@@ -60,27 +60,38 @@ so metering and true-bypass passthrough stay honest.
 
 ---
 
-## 2. Output makeup: should be ~1.0, used as a headroom pad
+## 2. Output makeup: CALIBRATE it to the captures — not to a headroom target
 
-With `K` anchored at both ends, the **physically-honest** makeup multiplier is **1.0**: the output
-float then represents the real circuit output voltage at the same scale as the input. The circuit's
-own gain sets where unity lands on the volume sweep — you are NOT forcing it.
+With `K` anchored at both ends, **1.0 is the physically-honest STARTING estimate**: the output float
+then represents the real circuit output voltage at the same scale as the input. But the
+**authoritative anchor is a level-match to the reference captures**, not a number you reason out for
+headroom. Render the plugin at a clean, sub-clipping setting and find the makeup that makes its
+output level equal the real pedal's there. That value is correct **even if it exceeds 1.0**.
 
-So why deviate from 1.0 at all? **Headroom.** A drive circuit genuinely amplifies (an op-amp
-recovery stage is often +6 dB), so the loudest internal voltage (the rail, e.g. ~3.4 V) maps to
-`3.4 / K` at the output. If that exceeds 1.0 it ticks over 0 dBFS:
+> **Hard-won correction (this section used to say "use ~0.9 as a headroom pad, keep output < 0 dBFS"
+> — that was WRONG and cost real debugging).** On the reference build, 0.9 left the plugin a
+> rock-constant **~2.6 dB quieter** than the authoritative captures at every clean setting. The fix
+> was makeup **1.217** (+2.6 dB, anchored on the cleanest pure-linear no-drive capture): it took
+> level agreement from 0/23 to 16/23 captures **and** independently landed unity at exactly the real
+> pedal's unity position (≈1 o'clock) — two independent facts agreeing, strong evidence it's right.
+> A real cranked drive pedal **genuinely exceeds 0 dBFS** at high drive + volume; that's faithful,
+> not a bug. **Do NOT pad it down to keep output under 0 dBFS — that breaks the A/B level match.**
+> The user's **output trim** (and the volume knob) manage headroom; makeup's job is fidelity. (The
+> internal float path can't clip anyway — §5.)
 
-| makeup | worst-case peak (rail 3.4 V, K 3.27) |
-|--------|--------------------------------------|
-| 1.0    | +0.34 dBFS  (clips)                  |
-| 0.9    | −0.6 dBFS   (honest to ~1 dB, safe) |
-| 0.8    | −1.6 dBFS   (comfortable)           |
+Procedure:
+1. **Have captures:** level-match makeup to them at a clean setting — but **decompose the deficit
+   first** (`validation-and-capture.md` §4) so you fix the right thing.
+2. **Cross-check:** unity (output = input at min drive / no cut) should land at the volume position
+   the REAL pedal does (often ~1 o'clock). Capture-matched makeup landing unity there = confirmation.
+3. **No captures yet:** use ~1.0 as an interim; revisit once you can A/B — don't ship a
+   headroom-padded guess as final.
 
-**Use ~0.9**: closest to real behaviour while guaranteeing the output never exceeds 0 dBFS. It is a
-deliberate ~1 dB safety pad, **not** a calibration crutch. Tune within 0.8–1.0 to taste.
-
-> The makeup is the ONLY legitimately non-circuit scalar in the whole chain. If you find yourself
-> needing it far from 1.0 to get unity, your `kInputRef` or a taper is wrong — fix that, not this.
+> Makeup is the ONLY legitimately non-circuit scalar, and it's a single FLAT multiplier — so use it
+> ONLY for the flat (level-independent) part of a deficit. If the gap **grows with drive**, that's
+> the clipping ceiling (fixing it with makeup throws off every clean setting — see the "go hotter"
+> trap below). If it differs by **volume position**, it's the volume taper. Localize before reaching
+> for makeup.
 
 ---
 
@@ -231,7 +242,9 @@ masked. If you change the output makeup, the idle floor moves with it — re-che
 
 - [ ] `kInputRef` measured from YOUR interface + pickups, not copied blindly.
 - [ ] Every pot taper sanity-checked at x=0 and x=1 against the schematic (esp. 0 Ω minimums).
-- [ ] Makeup ≈ 0.9; verify the loudest setting (full drive + full volume) peaks < 0 dBFS.
+- [ ] Makeup level-matched to the reference captures at a clean setting (NOT padded for headroom;
+      may exceed 1.0). Cross-check: unity lands at the real pedal's unity position (≈1 o'clock).
+      Exceeding 0 dBFS at full drive+volume is faithful — the output trim manages it (§2).
 - [ ] Op-amp rails clamped on every op-amp output; worst-case node measured.
 - [ ] Cut controls map x→cut (knob up = more cut), not inverted.
 - [ ] Gain/drive taper fit from THD-vs-drive captures, not the audio approximation.

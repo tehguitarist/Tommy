@@ -183,6 +183,10 @@ jobs:
           Write-Host "Using makensis at $makensisPath"
           & $makensisPath /DVERSION=$version /DARTEFACTS_DIR="$PWD\build\<Pedal>_artefacts\Release\VST3" installer\windows\Pedal.nsi
 
+          # NSIS resolves a relative OutFile against the .nsi's own directory, not this process's
+          # CWD — move the built installer to the repo root so the upload-artifact glob finds it.
+          Move-Item "installer\windows\<Pedal>-Windows-v$version-Installer.exe" .
+
       - uses: actions/upload-artifact@v6
         with:
           name: <Pedal>-Windows

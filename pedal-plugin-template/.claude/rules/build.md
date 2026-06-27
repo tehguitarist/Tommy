@@ -71,6 +71,12 @@ remove/re-add the plugin.
 - Throwaway measurement probes (gain, rail levels) are fine standalone:
   `c++ -std=c++17 -O2 -I libs/chowdsp_wdf/include tests/Probe.cpp -o build/Probe` (works for
   headers that only pull chowdsp_wdf, not JUCE).
+- **UI changes: render the actual editor headlessly to an image, don't eyeball-only.** A small
+  console exe that constructs the real `AudioProcessorEditor` off-screen, paints it into a
+  `juce::Image`, and writes a PNG lets you verify layout/colour/scale changes (including at
+  different UI-scale factors) with no DAW and no physical display attached — useful in CI or over
+  SSH. Cheap to add (`juce_add_console_app`) and catches layout regressions a build-success check
+  alone won't.
 
 ## Code style
 
@@ -88,13 +94,63 @@ they activate once you copy the template out.
 - **ci.yml** — builds + runs `ctest` on macOS/Windows/Linux on every push/PR. Register each pass/fail
   test exe with `add_test()` (see `CMakeLists.txt.template`) so the whole suite runs as one gate.
 - **release.yml** — `workflow_dispatch` ONLY (no push trigger, so a release is never cut by accident):
-  builds VST3 (+ AU on macOS) on all three OSes, zips one archive per platform, publishes a draft
-  GitHub Release. macOS artifacts are unsigned until you wire up codesign/notarytool.
+  builds VST3 (+ AU on macOS) on all three OSes, packages a per-platform installer (see below)
+  alongside a raw zip, publishes a draft GitHub Release. macOS signing/notarization steps are
+  wired in but gated on secrets that don't exist until you add them (see "macOS signing" below) —
+  delete those steps if you don't want signed releases yet; without them, Gatekeeper just warns on
+  first launch and the plugin still works.
 - **auval on CI gotcha:** a freshly-copied `.component` isn't registered with the
   `AudioComponentRegistrar` on a clean runner, so `auval` fails with "didn't find the component" /
   `-50`. Bounce the registrar (`killall -9 AudioComponentRegistrar`) and retry — the ci.yml step
   already does this. If headless `auval` stays flaky, switch to **pluginval** (validates the built
   bundle directly, no OS registration, cross-platform so it covers the VST3 too).
+
+### macOS signing + notarization
+
+Requires an active Apple Developer Program membership ($99/yr; Developer ID certs aren't available
+on a free account). Six GitHub Actions secrets, all referenced by `release.yml`'s `macos` job:
+
+| Secret | What it is |
+|---|---|
+| `APPLE_CERT_P12_BASE64` | `base64 -i DeveloperIDApplication.p12` of your exported Developer ID Application cert |
+| `APPLE_CERT_PASSWORD` | the password the `.p12` was exported with |
+| `APPLE_SIGNING_IDENTITY` | e.g. `Developer ID Application: Name (TEAMID)` — copy exactly from `security find-identity -v -p codesigning` |
+| `APPLE_TEAM_ID` | your 10-character Apple Developer Team ID |
+| `APPLE_ID` | the Apple ID email used for notarization |
+| `APPLE_APP_SPECIFIC_PASSWORD` | an app-specific password for that Apple ID (generate at appleid.apple.com → Sign-In and Security, NOT your main password) |
+
+To get the cert: developer.apple.com/account/resources/certificates → **+** → **Developer ID
+Application** → upload a CSR generated via Keychain Access (Certificate Assistant → Request a
+Certificate from a CA → Saved to disk) → download and double-click the `.cer` to install it →
+export it + its private key from Keychain Access as a `.p12` (this is what gets base64'd).
+
+Set secrets via `gh secret set <NAME>` (reads from stdin/`--body`; omit the value to get a
+non-echoing interactive prompt) — re-set the cert + its password **together** if either ever needs
+changing, to avoid a stale-pairing mismatch (`SecKeychainItemImport: MAC verification failed`,
+i.e. "wrong password" — almost always means the `.p12` and password secrets don't actually match).
+
+### Installers
+
+`installer/macos/`, `installer/windows/`, `installer/linux/` hold basic per-platform installer
+scripts/configs, wired into `release.yml`'s "Build installer" step in each platform job:
+
+- **macOS** (`build_installer.sh` + `Distribution.xml`) — a `.pkg` built via `pkgbuild` +
+  `productbuild`, with a **choice screen for AU vs VST3** (both selected by default — this is the
+  one platform with two formats, so it's the only one that needs a choice screen at all). Wraps
+  whatever bundles are on disk, signed/notarized or not; the `.pkg` wrapper itself is NOT signed
+  (that needs a separate "Developer ID Installer" cert, not provisioned by the secrets above) —
+  double-clicking it directly may show an "unidentified developer" prompt even when the AU/VST3
+  bundles inside are properly signed and notarized.
+- **Windows** (`Pedal.nsi`, NSIS) — VST3 only (no AU on Windows). `makensis` ships on
+  `windows-latest` runners but is **not on PATH** — locate it via `Get-Command` / common install
+  paths first, falling back to `choco install nsis` (see the release.yml step for the exact logic;
+  don't assume a bare `makensis` call works).
+- **Linux** (`build_deb.sh` + `control`) — VST3 only (no AU on Linux), a `.deb` via `dpkg-deb`
+  (preinstalled on `ubuntu-latest`).
+
+All three scripts take `<version> [artefacts-dir] [output-dir]` and expect the relevant build
+targets already built. Rename `<Pedal>` placeholders throughout (including inside `Pedal.nsi`'s
+filename and `installer/linux/control`'s package name/maintainer) when copying the template out.
 
 ## Validation gates (do not skip ahead)
 

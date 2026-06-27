@@ -160,7 +160,26 @@ jobs:
         shell: pwsh
         run: |
           $version = "${{ needs.version.outputs.version }}"
-          makensis /DVERSION=$version /DARTEFACTS_DIR="$PWD\build\Tommy_artefacts\Release\VST3" installer\windows\Tommy.nsi
+
+          $makensis = Get-Command makensis.exe -ErrorAction SilentlyContinue
+          if ($makensis) {
+            $makensisPath = $makensis.Source
+          } else {
+            $candidates = @(
+              "$env:ProgramFiles\NSIS\makensis.exe",
+              "${env:ProgramFiles(x86)}\NSIS\makensis.exe"
+            )
+            $makensisPath = $candidates | Where-Object { Test-Path $_ } | Select-Object -First 1
+          }
+
+          if (-not $makensisPath) {
+            Write-Host "makensis not found on this runner — installing via Chocolatey"
+            choco install nsis -y --no-progress
+            $makensisPath = "${env:ProgramFiles(x86)}\NSIS\makensis.exe"
+          }
+
+          Write-Host "Using makensis at $makensisPath"
+          & $makensisPath /DVERSION=$version /DARTEFACTS_DIR="$PWD\build\Tommy_artefacts\Release\VST3" installer\windows\Tommy.nsi
 
       - uses: actions/upload-artifact@v6
         with:

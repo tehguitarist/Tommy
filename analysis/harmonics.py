@@ -7,7 +7,7 @@ import sys, subprocess, os, numpy as np
 import analyze as A
 
 REND = "build/OfflineRender_artefacts/Release/OfflineRender"
-orig = A.load("analysis/tommy_test_signal_48k.wav"); orig.astype(np.float32).tofile("/tmp/o.f32")
+orig = A.load(A.ORIG); orig.astype(np.float32).tofile("/tmp/o.f32")  # follows SIGNAL=v1/v2
 FS = 48000
 
 parse = A.parse_filename   # consolidated parser now lives in analyze.py (handles all batches)

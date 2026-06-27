@@ -17,7 +17,7 @@ import analyze as A   # reuse aligned transfer / level / thd helpers + the share
 
 import os as _os
 REND = "build/OfflineRender_artefacts/Release/OfflineRender"
-ORIG = "analysis/tommy_test_signal_48k.wav"
+ORIG = A.ORIG   # follows SIGNAL=v1/v2 (set in analyze.use_layout); don't hardcode the v1 path
 NAMDIR = _os.environ.get("NAMDIR", "analysis/pedal_results")
 OSLOG2 = 3  # 8x — take aliasing off the table
 KIN = _os.environ.get("KIN", "")  # override kInputRef; empty = plugin default

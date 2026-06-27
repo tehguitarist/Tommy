@@ -65,12 +65,15 @@ ordering): one hot setting (Drive 5:00, switch up, Volume 12:00) at the 9 / 12 /
 ## After capturing
 
 1. Drop the files in `analysis/pedal_results6/`.
-2. The harness already parses the filenames and skips short files; run:
-   - `FINE=1 NAMDIR=analysis/pedal_results6 python3 analysis/run_compare.py` (EQ + level)
-   - `python3 analysis/knob_tracking.py analysis/pedal_results6` (pass/fail)
-   - `python3 analysis/null_test.py analysis/pedal_results6` (null depth)
+2. **Set `SIGNAL=v2`** — the harness then reads the v2 layout (from `gen_test_signal_v2`) and the
+   v2 signal file automatically; it parses the filenames and skips short files as before. Run:
+   - `SIGNAL=v2 FINE=1 NAMDIR=analysis/pedal_results6 python3 analysis/run_compare.py` (EQ + level)
+   - `SIGNAL=v2 python3 analysis/knob_tracking.py analysis/pedal_results6` (pass/fail)
+   - `SIGNAL=v2 python3 analysis/null_test.py analysis/pedal_results6` (null depth)
+   - `SIGNAL=v2 python3 analysis/swept_thd.py --matrix analysis/pedal_results6` (continuous THD)
 3. The Volume sweep lets us finally fit the volume taper (the open batch-3 V0.4 ~4 dB residual) and
    the bypass anchor lets us state absolute level with confidence.
-4. Note: v2 segment names differ from v1 (`sweep_drv_-12` etc.). When batch 6 lands, point the
-   analyzer at the v2 layout via `gen_test_signal_v2.segment_times()` (its single source of truth) —
-   the v1 path stays as-is for batches 1–5.
+4. The v2 analysis path is already wired + dry-run-validated (plugin-through-v2 self-null −306 dB,
+   EQ delta +0.00 dB). `SIGNAL=v2` is the only switch needed; the v1 path stays the default so
+   batches 1–5 are byte-for-byte unchanged. v1-named requests (`sweep_driven`, `lvl-12`, `f110`…)
+   are aliased onto the v2 segments, so every existing tool works against batch 6 unchanged.

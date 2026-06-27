@@ -10,29 +10,59 @@ Each render is auto-aligned to the original (cross-correlation, handles plugin l
   - freq steps   -> THD / harmonic content per frequency (clipping character)
 Outputs a text report; saves PNG overlays if matplotlib is present.
 """
-import sys, re, numpy as np
+import os, sys, re, numpy as np
 from scipy.io import wavfile
 from scipy import signal as sps
 
 FS = 48000
-ORIG = "analysis/tommy_test_signal_48k.wav"
 
-# Segment layout (seconds) — must match gen_test_signal.py
+# --- Signal layout selection (v1 default; v2 = the comprehensive batch-6 signal) ----------------
+# All tools read A.ORIG and A.T, so switching the layout retargets the whole harness. Select with
+# the SIGNAL env var: SIGNAL=v2 uses tommy_test_signal_v2_48k.wav + gen_test_signal_v2's layout.
+# v1 stays the default so batches 1-5 and existing runs are byte-for-byte unchanged.
+ORIG = "analysis/tommy_test_signal_48k.wav"
 T = {}
-def _build_layout():
-    cur = 0.0
+
+def _build_layout_v1():
+    """v1 layout — must match gen_test_signal.py."""
+    T.clear()
+    cur = [0.0]
     def seg(name, dur):
-        nonlocal cur
-        T[name] = (cur, cur + dur); cur += dur
+        T[name] = (cur[0], cur[0] + dur); cur[0] += dur
     seg("sil0", 0.5); seg("cal", 1.0); seg("sil1", 0.5)
     seg("sweep_clean", 10.0); seg("sil2", 0.5)
     seg("sweep_driven", 10.0); seg("sil3", 0.5)
-    lvl = {}
     for db in (-24, -18, -12, -6):
         seg(f"lvl{db}", 1.0); seg(f"lvl{db}_g", 0.3)
     for f in (82.41, 110, 220, 440, 1000, 2000, 5000):
         seg(f"f{f}", 1.0); seg(f"f{f}_g", 0.3)
-_build_layout()
+
+def _build_layout_v2():
+    """v2 layout — imported from gen_test_signal_v2 (its segment_times() is the source of truth),
+    PLUS v1-compatible aliases so the existing tools (which ask for 'sweep_clean', 'sweep_driven',
+    'lvl-12', 'f110', ...) work unchanged against v2 captures."""
+    import gen_test_signal_v2 as g2
+    T.clear()
+    T.update(g2.segment_times())
+    aliases = {"cal": "cal_1k", "sweep_driven": "sweep_drv_-12",
+               "lvl-24": "lvl_-24", "lvl-18": "lvl_-18", "lvl-12": "lvl_-12", "lvl-6": "lvl_-6",
+               "f82.41": "tone_82.41", "f110": "tone_110", "f220": "tone_220", "f440": "tone_440",
+               "f1000": "tone_1000", "f2000": "tone_2000"}
+    for old, new in aliases.items():
+        if new in T:
+            T[old] = T[new]
+
+def use_layout(version):
+    """Select 'v1' or 'v2'; sets ORIG + rebuilds T. Tools call A.seg_of/A.ORIG, so this is global."""
+    global ORIG
+    if version == "v2":
+        ORIG = "analysis/tommy_test_signal_v2_48k.wav"
+        _build_layout_v2()
+    else:
+        ORIG = "analysis/tommy_test_signal_48k.wav"
+        _build_layout_v1()
+
+use_layout(os.environ.get("SIGNAL", "v1"))
 
 def load(path):
     sr, x = wavfile.read(path)
@@ -194,6 +224,8 @@ def main():
     hdr = "freq Hz | " + " | ".join(f"{l:>8}" for l in renders)
     print(hdr); print("-" * len(hdr))
     for f in (82.41, 110, 220, 440, 1000, 2000, 5000):
+        if f"f{f}" not in T:   # e.g. v2 layout dropped 5000 — skip cleanly instead of KeyError
+            continue
         row = f"{f:>7.0f} | " + " | ".join(f"{thd(seg_of(x, f'f{f}'), f)[0]:>8.1f}" for x in renders.values())
         print(row)
 

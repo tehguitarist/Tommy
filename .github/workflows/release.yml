@@ -5,9 +5,9 @@ name: Release
 # release.yml`. Builds VST3 for macOS/Windows/Linux (+ AU on macOS), zips one archive per
 # platform, and publishes them to a GitHub Release tagged from the version in CMakeLists.txt.
 #
-# macOS artifacts are currently UNSIGNED (Apple Developer ID signing + notarization is planned
-# for the 0.8 release — see CLAUDE.md's Roadmap section). Expect a Gatekeeper warning on first
-# launch until that lands.
+# macOS artifacts are signed with a Developer ID Application certificate and notarized via
+# notarytool, using secrets configured in the repo (APPLE_CERT_P12_BASE64, APPLE_CERT_PASSWORD,
+# APPLE_SIGNING_IDENTITY, APPLE_TEAM_ID, APPLE_ID, APPLE_APP_SPECIFIC_PASSWORD).
 
 on:
   workflow_dispatch:
@@ -49,11 +49,70 @@ jobs:
       - name: Build AU + VST3
         run: cmake --build build --config Release --target Tommy_AU --target Tommy_VST3 --parallel
 
+      - name: Import signing certificate
+        env:
+          APPLE_CERT_P12_BASE64: ${{ secrets.APPLE_CERT_P12_BASE64 }}
+          APPLE_CERT_PASSWORD: ${{ secrets.APPLE_CERT_PASSWORD }}
+        run: |
+          KEYCHAIN_PATH="$RUNNER_TEMP/signing.keychain-db"
+          KEYCHAIN_PASSWORD=$(uuidgen)
+          CERT_PATH="$RUNNER_TEMP/cert.p12"
+
+          echo "$APPLE_CERT_P12_BASE64" | base64 --decode -o "$CERT_PATH"
+
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security import "$CERT_PATH" -k "$KEYCHAIN_PATH" -P "$APPLE_CERT_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security list-keychain -d user -s "$KEYCHAIN_PATH" $(security list-keychains -d user | sed 's/"//g')
+
+          rm -f "$CERT_PATH"
+          echo "KEYCHAIN_PATH=$KEYCHAIN_PATH" >> "$GITHUB_ENV"
+
+      - name: Sign AU + VST3
+        env:
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+        run: |
+          for bundle in \
+            "build/Tommy_artefacts/Release/AU/Tommy.component" \
+            "build/Tommy_artefacts/Release/VST3/Tommy.vst3"; do
+            codesign --force --deep --options runtime --timestamp \
+              --sign "$APPLE_SIGNING_IDENTITY" --keychain "$KEYCHAIN_PATH" "$bundle"
+            codesign --verify --deep --strict --verbose=2 "$bundle"
+          done
+
+      - name: Notarize AU + VST3
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          NOTARIZE_ZIP="$RUNNER_TEMP/notarize.zip"
+          NOTARIZE_DIR="$RUNNER_TEMP/notarize"
+          mkdir -p "$NOTARIZE_DIR"
+          cp -R "build/Tommy_artefacts/Release/AU/Tommy.component" "$NOTARIZE_DIR/"
+          cp -R "build/Tommy_artefacts/Release/VST3/Tommy.vst3" "$NOTARIZE_DIR/"
+          ditto -c -k --keepParent "$NOTARIZE_DIR" "$NOTARIZE_ZIP"
+
+          xcrun notarytool submit "$NOTARIZE_ZIP" \
+            --apple-id "$APPLE_ID" \
+            --password "$APPLE_APP_SPECIFIC_PASSWORD" \
+            --team-id "$APPLE_TEAM_ID" \
+            --wait
+
+          xcrun stapler staple "build/Tommy_artefacts/Release/AU/Tommy.component"
+          xcrun stapler staple "build/Tommy_artefacts/Release/VST3/Tommy.vst3"
+
       - name: Package
         run: |
           VERSION="${{ needs.version.outputs.version }}"
           ditto -c -k --sequesterRsrc --keepParent \
             build/Tommy_artefacts/Release "Tommy-macOS-v${VERSION}.zip"
+
+      - name: Clean up keychain
+        if: always()
+        run: security delete-keychain "$KEYCHAIN_PATH" || true
 
       - uses: actions/upload-artifact@v6
         with:

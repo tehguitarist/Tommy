@@ -228,10 +228,19 @@ All three are in `schematics/` at the repo root. Load them when verifying any ci
   (b) chase the two documented residuals if desired (full-drive clip-scaling ~2 dB; V0.4 volume
   taper ~4 dB — the latter needs a **batch-6 Volume-sweep reamp**, the one capture gap, since no
   batch varies Volume); (c) the EQ-shape SHAPE-fails are the known V4-linear-treble trade.
-  Also still TODO: real Apple Developer ID signing + notarization for macOS release artifacts (wire
-  up codesign/notarytool steps in `release.yml`, gated on the secrets `APPLE_CERTIFICATE_P12`,
-  `APPLE_CERTIFICATE_PASSWORD`, `APPLE_TEAM_ID`, plus notarization credentials).
-- **v0.9 TODO:** Factory presets.
+  **DONE (2026-06-28):** Apple Developer ID signing + notarization wired into `release.yml`'s
+  `macos` job — imports the cert into a temporary keychain (`APPLE_CERT_P12_BASE64` +
+  `APPLE_CERT_PASSWORD`), codesigns both AU and VST3 bundles (`APPLE_SIGNING_IDENTITY`, hardened
+  runtime + timestamp), submits to `notarytool` (`APPLE_ID` + `APPLE_APP_SPECIFIC_PASSWORD` +
+  `APPLE_TEAM_ID`, `--wait`), staples the ticket, then packages and deletes the temp keychain.
+  Untested end-to-end (no release run yet since secrets were added) — verify on the next
+  `workflow_dispatch` run before calling v0.8 final.
+- **v0.9 DONE (2026-06-28):** 5 factory presets (Bluesy OD, Rhythm Crunch, Rock Lead, High Gain,
+  Edge-of-Breakup) wired via the standard JUCE program API (`getNumPrograms`/`setCurrentProgram`/
+  `getProgramName` in `PluginProcessor.cpp`) — exposed in any host's preset menu. Knob values are
+  stored as physical 0-10 dial positions (matching printed pedal markings) in `factoryPresets`,
+  converted to the 0-1 APVTS normalised range via `setValueNotifyingHost` at apply time. auval +
+  7 ctests still pass.
 - **v1.0 TODO:** Simple per-platform installers, if JUCE/CMake tooling supports it without
   disproportionate effort (e.g. `pkgbuild`/`productbuild` on macOS, NSIS/WiX on Windows,
   `.deb`/AppImage on Linux) — evaluate feasibility at the time, not committed yet.

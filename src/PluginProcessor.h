@@ -47,6 +47,18 @@ public:
 private:
     static juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout();
 
+    // Factory presets (Step 9.5 / v0.9). Knob values stored as physical 0-10 dial positions
+    // (matching the printed pedal markings), converted to the 0-1 APVTS range at apply time.
+    struct FactoryPreset
+    {
+        const char* name;
+        float bass, drive, treble, volume; // 0-10 dial position
+        int clipMode; // 0=Asymmetric, 1=Open, 2=Symmetric
+    };
+    static const std::array<FactoryPreset, 5> factoryPresets;
+
+    int currentProgramIndex { 0 };
+
     // Input reference: volts-per-full-scale. Anchors the DAW float to real guitar volts so the
     // nonlinear stages (diodes ~0.3-0.6V, op-amp rails) clip at the physically correct point.
     // Scaled UP entering the WDF chain and DOWN by 1/kInputRef leaving it, so it cancels in the

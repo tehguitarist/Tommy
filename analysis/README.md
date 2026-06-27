@@ -73,3 +73,44 @@ analysis/.venv/bin/python3 analysis/knob_tracking.py analysis/pedal_results3 ana
 # Hot batch uses a higher input reference
 KIN=2.4 analysis/.venv/bin/python3 analysis/knob_tracking.py analysis/pedal_results5
 ```
+
+## Validation summary (v0.8, 2026-06-28)
+
+Headline numbers from the validation pass that drove the v0.8 calibration changes (`kOutputMakeup`
+0.9→1.217, the diode-mismatch even-harmonic fix). Captured against batches 3/4/5 (the authoritative
+NAM reference — see Capture batches above); the raw WAVs are local-only (`.gitignore`'d, not in the
+repo) so these figures are carried over from that session rather than re-derived live.
+
+**Null depth** (`null_test.py`, sub-sample-aligned, level-matched):
+- Best clean null: **−13.5 dB** residual.
+- Below ~2 kHz: −5 to −6 dB residual in every clip mode.
+- 2–6 kHz: residual closes to ≈0 dB (i.e. no further cancellation) in every mode.
+- Diagnosis: the 2–6 kHz residual is harmonic **phase** decorrelation, not a magnitude/level error —
+  expected for a null test against a separately-recorded NAM capture, not a sign of a tone/level bug.
+  Magnitude (the EQ/level numbers below) already matches; this is the ceiling of what a null test can
+  show here.
+
+**THD by band / harmonic profile** (`swept_thd.py --matrix`, `harmonics.py`):
+- Odd-harmonic content and overall THD track the real pedal within ~1 dB across the drive × clipping
+  mode sweep once the input level is correctly matched (batch 5, +6 dB hot reamp) — the earlier
+  "high-drive THD ceiling" was mostly a level-calibration artifact, not a clipping-model gap.
+- H2 (even harmonic, 440 Hz, drive ≈ 5 o'clock), real vs plugin:
+  - Soft: −55 dB vs −51 dB
+  - Medium: −49 dB vs −51 dB
+  - Hard: −34 dB vs −34 dB (exact)
+  Closed by `AsymDiodePairT` — a deliberately mismatched antiparallel diode pair
+  (`kSymMismatch=0.06` Soft/Medium, `kAsymMismatch=0.45` Hard) standing in for real 1N4148
+  manufacturing tolerance, which a "perfect" symmetric model can't produce.
+- Known residual (not chased further): ~2 dB quiet at full drive — a clip-output-scaling effect
+  isolated to the top of the Gain range, confounded with harmonic content in the existing captures,
+  so not resolvable without a cleaner low-drive sweep.
+
+**Level (`run_compare.py` / `knob_tracking.py`)**:
+- Pre-fix: plugin was a rock-constant **~2.6 dB quiet** at every clean (sub-clipping) setting,
+  independent of input level and volume position — a pure linear-gain deficit, not a taper-shape
+  error. Anchored on the cleanest available point (pure-linear batch-4 no-drive file): deficit
+  −2.62 dB dead-constant across −24/−18/−12 dBFS.
+- Fix: `kOutputMakeup` 0.9 → 1.217 (+2.62 dB). LEVEL pass rate across the `knob_tracking.py`
+  threshold check went **0/23 → 16/23** captures.
+- Remaining SHAPE fails are the accepted V4-linear-treble trade (see CLAUDE.md's taper notes), not a
+  level issue.

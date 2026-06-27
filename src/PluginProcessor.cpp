@@ -70,6 +70,14 @@ juce::AudioProcessorValueTreeState::ParameterLayout TommyAudioProcessor::createP
     return { params.begin(), params.end() };
 }
 
+const std::array<TommyAudioProcessor::FactoryPreset, 5> TommyAudioProcessor::factoryPresets { {
+    { "Bluesy OD",        5.0f, 3.0f, 5.0f, 6.0f,   2 },
+    { "Rhythm Crunch",    4.0f, 4.5f, 4.5f, 7.0f,   1 },
+    { "Rock Lead",        3.5f, 6.5f, 4.5f, 7.5f,   1 },
+    { "High Gain",        7.5f, 8.0f, 4.0f, 6.5f,   0 },
+    { "Edge-of-Breakup",  5.5f, 4.0f, 4.5f, 6.5f,   1 },
+} };
+
 void TommyAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
 {
     currentSampleRate = sampleRate;
@@ -269,25 +277,46 @@ double TommyAudioProcessor::getTailLengthSeconds() const
 
 int TommyAudioProcessor::getNumPrograms()
 {
-    return 1;
+    return (int) factoryPresets.size();
 }
 
 int TommyAudioProcessor::getCurrentProgram()
 {
-    return 0;
+    return currentProgramIndex;
 }
 
-void TommyAudioProcessor::setCurrentProgram (int)
+void TommyAudioProcessor::setCurrentProgram (int index)
 {
+    if (index < 0 || index >= (int) factoryPresets.size())
+        return;
+
+    currentProgramIndex = index;
+    const auto& preset = factoryPresets[(size_t) index];
+
+    auto setNorm = [this] (const char* paramId, float normalised)
+    {
+        if (auto* param = apvts.getParameter (paramId))
+            param->setValueNotifyingHost (normalised);
+    };
+
+    setNorm ("bass", preset.bass / 10.0f);
+    setNorm ("drive", preset.drive / 10.0f);
+    setNorm ("treble", preset.treble / 10.0f);
+    setNorm ("volume", preset.volume / 10.0f);
+    setNorm ("clipping_mode", (float) preset.clipMode / 2.0f); // 3 choices -> normalised index/2
 }
 
-const juce::String TommyAudioProcessor::getProgramName (int)
+const juce::String TommyAudioProcessor::getProgramName (int index)
 {
-    return {};
+    if (index < 0 || index >= (int) factoryPresets.size())
+        return {};
+
+    return factoryPresets[(size_t) index].name;
 }
 
 void TommyAudioProcessor::changeProgramName (int, const juce::String&)
 {
+    // Factory presets are read-only; hosts that allow renaming have nothing to persist here.
 }
 
 void TommyAudioProcessor::getStateInformation (juce::MemoryBlock& destData)

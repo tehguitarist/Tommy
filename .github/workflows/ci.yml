@@ -55,4 +55,16 @@ jobs:
 
       - name: Validate AU (auval)
         if: runner.os == 'macOS'
-        run: auval -v aufx Tom1 LeP1
+        run: |
+          # On a clean CI runner the freshly-copied .component isn't registered with the
+          # AudioComponentRegistrar yet, so auval reports "didn't find the component" / -50.
+          # Bounce the registrar so it rescans ~/Library/Audio/Plug-Ins/Components and retry.
+          ls -la "$HOME/Library/Audio/Plug-Ins/Components/" || true
+          ok=0
+          for i in 1 2 3 4; do
+            if auval -v aufx Tom1 LeP1; then ok=1; break; fi
+            echo "::warning::auval attempt $i failed; bouncing AudioComponentRegistrar and retrying"
+            killall -9 AudioComponentRegistrar 2>/dev/null || true
+            sleep 5
+          done
+          [ "$ok" = 1 ]

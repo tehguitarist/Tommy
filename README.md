@@ -68,9 +68,12 @@ exponential-sweep harmonic separation, and a level-matched null test). Measured 
 - **Output level** matches the real pedal within ~±0.5 dB at and above noon volume, with unity
   gain landing at 1 o'clock as on the real pedal.
 - A **level-matched null** against the captures reaches about **−14 dB** at the cleanest
-  settings and **−8 to −12 dB** across the range. (Nulling against a NAM capture has an inherent
-  floor — the capture is itself a model, and the phase of clipping harmonics decorrelates — so
-  this measures timbre/feel agreement, not a sample-exact match.)
+  settings and **−8 to −12 dB** across the range. About half of that residual is linear
+  (EQ-shape + phase): after correcting linear differences, the **purely nonlinear residual — the
+  real measure of how well the clipping itself matches — is ~−20 dB across all three modes.**
+  (Nulling against a NAM capture has an inherent floor — the capture is itself a model, and the
+  phase of clipping harmonics decorrelates — so this measures timbre/feel agreement, not a
+  sample-exact match.)
 
 None of this is neural-net or sample-based modelling — every stage is an analytic circuit solve,
 so the plugin's behavior generalizes to settings and signal levels that were never explicitly

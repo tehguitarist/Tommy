@@ -48,22 +48,33 @@ EQ curves.
 
 ## Circuit accuracy
 
-Tommy's response was validated against real-pedal reamp captures rather than tuned by
-ear alone:
+Tommy's response was validated against real-pedal reamp captures rather than tuned by ear
+alone. The plugin is rendered through the exact same DSP and gain staging it ships with, then
+compared to the captures across dozens of knob settings using the analysis harness in
+[`analysis/`](analysis/) (1/3-octave frequency response, continuous THD-vs-frequency via
+exponential-sweep harmonic separation, and a level-matched null test). Measured results:
 
-- Bass and treble frequency response match the real pedal's cut curves within roughly
-  ±0.5 dB across the sweep
-- Second-harmonic level at high drive matches the real pedal within ~1 dB across all
-  three clipping modes (including the even-harmonic asymmetry mentioned above, which
-  a symmetric diode model can't reproduce)
-- Top-octave response (the part most sensitive to digital discretization error) is
-  within ±2 dB of the real pedal at the default oversampling factor — extending the
-  oversampled region to include the linear stages after the clipper closed most of a
-  several-dB gap that a 1x-only fix couldn't
+- **Frequency response** tracks the real pedal within about **±1.5 dB across 20 Hz–20 kHz**
+  once level-matched — tightest (~±0.5 dB) through the low end and midband, with the largest
+  deviations in the top treble at heavy-cut settings (a deliberate taper trade-off).
+- **Total harmonic distortion** tracks within **a few percent across 40 Hz–16 kHz** and across
+  every gain and clipping-mode setting; the model runs slightly under the real pedal only in
+  the 2–8 kHz band at very high drive.
+- **Second-harmonic level** at high drive matches within **~1 dB** across all three clipping
+  modes — including the even-harmonic asymmetry a symmetric diode model can't reproduce.
+- **Top-octave response** (most sensitive to digital discretization error) is within **±2 dB**
+  at the default oversampling factor — oversampling the linear stages after the clipper closed
+  most of a several-dB gap a 1x-only fix couldn't.
+- **Output level** matches the real pedal within ~±0.5 dB at and above noon volume, with unity
+  gain landing at 1 o'clock as on the real pedal.
+- A **level-matched null** against the captures reaches about **−14 dB** at the cleanest
+  settings and **−8 to −12 dB** across the range. (Nulling against a NAM capture has an inherent
+  floor — the capture is itself a model, and the phase of clipping harmonics decorrelates — so
+  this measures timbre/feel agreement, not a sample-exact match.)
 
-None of this is neural-net or sample-based modelling — every stage is an analytic
-circuit solve, so the plugin's behavior generalizes to settings and signal levels that
-were never explicitly captured.
+None of this is neural-net or sample-based modelling — every stage is an analytic circuit solve,
+so the plugin's behavior generalizes to settings and signal levels that were never explicitly
+captured.
 
 ## Controls
 

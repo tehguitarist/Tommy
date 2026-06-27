@@ -84,8 +84,19 @@ All three are in `schematics/` at the repo root. Load them when verifying any ci
 >   "boost zone" (a faithful cranked-Timmy overload, managed by the −12 dB output trim + volume knob)
 >   sits correspondingly higher; this MATCHES the real pedal's level, which is the whole point.
 >   KNOWN RESIDUALS (NOT masked with makeup — that's a crutch): ~2 dB quiet at full drive (clip-output
->   scaling = the documented clipping ceiling); batch-3 V0.4 still ~4 dB quiet (volume taper may be too
->   steep below noon, but confounded — needs the batch-6 Volume reamp to fit; no volume sweep exists yet).
+>   scaling = the documented clipping ceiling); the V0.4 ~3.5 dB deficit — **INVESTIGATED & CLOSED
+>   2026-06-27** (new v2 captures `analysis/pedal1` V0.4 + `analysis/pedal2` V0.5): it is a
+>   CAPTURE-GAIN discrepancy between the two sessions, NOT a taper error. Proof: the A25K + R11(18k)
+>   divider is PHYSICALLY forced to rise ~+3.3 dB from V0.4→V0.5 (R11 pins the upper arm ~constant in
+>   the lower range, so gain just tracks the wiper — true for ANY monotonic taper); the captures show
+>   V0.4≈V0.5 (flat), which is physically impossible for this pot+R11. Making it flat would need a
+>   CONCAVE taper (volume maxed by ~9 o'clock — bad feel, contradicts the spec'd A25K audio pot). The
+>   ~3.4 dB gap ≈ exactly the physical volume step = the tell of a per-session recording-gain offset.
+>   Volume model is physically correct and LEFT AS-IS; V0.5+ level matches spot-on (makeup 1.217
+>   validated by the fresh v2 captures), unity holds at 1 o'clock, everything matches when normalised.
+>   (Volume is a forward A25K + R11 divider — NOT reverse-wired like BASS/TREBLE; the bass convex
+>   x^2.41 came from bass being in the Stage-1 feedback gain-leg, a different mechanism that does not
+>   transfer to the volume output divider.)
 > - **Tapers (`utils/TaperUtils.h`) — V4 FINAL STATE (2026-06-21, user-chosen; web-verified taper
 >   types, see `timmy-pot-taper-research`).** BASS `50k·x^2.41`, DRIVE `1e6·x^2.2`, TREBLE
 >   `50k·x/(x+1)` (LINEAR-pot rheostat law), VOLUME A25K + **R11 18k**. BASS/TREBLE are CUT controls:

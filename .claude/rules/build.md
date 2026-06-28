@@ -41,6 +41,7 @@ Tommy/
 │   │   ├── TrebleNetwork.h
 │   │   ├── Stage2.h
 │   │   ├── Prewarp.h              ← bilinear-warp correction for tone/feedback caps
+│   │   ├── TopOctaveRestore.h     ← base-rate high-shelf: corrects low-OS top-octave droop
 │   │   └── TommyDSP.h             ← top-level DSP wrapper
 │   ├── ui/
 │   │   ├── TommyLookAndFeel.h / .cpp  ← all procedural drawing lives here
@@ -64,7 +65,10 @@ Tommy/
     ├── Stage2_RailProbe.cpp
     ├── Step6_Aliasing.cpp
     ├── Step7_Integration.cpp
-    └── VolumeCal_Probe.cpp
+    ├── VolumeCal_Probe.cpp
+    ├── PerfBenchmark.cpp           ← v1.1 CPU % / latency per OS factor (probe; README perf table)
+    ├── FeatureProfile.cpp          ← v1.1 per-feature CPU-vs-accuracy (probe; HQ-mode data)
+    └── OSFidelity.cpp              ← v1.1 FR + distortion fidelity at 1x/2x/4x vs 8x (probe)
 ```
 
 ## Build Commands

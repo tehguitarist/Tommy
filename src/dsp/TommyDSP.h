@@ -4,6 +4,7 @@
 #include "InputBuffer.h"
 #include "Stage1.h"
 #include "Stage2.h"
+#include "TopOctaveRestore.h"
 #include "TrebleNetwork.h"
 
 #include <cmath>
@@ -43,6 +44,9 @@ public:
         constexpr double kC6CornerHz = 6.0;
         dcR = std::exp (-2.0 * M_PI * kC6CornerHz / baseSampleRate);
         dcX1 = dcY1 = 0.0;
+        // Top-octave restore runs at BASE rate (after downsampling), correcting the low-OS bilinear
+        // droop of Treble+Stage2; transparent (≈0 dB) at 4x/8x. See TopOctaveRestore.h.
+        topRestore.prepare (baseSampleRate, factorLog2);
     }
 
     void reset()
@@ -52,6 +56,7 @@ public:
         treble.reset();
         stage2.reset();
         dcX1 = dcY1 = 0.0;
+        topRestore.reset();
     }
 
     void setControls (double bassR, double driveR, double trebR, Stage1::ClipMode mode)
@@ -86,6 +91,7 @@ public:
         // resistance params; trebR is re-applied each block via setControls).
         treble.prepare (clipper.getOversampledRate());
         stage2.prepare (clipper.getOversampledRate());
+        topRestore.setFactor (factorLog2); // droop (hence correction) depends on the OS factor
     }
 
     /** Tune Asymmetric-mode diode mismatch (for calibration). */
@@ -120,7 +126,7 @@ public:
             const double out = y - dcX1 + dcR * dcY1; // C6 output coupling (DC block), base rate
             dcX1 = y;
             dcY1 = out;
-            data[i] = out;
+            data[i] = topRestore.processSample (out); // restore low-OS top-octave droop
         }
     }
 
@@ -132,6 +138,8 @@ private:
 
     // C6 output-coupling DC blocker (see prepare()).
     double dcR = 0.0, dcX1 = 0.0, dcY1 = 0.0;
+
+    TopOctaveRestore topRestore; // base-rate low-OS top-octave correction
 };
 
 /** Production per-channel chain (accurate Wright-omega). PluginProcessor uses this alias. */

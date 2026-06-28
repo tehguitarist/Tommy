@@ -163,6 +163,18 @@ constexpr double n_1N4148  = 1.752;     // ideality factor — passed as nDiodes
   Stage 2) runs per oversampled sample; prepare those stages at `getOversampledRate()`. Do NOT
   oversample stages with no audible-band HF caps (e.g. the InputBuffer ≈8 Hz HP) — no benefit,
   just cost. Keep the prewarp (`Prewarp.h`) too — it still helps at the 1x setting.
+- **Top-octave restore (`TopOctaveRestore.h`) — base-rate correction for the LOW-OS droop.** Even
+  with prewarp, at low oversampling the Treble/Stage 2 bilinear discretisation droops the top
+  octave (measured vs an 8x reference: 1x ≈ −4 dB @8k / −10 dB @12k / −21 dB @16k; 2x ≈ −0.9 /
+  −2.2 / −4.1; 4x/8x negligible — see `tests/OSFidelity.cpp`). The droop is essentially
+  POT-INDEPENDENT and scales with the OS factor, so a single fixed-shape RBJ high-shelf (fc≈9.5k,
+  steepest non-resonant slope) with gain set PER OS FACTOR (`{+12, +3, 0, 0}` dB for 1x/2x/4x/8x)
+  restores most of it: 1x → within ±1.2 dB through 12 kHz (16 kHz stays ~−9 dB; you can't invert a
+  near-Nyquist zero without instability — accepted, least audible). At 4x/8x the gain is 0 so it is
+  bit-transparent (the default experience is unchanged). Applied at BASE rate after the C6 DC block
+  in `TommyDSP::processBlock`; one biquad, ~0 CPU, no added latency. Also restores the clipped
+  harmonics' top octave (1x harmonic fidelity vs 8x went −2.6 dB → −0.4 dB), and barely touches
+  aliasing. Always-on (it self-disables where there's no droop) — NOT gated behind any toggle.
 
 ## ADAA
 

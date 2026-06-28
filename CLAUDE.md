@@ -43,7 +43,8 @@ Format:  clang-format -i src/**/*.{cpp,h}
 
 **Status: SHIPPABLE, v1.0.** All 9 build-sequence steps are complete. Full DSP chain
 (`src/dsp/`: InputBuffer → Stage1+SW1 clipping, oversampled with ADAA on the rail clip and
-`AccurateOmega` → TrebleNetwork → Stage2, wired via `TommyDSP.h`) is validated; op-amp output
+`AccurateOmega` → TrebleNetwork → Stage2, wired via `TommyDSP.h`, then a base-rate
+`TopOctaveRestore` shelf that corrects the low-OS top-octave droop) is validated; op-amp output
 rails are modelled on both stages. `auval` passes; 9 test executables pass (two, `PerfBenchmark`
 and `FeatureProfile`, are measurement probes rather than pass/fail accuracy — `PerfBenchmark` →
 README's Performance table; `FeatureProfile` → the v1.1 roadmap's CPU-vs-accuracy data). UI
@@ -147,6 +148,15 @@ See `analysis/README.md` for harness usage and `analysis/CAPTURE_SPEC.md` for ca
     "Eco/HQ" = `omega4`/`AccurateOmega` switch (would need a new APVTS choice param +
     `architecture.md` table entry + templating `PluginProcessor`'s DSP on the provider or a runtime
     provider switch). **Do not add the toggle or downgrade any always-on feature without sign-off.**
+  - **DONE — low-OS fidelity pass.** `tests/OSFidelity.cpp` measures FR + distortion at 1x/2x/4x vs
+    8x (the common DAW case of running at low OS). Findings: the overdrive TONE (harmonic content) is
+    faithful at every OS factor; what low OS costs is (a) aliasing (the OS-only fix — 1x ≈ −31..−37 dB,
+    clean by 4x) and (b) top-octave FR droop (1x ≈ −4 @8k/−10 @12k/−21 @16k). Render default bumped
+    4x→8x (`render_oversampling`, `PluginProcessor.cpp`) since offline CPU is free.
+  - **DONE — top-octave restore** (`src/dsp/TopOctaveRestore.h`): a base-rate, OS-factor-scaled
+    high-shelf that corrects the low-OS droop (pot-independent, so a fixed shape works). 1x now within
+    ±1.2 dB through 12 kHz, 2x near-flat, 4x/8x bit-transparent. ~0 CPU, no latency. See dsp.md. So
+    low OS now "sounds close", with high OS only refining (aliasing) — the stated goal.
   - **NOT YET DONE:** memory profiling; the optional fine-grained hot-spot profile (per-adaptor) —
     `FeatureProfile` already localised the dominant cost to the diode/omega solve, so a deeper
     per-adaptor breakdown is likely unnecessary unless a specific optimisation is pursued.

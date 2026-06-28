@@ -60,7 +60,8 @@ juce::AudioProcessorValueTreeState::ParameterLayout TommyAudioProcessor::createP
         juce::StringArray { "1x", "2x", "4x", "8x" }, 1)); // default 2x for live playback
 
     params.push_back (std::make_unique<juce::AudioParameterChoice> ("render_oversampling", "Render Oversampling",
-        juce::StringArray { "1x", "2x", "4x", "8x" }, 2)); // default 4x for offline bouncing
+        juce::StringArray { "1x", "2x", "4x", "8x" }, 3)); // default 8x for offline bouncing (CPU is
+                                                           // free offline; take the cleanest render)
 
     params.push_back (std::make_unique<juce::AudioParameterBool> ("bypass", "Bypass", false));
 

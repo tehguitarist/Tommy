@@ -41,19 +41,19 @@ void checkFinite (const std::vector<double>& v)
         gAllFinite = gAllFinite && std::isfinite (x);
 }
 
-void configure (TommyDSP& d, int factorLog2, ClipMode mode, int maxBlock = 512)
+void configure (TommyDSP& d, int factorLog2, ClipMode mode, int maxBlock = 512, double trebR = kTrebR)
 {
     d.prepare (fs, maxBlock, factorLog2);
-    d.setControls (kBassR, kDriveR, kTrebR, mode);
+    d.setControls (kBassR, kDriveR, trebR, mode);
     d.setSupplyVoltage (9.0);
     d.setAdaaEnabled (true);
 }
 
 // --- A. small-signal magnitude (dB) at `freq` through the full chain (diodes off at amp=1e-3) ---
-double magDB (int factorLog2, double freq)
+double magDB (int factorLog2, double freq, double trebR = kTrebR)
 {
     TommyDSP d;
-    configure (d, factorLog2, ClipMode::Soft); // diodes don't conduct at this level => linear path
+    configure (d, factorLog2, ClipMode::Soft, 512, trebR); // diodes don't conduct here => linear path
 
     constexpr int blockSize = 512;
     const int total = (int) (1.0 * fs), warmup = (int) (0.5 * fs);

@@ -40,7 +40,7 @@ TommyAudioProcessor          ← AudioProcessor subclass
 | `input_trim` | Input Trim | -12.0 to +12.0 dB | 0.0 | Linear dB; `AudioParameterFloat` |
 | `output_trim` | Output Trim | -12.0 to +12.0 dB | 0.0 | Linear dB; `AudioParameterFloat` |
 | `oversampling` | Oversampling (live) | 0/1/2/3 | 1 (2x) | `AudioParameterChoice`: "1x" / "2x" / "4x" / "8x" — used during real-time playback |
-| `render_oversampling` | Oversampling (render) | 0/1/2/3 | 2 (4x) | Same choices; independent factor used for offline rendering/export |
+| `render_oversampling` | Oversampling (render) | 0/1/2/3 | 3 (8x) | Same choices; independent factor used for offline rendering/export (CPU is free offline → cleanest render) |
 | `bypass` | Bypass | true/false | false | `AudioParameterBool` — APVTS does support bool via this type |
 | `supply_voltage` | Supply | 0/1/2 | 0 (9V) | `AudioParameterChoice`: "9V" / "12V" / "18V" — scales op-amp rail headroom only, diode thresholds unchanged |
 

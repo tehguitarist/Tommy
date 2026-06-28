@@ -15,7 +15,9 @@ When invoked, you will be given a DSP stage to validate. Follow this process:
 - Cross-check every R, C value against `.claude/rules/circuit.md`
 - Flag ANY discrepancy — do not pass if a value differs, even slightly
 - For 1N4148 diodes, verify: Is=2.52e-9, Vt=25.85e-3, nDiodes=1.752 (ideality factor n, NOT 1.0)
-- Verify `DiodeQuality::Best` is used (not `DiodeQuality::Good`)
+- Verify the custom `AccurateOmega` provider is used, not chowdsp's default `omega4`. For
+  `DiodePairT`, this means `DiodeQuality::Good` (not `Best` — `Best` hardcodes `omega4` and
+  ignores the OmegaProvider). `DiodeT` honours the provider under either quality setting.
 - If Rs=0.568 modelling is attempted: verify it is implemented as an explicit `ResistorT` in series, not as a diode constructor parameter (chowdsp_wdf has no Rs parameter)
 
 ### 2. Numeric Precision
@@ -27,7 +29,8 @@ When invoked, you will be given a DSP stage to validate. Follow this process:
 - Confirm R-type adaptors are used where the circuit has feedback or non-tree topology
 - Confirm no WDF tree reconstruction at runtime for switch changes — only `setSMatrixData()` calls
 - Confirm Newton-Raphson is used only for nonlinear stages (diodes), not linear stages
-- Confirm `PolarityInverterT` is present for Stage 1 (inverting op-amp); confirm it is absent for Stage 2 (non-inverting)
+- Confirm `PolarityInverterT` is absent from both op-amp stages (IC1_A and IC1_B are both
+  non-inverting — neither needs it for op-amp polarity)
 
 ### 4. prepareToPlay
 - Confirm every `CapacitorT` has `.prepare(sampleRate)` called
@@ -43,8 +46,11 @@ When invoked, you will be given a DSP stage to validate. Follow this process:
 - If the stage involves TREB+R5/C5: confirm they are modelled as coupled
 
 ### 7. Oversampling / ADAA
-- Nonlinear stages (diode clipping): confirm oversampling is applied, ADAA is applied
-- Linear stages: confirm neither oversampling nor ADAA is applied
+- Confirm oversampling spans Stage 1 → Treble → Stage 2 (not just the diode clipper) — the
+  downstream linear stages have audible-band HF caps that need the higher rate too
+- Confirm ADAA wraps the op-amp rail clip (`railClip`/`railAntideriv` in `Stage1.h`/`Stage2.h`),
+  not the diode nonlinearity — this is deliberate, not a gap to flag
+- Confirm the InputBuffer (no audible-band HF cap) is NOT oversampled
 
 ### 8. Threading
 - Confirm no locks, mutexes, or blocking calls appear in DSP code paths

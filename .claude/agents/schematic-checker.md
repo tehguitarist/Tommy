@@ -25,6 +25,8 @@ You have read-only access. You do not write code or modify files.
 - "What are the 1N4148 Shockley parameters?" → Is=2.52e-9, nDiodes=1.752 (ideality factor n), Vt=25.85e-3, Rs=0.568
 - "How does SW1 Mode C work?" → Single diode D1 only — anode toward node_C, cathode toward node_D, clips positive peaks only
 - "Are BASS and DRIVE coupled?" → Yes, they share the Stage 1 feedback network at node_C
-- "Should Stage 2 use a nonlinear op-amp model?" → No, ideal op-amp, rails not reached under normal use
+- "Should Stage 2 use a nonlinear op-amp model?" → Ideal op-amp for the gain/feedback solve, but
+  output rail headroom IS modelled (asymmetric saturation, ~+2.5V/−3.4V) — node_J can swing past
+  the physically possible range in Hard mode without it
 
 Always give the exact value from the document. Precision matters for circuit accuracy.

@@ -109,7 +109,10 @@ they activate once you copy the template out.
 ### macOS signing + notarization
 
 Requires an active Apple Developer Program membership ($99/yr; Developer ID certs aren't available
-on a free account). Six GitHub Actions secrets, all referenced by `release.yml`'s `macos` job:
+on a free account). Nine GitHub Actions secrets, all referenced by `release.yml`'s `macos` job —
+six for signing the AU/VST3 bundles, three more for signing the `.pkg` installer itself (a
+**separate cert type** — "Developer ID Installer", not "Application"; `codesign` and `productsign`
+each only accept their own cert type):
 
 | Secret | What it is |
 |---|---|
@@ -119,14 +122,19 @@ on a free account). Six GitHub Actions secrets, all referenced by `release.yml`'
 | `APPLE_TEAM_ID` | your 10-character Apple Developer Team ID |
 | `APPLE_ID` | the Apple ID email used for notarization |
 | `APPLE_APP_SPECIFIC_PASSWORD` | an app-specific password for that Apple ID (generate at appleid.apple.com → Sign-In and Security, NOT your main password) |
+| `APPLE_INSTALLER_CERT_P12_BASE64` | `base64 -i DeveloperIDInstaller.p12` of your exported **Developer ID Installer** cert |
+| `APPLE_INSTALLER_CERT_PASSWORD` | the password that `.p12` was exported with |
+| `APPLE_INSTALLER_SIGNING_IDENTITY` | e.g. `Developer ID Installer: Name (TEAMID)` — copy exactly from `security find-identity -v -p basic` (Installer certs don't show under `-p codesigning`) |
 
-To get the cert: developer.apple.com/account/resources/certificates → **+** → **Developer ID
-Application** → upload a CSR generated via Keychain Access (Certificate Assistant → Request a
-Certificate from a CA → Saved to disk) → download and double-click the `.cer` to install it →
-export it + its private key from Keychain Access as a `.p12` (this is what gets base64'd).
+To get the Application cert: developer.apple.com/account/resources/certificates → **+** →
+**Developer ID Application** → upload a CSR generated via Keychain Access (Certificate Assistant →
+Request a Certificate from a CA → Saved to disk) → download and double-click the `.cer` to install
+it → export it + its private key from Keychain Access as a `.p12` (this is what gets base64'd).
+Repeat the same flow choosing **Developer ID Installer** for the second cert — both certs can share
+one CSR/private key, or use separate ones; either works.
 
 Set secrets via `gh secret set <NAME>` (reads from stdin/`--body`; omit the value to get a
-non-echoing interactive prompt) — re-set the cert + its password **together** if either ever needs
+non-echoing interactive prompt) — re-set a cert + its password **together** if either ever needs
 changing, to avoid a stale-pairing mismatch (`SecKeychainItemImport: MAC verification failed`,
 i.e. "wrong password" — almost always means the `.p12` and password secrets don't actually match).
 
@@ -137,11 +145,13 @@ scripts/configs, wired into `release.yml`'s "Build installer" step in each platf
 
 - **macOS** (`build_installer.sh` + `Distribution.xml`) — a `.pkg` built via `pkgbuild` +
   `productbuild`, with a **choice screen for AU vs VST3** (both selected by default — this is the
-  one platform with two formats, so it's the only one that needs a choice screen at all). Wraps
-  whatever bundles are on disk, signed/notarized or not; the `.pkg` wrapper itself is NOT signed
-  (that needs a separate "Developer ID Installer" cert, not provisioned by the secrets above) —
-  double-clicking it directly may show an "unidentified developer" prompt even when the AU/VST3
-  bundles inside are properly signed and notarized.
+  one platform with two formats, so it's the only one that needs a choice screen at all; AU and
+  VST3 sit at the top level of `<choices-outline>` with no wrapping parent `<line>` — adding one
+  creates an unnamed parent group in the customize screen). Wraps whatever bundles are on disk.
+  With the three `APPLE_INSTALLER_*` secrets configured (see above), `release.yml`'s "Sign +
+  notarize installer" step also `productsign`s, notarizes, and staples the `.pkg` itself, so it
+  shows no Gatekeeper warning on double-click either. Without those secrets, delete that step —
+  the `.pkg` still builds and wraps signed/notarized bundles fine, just unsigned itself.
 - **Windows** (`Pedal.nsi`, NSIS) — VST3 only (no AU on Windows). `makensis` ships on
   `windows-latest` runners but is **not on PATH** — locate it via `Get-Command` / common install
   paths first, falling back to `choco install nsis` (see the release.yml step for the exact logic;

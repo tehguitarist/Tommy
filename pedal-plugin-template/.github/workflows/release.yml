@@ -6,16 +6,18 @@
 #
 # macOS signing/notarization is WIRED but gated on secrets that don't exist until you add them —
 # if APPLE_CERT_P12_BASE64 etc. aren't set, the macOS job's signing steps below will fail. Either
-# add the six secrets (APPLE_CERT_P12_BASE64, APPLE_CERT_PASSWORD, APPLE_SIGNING_IDENTITY,
-# APPLE_TEAM_ID, APPLE_ID, APPLE_APP_SPECIFIC_PASSWORD — see build.md for how to obtain each) or
-# delete the "Import signing certificate" / "Sign AU + VST3" / "Notarize AU + VST3" / "Clean up
-# keychain" steps if you don't want signed releases yet. Without signing, Gatekeeper warns on
-# first launch but the plugin still works.
+# add the nine secrets (APPLE_CERT_P12_BASE64, APPLE_CERT_PASSWORD, APPLE_SIGNING_IDENTITY,
+# APPLE_TEAM_ID, APPLE_ID, APPLE_APP_SPECIFIC_PASSWORD, APPLE_INSTALLER_CERT_P12_BASE64,
+# APPLE_INSTALLER_CERT_PASSWORD, APPLE_INSTALLER_SIGNING_IDENTITY — see build.md for how to obtain
+# each) or delete the signing/notarization steps (through "Clean up keychain") if you don't want
+# signed releases yet. Without signing, Gatekeeper warns on first launch but the plugin still works.
 #
-# The macOS .pkg installer is built from installer/macos/ and wraps the (optionally signed)
-# AU/VST3 bundles with a choice screen — both formats selected by default. The Windows .exe (NSIS)
-# and Linux .deb are VST3-only since neither platform has AU. None of installer/*'s contents need
-# secrets — they run regardless of whether macOS signing is configured.
+# The macOS .pkg installer is built from installer/macos/ and wraps the (signed/notarized) AU/VST3
+# bundles with a choice screen — both formats selected by default. The .pkg itself is also signed
+# (productsign, a separate "Developer ID Installer" cert from the Application one used on the
+# bundles) and notarized/stapled by the "Sign + notarize installer" step, so it shows no
+# Gatekeeper warning on double-click either — delete that step too if skipping signing. The
+# Windows .exe (NSIS) and Linux .deb are VST3-only since neither platform has AU.
 name: Release
 
 on:
@@ -56,27 +58,32 @@ jobs:
       - name: Build AU + VST3
         run: cmake --build build --config Release --target <Pedal>_AU --target <Pedal>_VST3 --parallel
 
-      # --- Signing/notarization: requires the six APPLE_* secrets. Delete these four steps
-      # (through "Clean up keychain") if you haven't set them up yet — see build.md.
-      - name: Import signing certificate
+      # --- Signing/notarization: requires the nine APPLE_* secrets. Delete these steps (through
+      # "Clean up keychain") if you haven't set them up yet — see build.md.
+      - name: Import signing certificates
         env:
           APPLE_CERT_P12_BASE64: ${{ secrets.APPLE_CERT_P12_BASE64 }}
           APPLE_CERT_PASSWORD: ${{ secrets.APPLE_CERT_PASSWORD }}
+          APPLE_INSTALLER_CERT_P12_BASE64: ${{ secrets.APPLE_INSTALLER_CERT_P12_BASE64 }}
+          APPLE_INSTALLER_CERT_PASSWORD: ${{ secrets.APPLE_INSTALLER_CERT_PASSWORD }}
         run: |
           KEYCHAIN_PATH="$RUNNER_TEMP/signing.keychain-db"
           KEYCHAIN_PASSWORD=$(uuidgen)
           CERT_PATH="$RUNNER_TEMP/cert.p12"
+          INSTALLER_CERT_PATH="$RUNNER_TEMP/installer-cert.p12"
 
           echo "$APPLE_CERT_P12_BASE64" | base64 --decode -o "$CERT_PATH"
+          echo "$APPLE_INSTALLER_CERT_P12_BASE64" | base64 --decode -o "$INSTALLER_CERT_PATH"
 
           security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
           security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
           security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
           security import "$CERT_PATH" -k "$KEYCHAIN_PATH" -P "$APPLE_CERT_PASSWORD" -T /usr/bin/codesign
-          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security import "$INSTALLER_CERT_PATH" -k "$KEYCHAIN_PATH" -P "$APPLE_INSTALLER_CERT_PASSWORD" -T /usr/bin/productsign
+          security set-key-partition-list -S apple-tool:,apple:,codesign:,productsign: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
           security list-keychain -d user -s "$KEYCHAIN_PATH" $(security list-keychains -d user | sed 's/"//g')
 
-          rm -f "$CERT_PATH"
+          rm -f "$CERT_PATH" "$INSTALLER_CERT_PATH"
           echo "KEYCHAIN_PATH=$KEYCHAIN_PATH" >> "$GITHUB_ENV"
 
       - name: Sign AU + VST3
@@ -129,6 +136,29 @@ jobs:
         run: |
           VERSION="${{ needs.version.outputs.version }}"
           installer/macos/build_installer.sh "$VERSION" build/<Pedal>_artefacts/Release .
+
+      - name: Sign + notarize installer
+        env:
+          APPLE_INSTALLER_SIGNING_IDENTITY: ${{ secrets.APPLE_INSTALLER_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          VERSION="${{ needs.version.outputs.version }}"
+          PKG="<Pedal>-macOS-v${VERSION}-Installer.pkg"
+          SIGNED_PKG="$RUNNER_TEMP/signed.pkg"
+
+          productsign --sign "$APPLE_INSTALLER_SIGNING_IDENTITY" --keychain "$KEYCHAIN_PATH" \
+            "$PKG" "$SIGNED_PKG"
+          mv "$SIGNED_PKG" "$PKG"
+
+          xcrun notarytool submit "$PKG" \
+            --apple-id "$APPLE_ID" \
+            --password "$APPLE_APP_SPECIFIC_PASSWORD" \
+            --team-id "$APPLE_TEAM_ID" \
+            --wait
+
+          xcrun stapler staple "$PKG"
 
       - name: Clean up keychain
         if: always()

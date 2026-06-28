@@ -12,10 +12,11 @@ name: Release
 # Each platform also gets a basic installer built from installer/<platform>/ alongside the raw
 # zip: a .pkg on macOS (with an AU/VST3 choice screen, both selected by default), a .exe on
 # Windows (NSIS, VST3 only), and a .deb on Linux (VST3 only). The macOS .pkg wraps the already-
-# signed-and-notarized AU/VST3 bundles, but the .pkg installer itself is NOT signed (that needs
-# a separate "Developer ID Installer" cert, which isn't provisioned here) — Gatekeeper checks the
-# bundles when a host loads them, not the installer wrapper, so this is fine for distribution,
-# though double-clicking the .pkg directly may show an "unidentified developer" prompt.
+# signed-and-notarized AU/VST3 bundles AND is itself signed with a separate "Developer ID
+# Installer" certificate (APPLE_INSTALLER_CERT_P12_BASE64, APPLE_INSTALLER_CERT_PASSWORD,
+# APPLE_INSTALLER_SIGNING_IDENTITY — a Developer ID Installer cert, distinct from the Application
+# cert above) via `productsign`, then notarized/stapled like the bundles — double-clicking it
+# shows no Gatekeeper warning.
 
 on:
   workflow_dispatch:
@@ -57,25 +58,30 @@ jobs:
       - name: Build AU + VST3
         run: cmake --build build --config Release --target Tommy_AU --target Tommy_VST3 --parallel
 
-      - name: Import signing certificate
+      - name: Import signing certificates
         env:
           APPLE_CERT_P12_BASE64: ${{ secrets.APPLE_CERT_P12_BASE64 }}
           APPLE_CERT_PASSWORD: ${{ secrets.APPLE_CERT_PASSWORD }}
+          APPLE_INSTALLER_CERT_P12_BASE64: ${{ secrets.APPLE_INSTALLER_CERT_P12_BASE64 }}
+          APPLE_INSTALLER_CERT_PASSWORD: ${{ secrets.APPLE_INSTALLER_CERT_PASSWORD }}
         run: |
           KEYCHAIN_PATH="$RUNNER_TEMP/signing.keychain-db"
           KEYCHAIN_PASSWORD=$(uuidgen)
           CERT_PATH="$RUNNER_TEMP/cert.p12"
+          INSTALLER_CERT_PATH="$RUNNER_TEMP/installer-cert.p12"
 
           echo "$APPLE_CERT_P12_BASE64" | base64 --decode -o "$CERT_PATH"
+          echo "$APPLE_INSTALLER_CERT_P12_BASE64" | base64 --decode -o "$INSTALLER_CERT_PATH"
 
           security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
           security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
           security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
           security import "$CERT_PATH" -k "$KEYCHAIN_PATH" -P "$APPLE_CERT_PASSWORD" -T /usr/bin/codesign
-          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security import "$INSTALLER_CERT_PATH" -k "$KEYCHAIN_PATH" -P "$APPLE_INSTALLER_CERT_PASSWORD" -T /usr/bin/productsign
+          security set-key-partition-list -S apple-tool:,apple:,codesign:,productsign: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
           security list-keychain -d user -s "$KEYCHAIN_PATH" $(security list-keychains -d user | sed 's/"//g')
 
-          rm -f "$CERT_PATH"
+          rm -f "$CERT_PATH" "$INSTALLER_CERT_PATH"
           echo "KEYCHAIN_PATH=$KEYCHAIN_PATH" >> "$GITHUB_ENV"
 
       - name: Sign AU + VST3
@@ -128,6 +134,29 @@ jobs:
         run: |
           VERSION="${{ needs.version.outputs.version }}"
           installer/macos/build_installer.sh "$VERSION" build/Tommy_artefacts/Release .
+
+      - name: Sign + notarize installer
+        env:
+          APPLE_INSTALLER_SIGNING_IDENTITY: ${{ secrets.APPLE_INSTALLER_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          VERSION="${{ needs.version.outputs.version }}"
+          PKG="Tommy-macOS-v${VERSION}-Installer.pkg"
+          SIGNED_PKG="$RUNNER_TEMP/signed.pkg"
+
+          productsign --sign "$APPLE_INSTALLER_SIGNING_IDENTITY" --keychain "$KEYCHAIN_PATH" \
+            "$PKG" "$SIGNED_PKG"
+          mv "$SIGNED_PKG" "$PKG"
+
+          xcrun notarytool submit "$PKG" \
+            --apple-id "$APPLE_ID" \
+            --password "$APPLE_APP_SPECIFIC_PASSWORD" \
+            --team-id "$APPLE_TEAM_ID" \
+            --wait
+
+          xcrun stapler staple "$PKG"
 
       - name: Clean up keychain
         if: always()

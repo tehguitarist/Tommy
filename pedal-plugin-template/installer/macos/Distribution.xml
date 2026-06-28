@@ -9,15 +9,12 @@
     <options customize="allow" require-scripts="false" rootVolumeOnly="true"/>
 
     <!-- Two installable components, both selected by default. AU is macOS-only, so this is the
-         one platform where a plugin-format choice screen makes sense. -->
+         one platform where a plugin-format choice screen makes sense. AU/VST3 sit at the top
+         level (no wrapping parent line) so the customize screen doesn't show a nameless group. -->
     <choices-outline>
-        <line choice="default">
-            <line choice="au"/>
-            <line choice="vst3"/>
-        </line>
+        <line choice="au"/>
+        <line choice="vst3"/>
     </choices-outline>
-
-    <choice id="default"/>
 
     <choice id="au"
             title="Audio Unit (AU)"

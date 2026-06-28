@@ -106,6 +106,10 @@ See `analysis/README.md` for harness usage and `analysis/CAPTURE_SPEC.md` for ca
   rationale, and pruned the stale per-step build-log memories. First public release.
   - Keep condensing `.claude/rules/*.md`/`CLAUDE.md` as new work lands — strip "DONE" narration
     and investigation trails as they're superseded, but keep final values/constants verbatim.
+- **v1.0.1:** Sign + notarize the macOS `.pkg` installer itself (separate "Developer ID Installer"
+  cert via `productsign`, not just the AU/VST3 bundles inside it — see `release.yml`'s comments).
+  Fixed the customize-screen choice outline showing a nameless parent folder above the AU/VST3
+  options (`Distribution.xml`'s `<choices-outline>` had an unnecessary wrapping `<line>`).
 - **v1.1 TODO — CPU/latency/memory optimisation pass.**
   - Profile the full DSP chain (Stage 1 R-type solve, SW1 Newton-Raphson, oversampling,
     Stage 2) to find the actual hot spots before optimising blind.

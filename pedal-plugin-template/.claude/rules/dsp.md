@@ -133,6 +133,31 @@ provider (std::log/exp + a few Newton steps solving `w + ln(w) = x`).
 **`DiodeQuality::Good`** for the pair (eqn-18; accurate once given a true omega). `DiodeT` and the
 pair's `Good` path both honour the provider. Verify with an audible-band aliasing test.
 
+### HQ / Eco mode (gating CPU-vs-accuracy features)
+
+Don't add an HQ button reflexively — let `FeatureProfile` (`build.md`) decide. Measure each feature's
+CPU cost AND accuracy delta together; gate ONLY features that are a real lever (meaningful CPU for
+audible accuracy). Leave free/near-free features always-on (a toggle for them is just clutter).
+
+- **Usually the only real lever is the omega solver:** `omega4` is markedly cheaper (the diode solve
+  dominates DSP cost) but adds a ~−30..−44 dB distortion floor. So HQ on = AccurateOmega, off =
+  omega4. **Implement as a RUNTIME switch**, not two template instantiations: a `bool highQ` in the
+  diode class that branches the omega call per sample (predictable branch → effectively free), with a
+  `setHighQuality(bool)` plumbed processor → DSP → stage → diode. Keep the omega-provider TEMPLATE
+  too (defaulted) so `FeatureProfile` can still A/B at compile time. Add a `FeatureProfile` guard
+  asserting HQ-off is bit-identical to the omega4 chain, so the button can't silently become a no-op.
+- **Typically NOT worth gating (measure to confirm):** rail-clip ADAA (≈0 CPU for a big aliasing
+  cut), oversampling the downstream linear tone stages (cheap, fixes the top octave), diode mismatch
+  (≈0 CPU, it's a faithfulness feature). Oversampling factor itself is already the user's master
+  quality/CPU knob — often that, plus this one omega toggle, is all you need.
+- **Other levers to scope IF the profile flags them:** AccurateOmega Newton-iteration count (4→2 is a
+  minor sub-lever of the above); the JUCE oversampling FIR vs a cheaper polyphase-IIR (saves up/down
+  cost but is non-linear-phase — only if the FIR shows up as a real cost). Park these as notes unless
+  CPU is genuinely a problem; absolute cost is often already small (one accurate instance ≈ low
+  single-digit % of a core).
+- UI: a lit-on / dim-off toggle in the OS/scale strip with a brief customer-facing tooltip; `hq`
+  `AudioParameterBool` default true (see `architecture.md`).
+
 ## Oversampling
 
 - Oversample for the **nonlinear stage** (the aliasing source), but let the region SPAN any
@@ -184,6 +209,15 @@ Two fixes, a real trade-off:
   **Keep prewarp as well** — it's what fixes the top octave at the 1× (no-oversampling) setting.
   Recommended over prewarp-alone whenever the deficit is audible; prewarp-alone is the zero-CPU
   fallback. (The two are complementary, not exclusive.)
+
+- **Low-OS top-octave restore (a cheap third option, complements both).** Even with prewarp, at LOW
+  oversampling the tone caps' bilinear Nyquist zero still droops the top octave (reference: 1× ≈
+  −4 dB @8k / −10 @12k / −21 @16k; 2× ≈ a quarter of that in dB; 4×/8× negligible — measure with
+  `OSFidelity`). The droop is essentially POT-INDEPENDENT and scales with the OS factor, so a single
+  fixed-shape high-shelf (one biquad at base rate, gain set PER OS factor, ~0 at 4×/8× so it's
+  transparent at the default) recovers most of it — 1× to within ~±1 dB through 12 kHz. It can't
+  invert the near-Nyquist zero (16 kHz stays down — accepted, least audible). Always-on (self-
+  disables where there's no droop); makes low-OS "sound close" so high-OS only refines aliasing.
 
 Independent of supply-voltage / rail features (those scale amplitude headroom; prewarp corrects
 frequency) — the two never interact.

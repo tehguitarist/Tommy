@@ -59,6 +59,7 @@ taper in DSP (keeps host automation linear and the taper in one place):
 | `oversampling` | `AudioParameterChoice` 1×/2×/4×/8× | realtime factor |
 | `render_oversampling` | `AudioParameterChoice` | offline-bounce factor (see below) |
 | `bypass` | `AudioParameterBool` | APVTS supports bool via this type |
+| `hq` (optional) | `AudioParameterBool` default true | accurate vs fast diode solve — add ONLY if `FeatureProfile` shows a real CPU/accuracy lever (`dsp.md` "HQ / Eco mode") |
 
 ## processBlock structure
 

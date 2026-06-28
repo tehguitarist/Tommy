@@ -79,6 +79,21 @@ remove/re-add the plugin.
   SSH. Cheap to add (`juce_add_console_app`) and catches layout regressions a build-success check
   alone won't.
 
+### Performance & fidelity probes (CPU/quality optimisation pass)
+
+Three `juce_add_console_app` probes that render the real chain and measure — register them with
+`add_test()` as **finite-only** probes (assert no NaN/Inf; do NOT gate on absolute CPU %, CI speed
+varies). They produce the data for the HQ/Eco decision (see `dsp.md` "HQ / Eco mode"):
+- **`PerfBenchmark`** — CPU % of realtime + `getLatencySamples()` per OS factor × clip mode. Times a
+  fixed-length render (wall-clock vs audio duration). → a README "Performance" table.
+- **`FeatureProfile`** — per performance-affecting feature, measures CPU cost AND accuracy delta
+  TOGETHER (toggle it, null/THD/aliasing the result) so each is classed "free win" (keep always-on)
+  vs "real CPU/accuracy lever" (HQ candidate). Needs the DSP stages templated on the omega provider
+  (defaulted, production-unchanged) to A/B accurate-omega vs `omega4`.
+- **`OSFidelity`** — how close 1×/2×/4× are to 8× (FR + harmonic-vs-aliasing), the common DAW
+  low-OS case. Separates the wanted distortion (faithful at low OS) from aliasing + top-octave droop
+  (the OS-only fixes). Drove the low-OS top-octave restore (`dsp.md`).
+
 ## Code style
 
 `.clang-format` (LLVM base, IndentWidth 4, ColumnLimit 120, BreakBeforeBraces Attach,

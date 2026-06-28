@@ -94,6 +94,7 @@ public:
     void setRailClampEnabled (bool e) { stage1.setRailClampEnabled (e); }
     void setRailVoltages (double pos, double negMag) { stage1.setRailVoltages (pos, negMag); }
     void setAdaaEnabled (bool e) { stage1.setAdaaEnabled (e); }
+    void setHighQuality (bool hq) { stage1.setHighQuality (hq); }
 
     double getLatencySamples() const { return oversampler ? (double) oversampler->getLatencyInSamples() : 0.0; }
     int getFactor() const { return 1 << osLog2; }

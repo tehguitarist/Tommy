@@ -79,6 +79,12 @@ public:
         calcImpedance();
     }
 
+    /** Runtime quality switch: true = the template's OmegaProvider (accurate Wright-omega, no
+     *  distortion floor); false = chowdsp's fast omega4 (bit-trick, ~45% cheaper diode solve, but a
+     *  ~−30..−44 dB null error). Drives the user-facing "HQ" button. Branch is per-sample but
+     *  predictable (constant within a block), so effectively free. */
+    void setHighQuality (bool hq) { highQ = hq; }
+
     void calcImpedance() override
     {
         using std::log;
@@ -99,15 +105,18 @@ public:
         // +swing diode (Vt·(1+mismatch)) reflects a≥0; −swing diode (Vt·(1−mismatch)) reflects a<0.
         // Each branch → a at small |a| (diode off) ⇒ no small-signal gain shift; → clamp at clipping.
         if (a >= (T) 0)
-            wdf.b = a + (T) 2 * (R_Is - VtP * OmegaProvider::omega (logRP + a * ooVtP + RIs_oVtP));
+            wdf.b = a + (T) 2 * (R_Is - VtP * omega (logRP + a * ooVtP + RIs_oVtP));
         else
-            wdf.b = a - (T) 2 * (R_Is - VtN * OmegaProvider::omega (logRN - a * ooVtN + RIs_oVtN));
+            wdf.b = a - (T) 2 * (R_Is - VtN * omega (logRN - a * ooVtN + RIs_oVtN));
         return wdf.b;
     }
 
     chowdsp::wdft::WDFMembers<T> wdf;
 
 private:
+    // HQ on → accurate Wright-omega (template provider); off → chowdsp's fast omega4.
+    inline T omega (T x) const noexcept { return highQ ? OmegaProvider::omega (x) : chowdsp::Omega::omega4 (x); }
+
     void updateVt()
     {
         VtP = vtBase * ((T) 1 + mism);
@@ -118,6 +127,7 @@ private:
     T ooVtP = 1.0, RIs_oVtP = 0.0, logRP = 0.0;
     T ooVtN = 1.0, RIs_oVtN = 0.0, logRN = 0.0;
     T R_Is = 0.0;
+    bool highQ = true; // see setHighQuality
     const Next& next;
 };
 
@@ -228,6 +238,14 @@ public:
     /** Enable 1st-order ADAA on the op-amp rail saturation (the hard-edged nonlinearity that
      *  aliases most). In addition to oversampling, not instead — see dsp.md. */
     void setAdaaEnabled (bool enabled) { adaaOn = enabled; }
+
+    /** HQ on → accurate Wright-omega diode solve; off → fast omega4 (cheaper, slight distortion
+     *  floor). Drives the user-facing HQ button; applies to both diode sub-trees. */
+    void setHighQuality (bool hq)
+    {
+        diodePair.setHighQuality (hq);
+        diodeA.setHighQuality (hq);
+    }
 
     /** BASS / DRIVE as already-tapered resistances in ohms (A-taper applied by the caller). */
     void setParams (double bassResistanceOhms, double driveResistanceOhms)

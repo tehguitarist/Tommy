@@ -204,6 +204,14 @@ TommyAudioProcessorEditor::TommyAudioProcessorEditor(TommyAudioProcessor& p)
     scaleBtn.onClick = [this] { showScaleMenu(); };
     addAndMakeVisible(scaleBtn);
 
+    // ── HQ toggle (accurate vs fast diode solve) ──────────────────────────────
+    hqButton.setComponentID("ostoggle"); // lit when on, dim when off
+    hqButton.setClickingTogglesState(true);
+    hqButton.setLookAndFeel(&laf);
+    hqButton.setTooltip("HQ: most accurate diode modelling. Turn off to save CPU.");
+    addAndMakeVisible(hqButton);
+    hqAttach = std::make_unique<juce::ButtonParameterAttachment>(*p.apvts.getParameter("hq"), hqButton);
+
     // ── Load UI scale (per-session from APVTS state; falls back to user default) ──
     {
         juce::PropertiesFile::Options opts;
@@ -245,6 +253,7 @@ TommyAudioProcessorEditor::~TommyAudioProcessorEditor()
     osRealtimeBox.setLookAndFeel(nullptr);
     osRenderBox.setLookAndFeel(nullptr);
     scaleBtn.setLookAndFeel(nullptr);
+    hqButton.setLookAndFeel(nullptr);
 }
 
 // ── Timer — update meters + LED ───────────────────────────────────────────────
@@ -419,10 +428,12 @@ void TommyAudioProcessorEditor::resized()
         osLabel.setBounds(op.removeFromLeft(i(20)));
         op.removeFromLeft(i(8));
 
-        // Scale preset button + "UI SIZE" label at far right
+        // Far right: [HQ] [UI SIZE] [scale %] — quality + scale controls grouped together
         scaleBtn.setBounds(op.removeFromRight(i(48)).withSizeKeepingCentre(i(48), op.getHeight()));
         op.removeFromRight(i(5));
         sizeLabel.setBounds(op.removeFromRight(i(42)).withSizeKeepingCentre(i(42), i(14)));
+        op.removeFromRight(i(10));
+        hqButton.setBounds(op.removeFromRight(i(28)).withSizeKeepingCentre(i(28), op.getHeight()));
         op.removeFromRight(i(8)); // breathing room before the OS controls end
 
         // Left-aligned: LIVE [gap] liveBox [sep] RENDER [gap] renderBox

@@ -43,6 +43,7 @@ TommyAudioProcessor          ← AudioProcessor subclass
 | `render_oversampling` | Oversampling (render) | 0/1/2/3 | 3 (8x) | Same choices; independent factor used for offline rendering/export (CPU is free offline → cleanest render) |
 | `bypass` | Bypass | true/false | false | `AudioParameterBool` — APVTS does support bool via this type |
 | `supply_voltage` | Supply | 0/1/2 | 0 (9V) | `AudioParameterChoice`: "9V" / "12V" / "18V" — scales op-amp rail headroom only, diode thresholds unchanged |
+| `hq` | HQ | true/false | true | `AudioParameterBool` — diode solve quality: on = `AccurateOmega` (shipped), off = fast `omega4` (~45% cheaper diode solve, ~−30..−44 dB distortion floor). Runtime switch in `AsymDiodePairT::setHighQuality` (no template re-instantiation). See `dsp.md` Omega accuracy + `CLAUDE.md` v1.1. |
 
 Note: APVTS does not accept raw `bool` in `createParameterLayout()`. Use `std::make_unique<AudioParameterBool>("bypass", "Bypass", false)`.
 

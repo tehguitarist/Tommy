@@ -107,6 +107,10 @@ public:
         stage2.setAdaaEnabled (e);
     }
 
+    /** HQ button: true = accurate Wright-omega diode solve (default, shipped quality); false = fast
+     *  omega4 (~45% cheaper diode solve, slight distortion floor). See FeatureProfile / CLAUDE.md. */
+    void setHighQuality (bool hq) { clipper.setHighQuality (hq); }
+
     double getLatencySamples() const { return clipper.getLatencySamples(); }
 
     /** Processes one channel block in place (values in volts). */

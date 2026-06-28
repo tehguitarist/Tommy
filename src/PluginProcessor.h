@@ -114,6 +114,7 @@ private:
     std::atomic<float>* pRenderOs      { nullptr };
     std::atomic<float>* pBypass        { nullptr };
     std::atomic<float>* pSupply        { nullptr };
+    std::atomic<float>* pHQ            { nullptr };
 
     std::atomic<float> inputLevelL { 0.0f }, inputLevelR { 0.0f };
     std::atomic<float> outputLevelL { 0.0f }, outputLevelR { 0.0f };

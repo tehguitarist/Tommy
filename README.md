@@ -43,6 +43,8 @@ EQ curves.
   independent factors for live playback and offline rendering, applied across the
   clipping stage and the downstream linear stages so the top octave stays accurate
   at any factor
+- **HQ switch** — on by default for the most accurate diode modelling; switch it off to
+  trade a touch of accuracy for noticeably lower CPU when you need the headroom
 - **Calibrated I/O** — input and output trim with VU-style metering, calibrated to
   -12 dBu internal headroom
 - **True bypass** with a short crossfade to avoid clicks

@@ -214,16 +214,27 @@ void TommyLookAndFeel::drawButtonBackground(juce::Graphics& g, juce::Button& but
         g.setColour(juce::Colour(cOSBtnActiveBdr));
         g.drawRoundedRectangle(b.reduced(0.5f), corner, 1.0f);
     }
+    else if (button.getComponentID() == "ostoggle")
+    {
+        // Toggle button (HQ): lit when on, dim when off.
+        const float corner = 4.0f;
+        const bool on = button.getToggleState();
+        g.setColour(juce::Colour(on ? cOSBtnActiveBg : cOSBackground));
+        g.fillRoundedRectangle(b, corner);
+        g.setColour(juce::Colour(on ? cOSBtnActiveBdr : cOSBorder));
+        g.drawRoundedRectangle(b.reduced(0.5f), corner, 1.0f);
+    }
 }
 
 void TommyLookAndFeel::drawButtonText(juce::Graphics& g, juce::TextButton& button,
                                        bool, bool down)
 {
     const bool isOSButton = button.getComponentID() == "os";
+    const bool isOSToggle = button.getComponentID() == "ostoggle";
     const bool active = isOSButton || button.getToggleState();
     const juce::Colour col = active ? juce::Colour(cOSBtnActive) : juce::Colour(cOSLabel);
     g.setColour(col);
-    const float fontPx = isOSButton ? juce::jmax(7.0f, (float) button.getHeight() * 0.38f) : 8.0f;
+    const float fontPx = (isOSButton || isOSToggle) ? juce::jmax(7.0f, (float) button.getHeight() * 0.38f) : 8.0f;
     g.setFont(juce::Font(juce::FontOptions(fontPx, juce::Font::bold)));
 
     auto area = button.getLocalBounds();

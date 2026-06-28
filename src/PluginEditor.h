@@ -69,6 +69,10 @@ private:
     std::unique_ptr<juce::ComboBoxParameterAttachment> osRealtimeAttach, osRenderAttach;
     juce::Label    sizeLabel    { {}, "UI SIZE" };
     juce::TextButton scaleBtn;
+    juce::TextButton hqButton { "HQ" };
+    std::unique_ptr<juce::ButtonParameterAttachment> hqAttach;
+
+    juce::TooltipWindow tooltipWindow { this }; // shows the HQ button's hover tooltip
 
     // ── APVTS attachments ────────────────────────────────────────────────────
     juce::SliderParameterAttachment bassAttach, gainAttach, volumeAttach, trebleAttach;

@@ -142,12 +142,15 @@ See `analysis/README.md` for harness usage and `analysis/CAPTURE_SPEC.md` for ca
       but buys **+2.4 dB @12 kHz / +5.0 dB @16 kHz** top octave vs running them at base rate.
     - **Diode mismatch — free** (0.02% @4×); it's a faithfulness feature (even harmonics), not a
       quality/CPU tradeoff. Keep always on.
-  - **OPEN — HQ-button decision (discuss with user).** The data says only the omega solver is worth
-    a toggle, and even `AccurateOmega` at the 4× default is just ~3% of one core — so the simplest
-    product call may be to ship everything accurate and add NO button. If a toggle is wanted it's an
-    "Eco/HQ" = `omega4`/`AccurateOmega` switch (would need a new APVTS choice param +
-    `architecture.md` table entry + templating `PluginProcessor`'s DSP on the provider or a runtime
-    provider switch). **Do not add the toggle or downgrade any always-on feature without sign-off.**
+  - **DONE — HQ button.** Ships the `hq` `AudioParameterBool` (default ON = `AccurateOmega`; OFF =
+    fast `omega4`, ~45% cheaper diode solve). Implemented as a RUNTIME switch
+    (`AsymDiodePairT::setHighQuality` branches the omega call per sample — predictable, ~free), so no
+    second DSP instantiation and no `PluginProcessor` templating; plumbed
+    `PluginProcessor → TommyDSP → ClippingOversampler → Stage1 → AsymDiodePairT`. UI: a lit/dim "HQ"
+    toggle (componentID `"ostoggle"`) in the bottom strip by UI SIZE, with a customer-facing hover
+    tooltip. `FeatureProfile` has a regression guard asserting HQ-off is bit-identical to the omega4
+    template chain (so the button can never silently become a no-op). The other three features stay
+    always-on (free/near-free) — only the omega solver is gated.
   - **DONE — low-OS fidelity pass.** `tests/OSFidelity.cpp` measures FR + distortion at 1x/2x/4x vs
     8x (the common DAW case of running at low OS). Findings: the overdrive TONE (harmonic content) is
     faithful at every OS factor; what low OS costs is (a) aliasing (the OS-only fix — 1x ≈ −31..−37 dB,

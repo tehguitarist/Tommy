@@ -21,6 +21,7 @@ TommyAudioProcessor::TommyAudioProcessor()
     pRenderOs      = apvts.getRawParameterValue ("render_oversampling");
     pBypass        = apvts.getRawParameterValue ("bypass");
     pSupply        = apvts.getRawParameterValue ("supply_voltage");
+    pHQ            = apvts.getRawParameterValue ("hq");
 }
 
 TommyAudioProcessor::~TommyAudioProcessor() = default;
@@ -67,6 +68,10 @@ juce::AudioProcessorValueTreeState::ParameterLayout TommyAudioProcessor::createP
 
     params.push_back (std::make_unique<juce::AudioParameterChoice> ("supply_voltage", "Supply",
         juce::StringArray { "9V", "12V", "18V" }, 0)); // default 9V (the stock pedal)
+
+    // HQ: accurate Wright-omega diode solve (on, default) vs fast omega4 (off, ~45% cheaper diode
+    // solve at a slight distortion-floor cost). The only feature that's a real CPU/accuracy lever.
+    params.push_back (std::make_unique<juce::AudioParameterBool> ("hq", "HQ", true));
 
     return { params.begin(), params.end() };
 }
@@ -174,10 +179,13 @@ void TommyAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::
     static constexpr double kSupplyVolts[] = { 9.0, 12.0, 18.0 };
     const double supplyV = kSupplyVolts[juce::jlimit (0, 2, (int) pSupply->load())];
 
+    const bool highQ = pHQ->load() > 0.5f;
+
     for (auto& ch : dsp)
     {
         ch.setControls (bassR, driveR, trebR, mode);
         ch.setSupplyVoltage (supplyV);
+        ch.setHighQuality (highQ);
     }
 
     // 3. Per channel: input trim + meter, run the WDF chain in double, crossfade bypass, out meter.

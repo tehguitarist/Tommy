@@ -203,12 +203,18 @@ oversampling rates plus a UI-scale control):
   `oversampling` parameter) — the factor used during real-time playback
 - **"RENDER"** label + `osRenderBox` (separate `ComboBox` + attachment) — the factor used for
   offline rendering/export, independent of LIVE
+- **"HQ"** toggle (`hqButton`, `juce::TextButton`, componentID `"ostoggle"`, `ButtonParameterAttachment`
+  to the `hq` parameter) — grouped at the right with the UI-size controls. **Lit when on, dim when
+  off**, default on. Hover tooltip (`setTooltip`, shown via a `juce::TooltipWindow` member on the
+  editor): "HQ: most accurate diode modelling. Turn off to save CPU." Toggles the accurate vs fast
+  diode solver (see `architecture.md` `hq` / `dsp.md` Omega accuracy).
 - **"UI SIZE"** label (`sizeLabel`) + `scaleBtn` (`juce::TextButton`, componentID `"os"`, shows
   the current scale e.g. `"100%"`) at the far right — opens `showScaleMenu()`, a preset picker
   (50%–250% in 25% steps) for `currentScale` (see Plugin Window)
 
-`drawButtonBackground`'s `"os"` branch (rounded-rect background + border, brighter + a subtle glow
-when `getToggleState()` is true) currently only styles `scaleBtn`; the ComboBoxes use
+`drawButtonBackground` has two text-button branches: `"os"` (always-lit OS-combo styling, used by
+`scaleBtn` since it's a menu trigger, not a toggle) and `"ostoggle"` (lit background+border when
+`getToggleState()`, dim when off — used by `hqButton`). The ComboBoxes use
 `TommyLookAndFeel::drawComboBox` (dark background, thin border, small chevron arrow).
 
 ## Colour Palette

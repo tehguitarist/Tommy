@@ -144,6 +144,51 @@ double omegaNullErrorDB (int factorLog2, ClipMode mode)
     return 10.0 * std::log10 (errPow / sigPow);
 }
 
+// Regression guard for the runtime HQ switch: the production (AccurateOmega) chain with HQ turned
+// OFF must match the omega4 (FastOmega template) chain — i.e. the button genuinely routes to omega4,
+// it is not a silent no-op. Returns the null error (dB); expect a very low number (≈ bit-identical).
+double hqOffVsOmega4NullDB (int factorLog2, ClipMode mode)
+{
+    constexpr int blockSize = 512;
+    const int total = (int) (2.0 * fs);
+
+    TommyDSPT<AccurateOmega> acc; // production type, but HQ forced OFF -> should run omega4
+    TommyDSPT<FastOmega> fast;    // always omega4
+    acc.prepare (fs, blockSize, factorLog2);
+    fast.prepare (fs, blockSize, factorLog2);
+    acc.setControls (kBassR, kDriveR, kTrebR, mode);
+    fast.setControls (kBassR, kDriveR, kTrebR, mode);
+    acc.setSupplyVoltage (9.0);
+    fast.setSupplyVoltage (9.0);
+    acc.setAdaaEnabled (true);
+    fast.setAdaaEnabled (true);
+    acc.setHighQuality (false); // <-- the switch under test
+    fast.setHighQuality (false);
+
+    std::vector<double> a ((size_t) blockSize), b ((size_t) blockSize);
+    double sigPow = 0.0, errPow = 0.0;
+    const int warmup = (int) (0.5 * fs);
+    int idx = 0;
+    for (int p = 0; p < total; p += blockSize)
+    {
+        const int n = std::min (blockSize, total - p);
+        for (int i = 0; i < n; ++i, ++idx)
+            a[(size_t) i] = b[(size_t) i] = sineSample (idx, 1000.0, 0.6);
+        acc.processBlock (a.data(), n);
+        fast.processBlock (b.data(), n);
+        if (p >= warmup)
+            for (int i = 0; i < n; ++i)
+            {
+                const double ref = a[(size_t) i], err = b[(size_t) i] - a[(size_t) i];
+                sigPow += ref * ref;
+                errPow += err * err;
+            }
+    }
+    checkFinite (a);
+    checkFinite (b);
+    return 10.0 * std::log10 (errPow / std::max (sigPow, 1.0e-300));
+}
+
 // ---- 2: aliasing measurement (reused Step6 method) for ADAA on/off --------------------------
 double aliasingDB (ClipMode mode, int factorLog2, bool adaa, double amp, double driveR)
 {
@@ -276,6 +321,17 @@ int main()
             std::printf ("   %-5s %-7s %9.2f%% %9.2f%% %12.1f\n", (std::to_string (1 << f) + "x").c_str(),
                          mn, cAcc, cFast, nerr);
         }
+
+    // Runtime HQ-switch regression guard: HQ off on the production chain must equal the omega4 chain.
+    {
+        const double noNull = hqOffVsOmega4NullDB (2, ClipMode::Hard); // expect ~bit-identical
+        const double onErr = omegaNullErrorDB (2, ClipMode::Hard);     // expect the big -38 dB error
+        const bool routesToOmega4 = noNull < -100.0;
+        std::printf ("   HQ-switch check @4x Hard: HQ-off vs omega4 null = %.1f dB (%s); HQ-on differs by %.1f dB\n",
+                     noNull, routesToOmega4 ? "routes to omega4 OK" : "BROKEN — HQ off is a no-op", onErr);
+        if (! routesToOmega4)
+            gAllFinite = false; // fail the probe: the button isn't actually switching the solver
+    }
 
     // === 2. Rail-clip ADAA: aliasing reduction vs CPU =================================
     std::printf ("\n== 2. Rail-clip ADAA (Linear mode: rail is the active nonlinearity) ==\n");

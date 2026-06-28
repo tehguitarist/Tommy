@@ -32,6 +32,11 @@ Three-column layout: left side panel (Input: label + halo trim + VU), centre ped
 full-width oversampling/scale strip below. Side-panel internals scale with whatever column width
 you allocate, so the centre face is free to differ per pedal. See the spec for exact proportions.
 
+The bottom strip holds the OS selectors (LIVE/RENDER) on the left and UI-scale on the right. If you
+add an **HQ toggle** (see `dsp.md` "HQ / Eco mode"), place it **with the OS selectors** (it's a
+quality control, not a window control) — a lit-on / dim-off toggle button immediately after the
+RENDER box, with a brief hover tooltip. Keep it visually distinct from the scale/menu buttons.
+
 ## Resizable UI
 
 - `setResizable(true,true)` + `getConstrainer()->setFixedAspectRatio()` + `setSizeLimits()`

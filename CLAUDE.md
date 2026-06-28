@@ -41,7 +41,7 @@ Format:  clang-format -i src/**/*.{cpp,h}
 
 ## Current State
 
-**Status: SHIPPABLE, v1.0.** All 9 build-sequence steps are complete. Full DSP chain
+**Status: SHIPPABLE, v1.1.** All 9 build-sequence steps are complete. Full DSP chain
 (`src/dsp/`: InputBuffer → Stage1+SW1 clipping, oversampled with ADAA on the rail clip and
 `AccurateOmega` → TrebleNetwork → Stage2, wired via `TommyDSP.h`, then a base-rate
 `TopOctaveRestore` shelf that corrects the low-OS top-octave droop) is validated; op-amp output
@@ -124,7 +124,7 @@ See `analysis/README.md` for harness usage and `analysis/CAPTURE_SPEC.md` for ca
     Developer ID **Installer** cert, distinct from the Application cert already configured — see
     `pedal-plugin-template/.claude/rules/build.md`'s macOS signing section for how to obtain one).
     The release workflow's "Sign + notarize installer" step will fail until these are set.
-- **v1.1 — CPU/latency/memory optimisation pass (in progress).**
+- **v1.1 — CPU/latency optimisation + low-OS fidelity pass (shipped).**
   - **DONE — measurement harness.** `tests/PerfBenchmark.cpp` (CPU % of realtime + latency per OS
     factor/clip mode → README Performance table) and `tests/FeatureProfile.cpp` (per-feature
     CPU-vs-accuracy, below). Both registered with ctest as finite-only probes (CI speed varies, so

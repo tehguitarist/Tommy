@@ -65,3 +65,9 @@ dark-navy theme; recolour via the constants in `PedalLookAndFeel.h`.
 5. **The capture MATRIX, not the test signal, is the usual limit** — sweep one knob at a time,
    capture a bypass/unity anchor, keep the recording gain fixed, and never truncate
    (validation doc §3).
+6. **A multi-stage pedal's true signal order isn't always what the physical layout suggests** —
+   verify it from the hardware/schematic, never assume left-to-right or numbered layout matches
+   processing order (`.claude/rules/circuit.md`).
+7. **Never reconstruct a WDF node voltage from a source port's voltage** — combine only passive
+   ports, or you get a spurious one-sample-averaged low-pass that masquerades as ordinary bilinear
+   warping (`.claude/rules/dsp.md`).

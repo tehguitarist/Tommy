@@ -20,6 +20,19 @@
 - VREF = signal ground throughout: model **bipolar**, no power-supply node modelling (but DO model
   the op-amp output rails as a saturation — see calibration doc §6).
 
+### Fixed (non-runtime) circuit variants
+
+A factory/kit modification that's permanently present on only one of several otherwise-identical
+stages (e.g. one of two series gain circuits is built with one resistor changed) is **not** a
+runtime switch — it's a different stage instance, chosen once at construction
+(`Stage(bool variant)`), with no APVTS parameter, no atomic, and no per-block check. Don't model it
+as a `setSMatrixData()` swap unless the topology itself changes shape: if the variant only changes
+a resistance value and your R-type matrix is built from an `ImpedanceCalculator` that reads port
+impedances live (rather than a value baked into a precomputed table), changing the resistor constant
+at construction is enough — the matrix recomputes itself correctly with no second precomputed
+topology to maintain. Reserve precomputed-matrix swaps (`setSMatrixData()`) for actual runtime mode
+switches with genuinely different port topologies (see "Never rebuild the WDF tree" above).
+
 ### Ideal op-amp decomposition (the workhorse pattern)
 
 For an ideal op-amp the (−) input sits at the (+) input voltage and draws no current, so a
@@ -33,6 +46,17 @@ This avoids a full R-type solve for simple stages. Nonlinear elements (clipping 
 feedback leg and only clamp `Vf` — the op-amp holds the (−) node regardless. Confirm output
 polarity with a **DC-step test** in every stage; only add a `PolarityInverterT` if the readout sign
 genuinely requires it (NOT reflexively for "inverting" op-amps — verify against the schematic).
+
+**Reconstructing a node voltage: use only PASSIVE ports, never a source port.** When an output (or
+any internal node) is read by *combining* two port voltages so a shared node term cancels, every
+port in that combination must be a passive element (resistor, capacitor, or R+C series) — not an
+`IdealVoltageSourceT`/`ResistiveVoltageSourceT` port. A source port's incident/reflected wave is
+scheduled one sample apart from the rest of the tree, so reading its voltage mixes `Vs[n]` and
+`Vs[n-1]` — a spurious 2-point-average low-pass. This is easy to miss because the error *looks like*
+generic bilinear-cap warping (a smoothly-drooping high end) rather than an obvious bug, and can chase
+a sizeable error in a stage's peak/corner frequency before the real cause (the source-port read) is
+found. If a frequency-shaping stage's measured peak/corner is off by more than the expected bilinear
+warp (see "Top-octave accuracy" below), check this before reaching for a prewarp fix.
 
 ### prepareToPlay requirements (missing these = silence or wrong behaviour)
 
@@ -54,6 +78,14 @@ wdft::DiodeT<double, decltype(next), wdft::DiodeQuality::Best, AccurateOmega> d 
   **ideality factor n** (Shockley), NOT a physical count. (1N4148: Is=2.52e-9, Vt=25.85e-3, n=1.752.)
 - chowdsp diodes have no series-Rs parameter; add an explicit `ResistorT` in series if Rs is
   audibly significant (usually negligible at guitar levels).
+- **Two (or more) identical diodes in series collapse to ONE diode with a scaled ideality factor.**
+  For the ideal Shockley equation `V = n·Vt·ln(I/Is + 1)`, identical diodes carrying the same series
+  current sum their voltages linearly in `n`: k diodes in series ≡ a single diode with the same `Is`
+  and `n_eff = k × n`. So a network like "two diodes in series, mirrored by another two in series
+  the other way" is electrically just **one** symmetric `DiodePairT` with `n_eff = 2n` — do not
+  instantiate multiple `DiodePairT`/`DiodeT` objects for a stacked string; that models independent
+  parallel paths, not a series stack, and gets both the threshold voltage and the small-signal
+  behaviour wrong. Verify the simplification against the schematic's actual stack count, not assumed.
 
 ### Asymmetric clip modes & even harmonics — use a PER-POLARITY diode mismatch
 
@@ -133,7 +165,13 @@ Two fixes, a real trade-off:
   right at Nyquist. Recompute per-block for a cap whose corner moves with a pot. Best for low-order,
   well-separated corners. **Only prewarp BASE-RATE linear caps** — a cap inside the oversampled
   nonlinear stage is already discretised at the high rate (the oversampler fixes its warp; prewarping
-  it too would over-correct).
+  it too would over-correct). **Don't prewarp a peak/corner that sweeps with a knob across a wide
+  range** (e.g. a gain-stage resonance whose peak frequency moves with a drive control) — prewarping
+  pins ONE frequency, so it only matches the analog response at the knob position you pinned it to,
+  and is silently wrong everywhere else on that knob's range. For a knob-dependent peak, either
+  accept the warp (validate that the *gain* and DC/limiting behaviour are still correct at the base
+  rate, and document the frequency warp as a known, bounded inaccuracy) or oversample that stage
+  instead, which tracks the moving peak correctly at every knob position.
 - **Oversample the downstream linear HF stages** (extend the nonlinear oversampling region to cover
   tone + recovery): flat to 20 kHz regardless of topology, mode-INDEPENDENT (it's a pure
   discretisation fix, so it behaves identically in every clip mode — the right answer when you need

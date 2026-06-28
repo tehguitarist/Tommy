@@ -33,6 +33,19 @@ List every image in `schematics/` and its role (which is authoritative for what)
 - **Power section parts in the signal columns:** supply-filter R/C (and any series Schottky) can be
   mislabelled as signal-path parts. Exclude VREF-divider and supply-filter components from the DSP
   model.
+- **Same component VALUES ≠ same TOPOLOGY across schematic sources.** Two traces of "the same"
+  pedal (an early-revision trace vs a later kit/clone) can share every R/C value designator-for-
+  designator while wiring one network completely differently (e.g. two independent series R+C
+  branches to ground vs one shared branch-then-shared-cap-to-ground). Identical values are NOT
+  evidence the topology matches — redraw the actual node connections from each source before
+  concluding they agree, especially for any network feeding a feedback node.
+- **If the pedal has more than one full gain stage in series ("channels"/"sides"), verify the
+  ACTUAL signal order from the real unit (continuity trace, or an unambiguous schematic signal-flow
+  arrow) — never assume it from the physical/UI layout.** Left-to-right, top-to-bottom, or numbered
+  ("1/2", "A/B") layout is a UI/PCB-placement convention and is **not** guaranteed to match which
+  stage the input actually reaches first. Getting this backwards still produces a plausible-sounding
+  result (both stages are real circuits, so it "works"), which is exactly why it's easy to ship
+  before catching it — confirm the order explicitly, early, rather than inferring it.
 
 ---
 
@@ -76,6 +89,21 @@ precomputed scattering matrix.
 
 List any controls that share a network and MUST be modelled coupled (not independent), e.g. a tone
 control inside a feedback web. Note `ScopedDeferImpedancePropagation` when updating them together.
+
+## Multi-stage / multi-channel series pedals
+
+If the unit is actually two (or more) complete, otherwise-independent gain circuits in series —
+each with its own controls and its own bypass — model each as its own instance of the same
+per-channel DSP class, instantiated once per stage, NOT as a single wider circuit. Each instance
+needs its own independent bypass/crossfade so the hardware's independent footswitches are honoured.
+
+A fixed factory/kit modification present on only ONE of the otherwise-identical stages (not a
+runtime-switchable mode) belongs at **construction time**, not as an APVTS parameter — see
+`dsp.md` "Fixed (non-runtime) circuit variants".
+
+Document the verified real processing order explicitly here (see the gotcha above) and keep it
+separate from whatever names/labels the UI uses for each stage — naming and signal order are
+independent facts and don't have to agree (see `architecture.md` / `ui.md` if the two diverge).
 
 ## Validation notes
 

@@ -57,10 +57,10 @@ juce::AudioProcessorValueTreeState::ParameterLayout TommyAudioProcessor::createP
         juce::NormalisableRange<float> (-12.0f, 12.0f), 0.0f));
 
     params.push_back (std::make_unique<juce::AudioParameterChoice> ("oversampling", "Oversampling",
-        juce::StringArray { "1x", "2x", "4x", "8x" }, 2));
+        juce::StringArray { "1x", "2x", "4x", "8x" }, 1)); // default 2x for live playback
 
     params.push_back (std::make_unique<juce::AudioParameterChoice> ("render_oversampling", "Render Oversampling",
-        juce::StringArray { "1x", "2x", "4x", "8x" }, 3)); // default 8x for offline bouncing
+        juce::StringArray { "1x", "2x", "4x", "8x" }, 2)); // default 4x for offline bouncing
 
     params.push_back (std::make_unique<juce::AudioParameterBool> ("bypass", "Bypass", false));
 

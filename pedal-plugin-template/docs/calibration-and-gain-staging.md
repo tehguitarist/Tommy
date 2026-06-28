@@ -186,6 +186,19 @@ each op-amp's output, and measure the worst-case node before assuming.
 
 ---
 
+## 6a. Optional "run it hotter" supply-voltage mods — scale ONLY the rail
+
+If you want to offer a supply-voltage option (e.g. a higher-voltage power mod some players run),
+scale **only the op-amp output rail ceiling** with it — the diode/transistor clip thresholds are set
+by junction physics, not supply voltage, and must NOT move. This is both cheap (one constant: rail
+ceiling moves, e.g. `+0.5 V` of usable swing per `+1 V` of supply) and physically accurate, since
+it's literally what happens in the real circuit. The audible effect concentrates in whichever mode
+clips on the rails rather than the diodes (often a clean/boost-style mode) — modes that clip well
+below the rails already are mostly unaffected, which is the correct, faithful result, not a bug to
+chase.
+
+---
+
 ## 6b. Validating clipping: harmonics, saturation, and the "go hotter" trap
 
 Don't validate the drive/clipping by THD alone — compare the **harmonic profile** to captures.

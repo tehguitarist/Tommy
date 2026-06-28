@@ -246,6 +246,37 @@ All three are in `schematics/` at the repo root. Load them when verifying any ci
   pedal markings) in `factoryPresets`, converted to the 0-1 APVTS normalised range via
   `setValueNotifyingHost` at apply time. auval +
   7 ctests still pass.
-- **v1.0 TODO:** Per-platform installers shipped early (v0.8, see above) using pkgbuild/productbuild
-  (macOS), NSIS (Windows), and dpkg-deb (Linux). Nothing else currently scoped for v1.0 — revisit
-  once there's a concrete next feature.
+- **v1.0 TODO — project cleanup pass.** Per-platform installers already shipped (v0.8). Before
+  calling 1.0, do a documentation/repo hygiene pass:
+  - Remove unneeded files (stale analysis scratch outputs, superseded schematics crops, dead
+    build byproducts) — keep `schematics/`, `analysis/` tooling, and anything still referenced.
+  - Condense `.claude/rules/*.md` and `CLAUDE.md`: strip "planned feature — DONE" narration and
+    superseded investigation trails. Where a dead-end was tried, compress to one line
+    ("tried X, reverted — caused Y regression") instead of the full investigation log, but keep
+    final component values, taper laws, and calibration constants verbatim (those are load-bearing
+    for future DSP work, not narration).
+  - Remove resolved "OPEN ITEM"/audit banners once the correction has been folded into the main
+    text (e.g. circuit.md's 2026-06-16 audit banner can become a plain statement of the corrected
+    values once nothing else references the audit).
+  - De-duplicate: several facts (taper laws, calibration constants, diode params) are currently
+    stated in both `CLAUDE.md` and the relevant `rules/*.md` file — pick one home per fact and
+    cross-reference instead of repeating.
+  - Re-check `MEMORY.md`/`memory/*.md` for the same staleness/duplication and prune alongside.
+  - Goal: keep everything a future session needs to not re-derive circuit/DSP decisions, while
+    cutting everything that's just historical narration of how we got there.
+
+- **v1.1 TODO — CPU/latency/memory optimisation pass.**
+  - Profile the full DSP chain (Stage 1 R-type solve, SW1 Newton-Raphson, oversampling,
+    Stage 2) to find the actual hot spots before optimising blind.
+  - Add CPU-usage and latency measurement to the test suite (e.g. a timed render of N seconds
+    of audio at a fixed block size/sample rate, reported as % of realtime, plus
+    `getLatencySamples()` reported per oversampling factor) — wire the results into `ctest` output
+    and summarise them in the README (a small "Performance" table: CPU % and latency per OS
+    factor/clip mode).
+  - While profiling, identify which currently-on features are "a few % CPU for a small accuracy/
+    quality gain" candidates (e.g. diode-pair ADAA if added, the AccurateOmega solve vs the
+    cheaper default omega4, the linear-stage-inside-oversampling treble/Stage2 pass) that could be
+    gated behind an optional "HQ" mode rather than always-on.
+  - **Discuss with the user before adding an HQ toggle or removing/gating any existing accuracy
+    feature** — this is a UX/CPU tradeoff decision, not a pure cleanup, and changes user-facing
+    behaviour (`architecture.md`'s parameter table would need a new APVTS parameter).

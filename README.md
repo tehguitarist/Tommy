@@ -1,23 +1,25 @@
 # Tommy
 
 Tommy is an overdrive plugin (AU and VST3) modelled on the classic "transparent overdrive"
-pedal circuit. Rather than capturing a handful of fixed gain settings, Tommy simulates the actual 
-analog circuit — drive stage,diode clipper, passive tone network, and output buffer — sample by 
-sample, so everycontrol behaves the way the real pedal's electronics would at any setting in between.
+pedal circuit. Rather than capturing a handful of fixed gain settings, Tommy simulates the actual
+analog circuit — drive stage, diode clipper, passive tone network, and output buffer — sample by
+sample, so every control behaves the way the real pedal's electronics would at any setting in between.
 
 > Tommy is an original implementation built from circuit analysis and is not affiliated
 > with or endorsed by any pedal manufacturer.
+
+**[⬇ Download the latest release](https://github.com/tehguitarist/Tommy/releases/latest)**
 
 <img src="image.png" width=60% />
 
 ## Overview
 
 Under the hood, Tommy's signal path is built as a [Wave Digital Filter](https://en.wikipedia.org/wiki/Wave_digital_filter)
-(WDF) network using [`chowdsp_wdf`](https://github.com/Chowdhury-DSP/chowdsp_wdf). Every 
-resistor, capacitor, and diode in the original circuit has a corresponding WDF element 
-with the real component's value; the nonlinear clipping diodes are solved with 
-Newton-Raphson iteration rather than a curve-fit approximation. The resultresponds to 
-the interaction between controls the way the analog circuit does — turningup Bass 
+(WDF) network using [`chowdsp_wdf`](https://github.com/Chowdhury-DSP/chowdsp_wdf). Every
+resistor, capacitor, and diode in the original circuit has a corresponding WDF element
+with the real component's value; the nonlinear clipping diodes are solved with
+Newton-Raphson iteration rather than a curve-fit approximation. The result responds to
+the interaction between controls the way the analog circuit does — turning up Bass
 changes how Gain behaves, because on the real pedal they share the same feedback
 network, and that coupling is modelled directly rather than faked with two independent
 EQ curves.
@@ -79,20 +81,6 @@ None of this is neural-net or sample-based modelling — every stage is an analy
 so the plugin's behavior generalizes to settings and signal levels that were never explicitly
 captured.
 
-## Controls
-
-| Control | Description |
-|---|---|
-| Bass | Low end into the drive stage (shares a feedback network with Gain) |
-| Gain | Drive amount / clipping stage input level |
-| Treble | High-frequency cut after the clipping stage |
-| Volume | Output level |
-| Clipping switch (Symmetrical / Open / Asymmetrical) | Selects the diode clipping topology |
-| Supply voltage (9V / 12V / 18V) | Op-amp rail headroom; diode thresholds unchanged |
-| Input Trim / Output Trim | ±12 dB trims with VU metering, for level matching |
-| Oversampling (live / render) | 1x / 2x / 4x / 8x, independent factors for playback vs. export |
-| Bypass | True bypass with crossfade |
-
 ## Where to find things
 
 ```
@@ -120,7 +108,6 @@ schematics/                 Source schematics the circuit model is built from
 .claude/rules/               Detailed circuit/DSP/architecture/UI/build references —
                              read circuit.md if you want the full component-by-component
                              schematic breakdown
-CLAUDE.md                    Project status and build-step log
 ```
 
 ## Installing a release build
@@ -134,9 +121,6 @@ guided installer. Six files total:
 | macOS | `Tommy-macOS-vX.Y.Z.zip` — AU + VST3 | `Tommy-macOS-vX.Y.Z-Installer.pkg` — lets you choose AU, VST3, or both (both checked by default) |
 | Windows | `Tommy-Windows-vX.Y.Z.zip` — VST3 | `Tommy-Windows-vX.Y.Z-Installer.exe` — VST3 only (no AU on Windows) |
 | Linux | `Tommy-Linux-vX.Y.Z.zip` — VST3 | `Tommy-Linux-vX.Y.Z-Installer.deb` — VST3 only (no AU on Linux) |
-
-All six are built and published automatically by [GitHub Actions](.github/workflows/release.yml),
-but only on a manual trigger — nothing publishes itself on every push.
 
 ### Installer (recommended)
 
@@ -195,12 +179,6 @@ the whole suite runs as one pass/fail gate (this is also what CI runs on every p
 cmake --build build
 ctest --test-dir build --output-on-failure
 ```
-
-## Status
-
-Core DSP, UI, and calibration are complete and the plugin passes `auval`. See
-[CLAUDE.md](CLAUDE.md) for the detailed build-step log and what (if anything) is
-still open.
 
 ## License
 

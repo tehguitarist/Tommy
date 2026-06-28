@@ -57,3 +57,13 @@ you allocate, so the centre face is free to differ per pedal. See the spec for e
 Input and output trim knobs use the **halo** style (`componentID == "trim"`) to stay visually
 distinct from the pedal's own controls. Input trim sits pre-DSP (post → meter → chain); output trim
 post-DSP (chain → meter → out).
+
+## When a fixed name/position can't change but the underlying fact can
+
+If a control's name or on-screen position is locked for compatibility/familiarity (e.g. it must
+keep matching the hardware's physical layout) but you later learn an underlying fact about it has
+changed (e.g. which one actually processes first — see `architecture.md`), don't silently rename or
+reposition anything. Instead add a small, non-interactive label/badge near the control that states
+the real fact directly (e.g. a processing-order marker), so the UI stays legible without requiring
+the user to already know the internal correction. Keep it visually secondary (small, muted colour)
+to the control's primary identity.

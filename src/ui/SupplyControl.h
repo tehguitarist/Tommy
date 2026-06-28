@@ -34,7 +34,7 @@ public:
         g.setColour(index < 2 ? lit : dim); // "(+)" lit when a higher voltage is available
         g.drawText("(+)", layout.plusBounds, juce::Justification::centred, false);
 
-        g.setColour(dim);
+        g.setColour(lit);
         g.drawText(layout.voltsText, layout.voltsBounds, juce::Justification::centred, false);
 
         g.setColour(index > 0 ? lit : dim); // "(-)" lit when a lower voltage is available

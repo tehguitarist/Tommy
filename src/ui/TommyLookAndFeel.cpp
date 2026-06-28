@@ -206,31 +206,25 @@ void TommyLookAndFeel::drawButtonBackground(juce::Graphics& g, juce::Button& but
     }
     else if (button.getComponentID() == "os")
     {
-        // Segmented OS button — toggle state drives active appearance
-        const bool active = button.getToggleState();
+        // Styled to match the OS ComboBoxes (same brightness/colours), not a toggle state.
         const float corner = 4.0f;
 
-        g.setColour(active ? juce::Colour(cOSBtnActiveBg) : juce::Colour(0xFF0C1828u));
+        g.setColour(juce::Colour(cOSBtnActiveBg));
         g.fillRoundedRectangle(b, corner);
-        g.setColour(active ? juce::Colour(cOSBtnActiveBdr) : juce::Colour(0xFF182840u));
+        g.setColour(juce::Colour(cOSBtnActiveBdr));
         g.drawRoundedRectangle(b.reduced(0.5f), corner, 1.0f);
-
-        if (active)
-        {
-            // Subtle glow
-            g.setColour(juce::Colour(cOSBtnActiveBdr).withAlpha(0.3f));
-            g.drawRoundedRectangle(b.expanded(1.5f), corner + 1.5f, 1.5f);
-        }
     }
 }
 
 void TommyLookAndFeel::drawButtonText(juce::Graphics& g, juce::TextButton& button,
                                        bool, bool down)
 {
-    const bool active = button.getToggleState();
+    const bool isOSButton = button.getComponentID() == "os";
+    const bool active = isOSButton || button.getToggleState();
     const juce::Colour col = active ? juce::Colour(cOSBtnActive) : juce::Colour(cOSLabel);
     g.setColour(col);
-    g.setFont(juce::Font(juce::FontOptions(8.0f, juce::Font::bold)));
+    const float fontPx = isOSButton ? juce::jmax(7.0f, (float) button.getHeight() * 0.38f) : 8.0f;
+    g.setFont(juce::Font(juce::FontOptions(fontPx, juce::Font::bold)));
 
     auto area = button.getLocalBounds();
     if (down) area = area.translated(0, 1);

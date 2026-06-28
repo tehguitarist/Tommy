@@ -420,7 +420,7 @@ void TommyAudioProcessorEditor::resized()
         op.removeFromLeft(i(8));
 
         // Scale preset button + "UI SIZE" label at far right
-        scaleBtn.setBounds(op.removeFromRight(i(48)).withSizeKeepingCentre(i(48), i(16)));
+        scaleBtn.setBounds(op.removeFromRight(i(48)).withSizeKeepingCentre(i(48), op.getHeight()));
         op.removeFromRight(i(5));
         sizeLabel.setBounds(op.removeFromRight(i(42)).withSizeKeepingCentre(i(42), i(14)));
         op.removeFromRight(i(8)); // breathing room before the OS controls end

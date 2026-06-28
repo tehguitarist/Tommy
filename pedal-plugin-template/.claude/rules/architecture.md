@@ -28,6 +28,24 @@ PedalAudioProcessor : AudioProcessor
 recovery stage). Volume/trim/metering live in the processor (plain gains + level reads), not in the
 WDF tree.
 
+### Multiple full gain stages in series ("dual"/"stacked" pedals)
+
+If the pedal is actually two or more complete, independently-bypassable gain circuits chained
+together (not just stereo L/R), instantiate one `PedalDSP`-style object per **stage**, fed into each
+other in series, each with its own bypass crossfade — not stereo channels of one circuit. The order
+they're wired in `processBlock` must be the **verified real signal order** (see `circuit.md` —
+trace it from the hardware/schematic, never assume it from physical layout or numbering). A fixed
+per-stage build variant (e.g. one stage has a permanent factory mod the other doesn't) is a
+constructor-time flag on that stage's class, not a parameter — see `dsp.md` "Fixed (non-runtime)
+circuit variants".
+
+If you discover **after shipping parameters** that your assumed signal order (or any other
+assumption baked into IDs/labels) was wrong, fix the runtime *behaviour* (which object processes
+first) without renaming the APVTS parameter IDs or reordering member declarations that match them —
+existing saved sessions reference parameters by ID, and renaming/reordering breaks recall silently.
+Keep the old IDs/order for compatibility and document the now-stale name↔order mismatch clearly in
+comments and project notes so a future reader isn't misled by the names.
+
 ## Parameters (APVTS)
 
 Typical set — adapt to the pedal. Use `0..1` `AudioParameterFloat` for pot controls and apply the

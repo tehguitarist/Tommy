@@ -115,8 +115,14 @@ jobs:
       - name: Package
         run: |
           VERSION="${{ needs.version.outputs.version }}"
-          ditto -c -k --sequesterRsrc --keepParent \
-            build/Tommy_artefacts/Release "Tommy-macOS-v${VERSION}.zip"
+          # Zip only the AU/VST3 bundles, NOT the whole Release dir — that also contains
+          # libTommy_SharedCode.a (a ~28 MB build byproduct, not something an end user installs).
+          # ditto -c can't take multiple sources directly, so stage them into one dir first
+          # (named "Tommy" so --keepParent gives the zip a clean top-level folder).
+          PKG_DIR="$RUNNER_TEMP/Tommy"
+          mkdir -p "$PKG_DIR"
+          cp -R "build/Tommy_artefacts/Release/AU" "build/Tommy_artefacts/Release/VST3" "$PKG_DIR/"
+          ditto -c -k --sequesterRsrc --keepParent "$PKG_DIR" "Tommy-macOS-v${VERSION}.zip"
 
       - name: Build installer
         run: |

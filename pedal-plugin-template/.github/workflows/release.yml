@@ -116,8 +116,14 @@ jobs:
       - name: Package
         run: |
           VERSION="${{ needs.version.outputs.version }}"
-          ditto -c -k --sequesterRsrc --keepParent \
-            build/<Pedal>_artefacts/Release "<Pedal>-macOS-v${VERSION}.zip"
+          # Zip only the AU/VST3 bundles, NOT the whole Release dir — that also contains
+          # lib<Pedal>_SharedCode.a (a build byproduct, not something an end user installs).
+          # ditto -c can't take multiple sources directly, so stage them into one dir first
+          # (named "<Pedal>" so --keepParent gives the zip a clean top-level folder).
+          PKG_DIR="$RUNNER_TEMP/<Pedal>"
+          mkdir -p "$PKG_DIR"
+          cp -R "build/<Pedal>_artefacts/Release/AU" "build/<Pedal>_artefacts/Release/VST3" "$PKG_DIR/"
+          ditto -c -k --sequesterRsrc --keepParent "$PKG_DIR" "<Pedal>-macOS-v${VERSION}.zip"
 
       - name: Build installer
         run: |

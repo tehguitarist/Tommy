@@ -125,14 +125,44 @@ CLAUDE.md                    Project status and build-step log
 
 ## Installing a release build
 
-Prebuilt zips (one per platform: macOS, Windows, Linux) are published on the
-[Releases page](https://github.com/tehguitarist/Tommy/releases). Each release is built and
-packaged automatically by [GitHub Actions](.github/workflows/release.yml), but only ever on
-a manual trigger — nothing publishes itself on every push.
+Each [Release](https://github.com/tehguitarist/Tommy/releases) ships two ways to install per
+platform — a plain zip of the plugin files (for anyone who'd rather drop them in manually) and a
+guided installer. Six files total:
 
-> **macOS note:** release zips are currently **unsigned** (Apple Developer ID signing and
-> notarization are planned for a future release). Gatekeeper will warn on first launch —
-> right-click the plugin and choose "Open", or allow it in System Settings → Privacy & Security.
+| Platform | Zip (manual) | Installer |
+|---|---|---|
+| macOS | `Tommy-macOS-vX.Y.Z.zip` — AU + VST3 | `Tommy-macOS-vX.Y.Z-Installer.pkg` — lets you choose AU, VST3, or both (both checked by default) |
+| Windows | `Tommy-Windows-vX.Y.Z.zip` — VST3 | `Tommy-Windows-vX.Y.Z-Installer.exe` — VST3 only (no AU on Windows) |
+| Linux | `Tommy-Linux-vX.Y.Z.zip` — VST3 | `Tommy-Linux-vX.Y.Z-Installer.deb` — VST3 only (no AU on Linux) |
+
+All six are built and published automatically by [GitHub Actions](.github/workflows/release.yml),
+but only on a manual trigger — nothing publishes itself on every push.
+
+### Installer (recommended)
+
+- **macOS:** double-click the `.pkg` and follow the prompts. A "Customize" screen lets you pick AU
+  and/or VST3; both are selected by default. Installs to `/Library/Audio/Plug-Ins/Components` and
+  `/Library/Audio/Plug-Ins/VST3` respectively.
+- **Windows:** run the `.exe` and follow the prompts. Installs the VST3 to
+  `%COMMONPROGRAMFILES%\VST3\Tommy.vst3`. Includes an uninstaller.
+- **Linux:** `sudo dpkg -i Tommy-Linux-vX.Y.Z-Installer.deb` installs the VST3 to
+  `/usr/lib/vst3/Tommy.vst3`.
+
+### Manual (zip)
+
+Unzip and copy the plugin bundle(s) to your system's plugin folder yourself:
+
+- **macOS:** `Tommy.component` → `~/Library/Audio/Plug-Ins/Components/` (or
+  `/Library/Audio/Plug-Ins/Components/` for all users), `Tommy.vst3` → `~/Library/Audio/Plug-Ins/VST3/`
+  (or `/Library/Audio/Plug-Ins/VST3/`).
+- **Windows:** `Tommy.vst3` → `C:\Program Files\Common Files\VST3\`.
+- **Linux:** `Tommy.vst3` → `~/.vst3/` (or `/usr/lib/vst3/` for all users).
+
+> **macOS signing:** release artifacts are signed with a Developer ID certificate and notarized by
+> Apple — no Gatekeeper warning on first launch for the AU/VST3 bundles themselves. The `.pkg`
+> installer wrapper is not separately signed, so macOS may still show an "unidentified developer"
+> prompt when you double-click the `.pkg` directly (right-click → Open, or allow it once in System
+> Settings → Privacy & Security) — this doesn't affect the plugin bundles it installs.
 
 ## Building
 

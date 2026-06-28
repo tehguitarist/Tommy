@@ -233,14 +233,19 @@ All three are in `schematics/` at the repo root. Load them when verifying any ci
   `APPLE_CERT_PASSWORD`), codesigns both AU and VST3 bundles (`APPLE_SIGNING_IDENTITY`, hardened
   runtime + timestamp), submits to `notarytool` (`APPLE_ID` + `APPLE_APP_SPECIFIC_PASSWORD` +
   `APPLE_TEAM_ID`, `--wait`), staples the ticket, then packages and deletes the temp keychain.
-  Untested end-to-end (no release run yet since secrets were added) — verify on the next
-  `workflow_dispatch` run before calling v0.8 final.
-- **v0.9 DONE (2026-06-28):** 5 factory presets (Bluesy OD, Rhythm Crunch, Rock Lead, High Gain,
-  Edge-of-Breakup) wired via the standard JUCE program API (`getNumPrograms`/`setCurrentProgram`/
-  `getProgramName` in `PluginProcessor.cpp`) — exposed in any host's preset menu. Knob values are
-  stored as physical 0-10 dial positions (matching printed pedal markings) in `factoryPresets`,
-  converted to the 0-1 APVTS normalised range via `setValueNotifyingHost` at apply time. auval +
+  **Verified live 2026-06-28** — `workflow_dispatch` run succeeded end-to-end, notarytool returned
+  `status: Accepted`. Also added per-platform installers (`installer/macos|windows|linux/`): a
+  macOS `.pkg` with an AU/VST3 choice screen (both selected by default), a Windows `.exe` (NSIS),
+  and a Linux `.deb` — published alongside the raw plugin-only zips (fixed the macOS zip to
+  exclude `libTommy_SharedCode.a`, a ~28 MB build byproduct that was leaking into it). Same
+  signing/installer/zip-fix pattern was ported into `pedal-plugin-template/` for reuse.
+- **v0.9 DONE (2026-06-28):** Plugin version bumped to 0.9.0. 5 factory presets (Bluesy OD,
+  Rhythm Crunch, Rock Lead, High Gain, Edge-of-Breakup) wired via the standard JUCE program API
+  (`getNumPrograms`/`setCurrentProgram`/`getProgramName` in `PluginProcessor.cpp`) — exposed in any
+  host's preset menu. Knob values are stored as physical 0-10 dial positions (matching printed
+  pedal markings) in `factoryPresets`, converted to the 0-1 APVTS normalised range via
+  `setValueNotifyingHost` at apply time. auval +
   7 ctests still pass.
-- **v1.0 TODO:** Simple per-platform installers, if JUCE/CMake tooling supports it without
-  disproportionate effort (e.g. `pkgbuild`/`productbuild` on macOS, NSIS/WiX on Windows,
-  `.deb`/AppImage on Linux) — evaluate feasibility at the time, not committed yet.
+- **v1.0 TODO:** Per-platform installers shipped early (v0.8, see above) using pkgbuild/productbuild
+  (macOS), NSIS (Windows), and dpkg-deb (Linux). Nothing else currently scoped for v1.0 — revisit
+  once there's a concrete next feature.

@@ -154,3 +154,17 @@ target_link_libraries(Step7_Integration PRIVATE
     juce::juce_dsp
     juce::juce_recommended_config_flags)
 add_test(NAME Step7_Integration COMMAND Step7_Integration)
+
+# v1.1 CPU/latency benchmark (TommyDSP uses ClippingOversampler -> juce_dsp). Measurement probe,
+# not an accuracy test — see PerfBenchmark.cpp's header comment.
+juce_add_console_app(PerfBenchmark PRODUCT_NAME "PerfBenchmark")
+target_sources(PerfBenchmark PRIVATE tests/PerfBenchmark.cpp)
+target_compile_definitions(PerfBenchmark PRIVATE
+    JUCE_USE_CURL=0
+    JUCE_WEB_BROWSER=0
+    JUCE_STANDALONE_APPLICATION=1)
+target_link_libraries(PerfBenchmark PRIVATE
+    chowdsp::chowdsp_wdf
+    juce::juce_dsp
+    juce::juce_recommended_config_flags)
+add_test(NAME PerfBenchmark COMMAND PerfBenchmark)

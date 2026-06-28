@@ -177,6 +177,19 @@ cmake --build build
 ctest --test-dir build --output-on-failure
 ```
 
+### Performance
+
+CPU usage (% of realtime, single channel) and algorithmic latency at each oversampling factor,
+measured by `PerfBenchmark` (`tests/PerfBenchmark.cpp`) on an Apple Silicon Mac, Release build.
+Clip mode has negligible effect on CPU; figures will vary by machine.
+
+| OS factor | CPU % of realtime | Latency (samples) | Latency (ms) |
+|-----------|-------------------:|-------------------:|-------------:|
+| 1x        | ~0.7%              | 0                   | 0.000        |
+| 2x        | ~1.6%              | 49                  | 1.021        |
+| 4x        | ~3.0%              | 60                  | 1.240        |
+| 8x        | ~5.8%              | 64                  | 1.339        |
+
 ## License
 
 Tommy is licensed under the [GNU Affero General Public License v3.0](LICENSE) (AGPLv3).

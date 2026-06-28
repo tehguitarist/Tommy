@@ -44,7 +44,9 @@ Format:  clang-format -i src/**/*.{cpp,h}
 **Status: SHIPPABLE, v1.0.** All 9 build-sequence steps are complete. Full DSP chain
 (`src/dsp/`: InputBuffer → Stage1+SW1 clipping, oversampled with ADAA on the rail clip and
 `AccurateOmega` → TrebleNetwork → Stage2, wired via `TommyDSP.h`) is validated; op-amp output
-rails are modelled on both stages. `auval` passes; 8 test executables pass. UI (Step 8) is a
+rails are modelled on both stages. `auval` passes; 8 test executables pass (one, `PerfBenchmark`,
+is a CPU/latency measurement probe rather than pass/fail accuracy — see README's Performance
+table). UI (Step 8) is a
 fixed 480×480 three-column layout — full design in `ui.md`. No open modelling items remain.
 
 ### Calibration constants (`PluginProcessor.h` / `TaperUtils.h`)

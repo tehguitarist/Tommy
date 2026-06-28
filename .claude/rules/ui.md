@@ -204,10 +204,11 @@ oversampling rates plus a UI-scale control):
 - **"RENDER"** label + `osRenderBox` (separate `ComboBox` + attachment) — the factor used for
   offline rendering/export, independent of LIVE
 - **"HQ"** toggle (`hqButton`, `juce::TextButton`, componentID `"ostoggle"`, `ButtonParameterAttachment`
-  to the `hq` parameter) — grouped at the right with the UI-size controls. **Lit when on, dim when
-  off**, default on. Hover tooltip (`setTooltip`, shown via a `juce::TooltipWindow` member on the
-  editor): "HQ: most accurate diode modelling. Turn off to save CPU." Toggles the accurate vs fast
-  diode solver (see `architecture.md` `hq` / `dsp.md` Omega accuracy).
+  to the `hq` parameter) — sits **immediately after the RENDER box** (a quality control, grouped with
+  the OS selectors, not over by UI SIZE). **Lit when on, dim when off**, default on. Hover tooltip
+  (`setTooltip`, shown via a `juce::TooltipWindow` member on the editor): "HQ: most accurate diode
+  modelling. Turn off to save CPU." Toggles the accurate vs fast diode solver (see `architecture.md`
+  `hq` / `dsp.md` Omega accuracy).
 - **"UI SIZE"** label (`sizeLabel`) + `scaleBtn` (`juce::TextButton`, componentID `"os"`, shows
   the current scale e.g. `"100%"`) at the far right — opens `showScaleMenu()`, a preset picker
   (50%–250% in 25% steps) for `currentScale` (see Plugin Window)

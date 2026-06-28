@@ -428,15 +428,13 @@ void TommyAudioProcessorEditor::resized()
         osLabel.setBounds(op.removeFromLeft(i(20)));
         op.removeFromLeft(i(8));
 
-        // Far right: [HQ] [UI SIZE] [scale %] — quality + scale controls grouped together
+        // Far right: [UI SIZE] [scale %]
         scaleBtn.setBounds(op.removeFromRight(i(48)).withSizeKeepingCentre(i(48), op.getHeight()));
         op.removeFromRight(i(5));
         sizeLabel.setBounds(op.removeFromRight(i(42)).withSizeKeepingCentre(i(42), i(14)));
-        op.removeFromRight(i(10));
-        hqButton.setBounds(op.removeFromRight(i(28)).withSizeKeepingCentre(i(28), op.getHeight()));
         op.removeFromRight(i(8)); // breathing room before the OS controls end
 
-        // Left-aligned: LIVE [gap] liveBox [sep] RENDER [gap] renderBox
+        // Left-aligned: LIVE [gap] liveBox [sep] RENDER [gap] renderBox [sep] HQ
         // RENDER label is wider than LIVE to avoid truncation
         const int liveW = i(26), renderW = i(40), innerGap = i(5), boxW = i(36), sep = i(12);
         osLiveLabel.setBounds(op.removeFromLeft(liveW));
@@ -446,6 +444,9 @@ void TommyAudioProcessorEditor::resized()
         osBncLabel.setBounds(op.removeFromLeft(renderW));
         op.removeFromLeft(innerGap);
         osRenderBox.setBounds(op.removeFromLeft(boxW));
+        // HQ toggle sits just after the OS selectors (it's a quality control, same group)
+        op.removeFromLeft(sep);
+        hqButton.setBounds(op.removeFromLeft(i(28)).withSizeKeepingCentre(i(28), op.getHeight()));
     }
 
     scaleBtn.setButtonText(juce::String(juce::roundToInt(currentScale * 100.0f)) + "%");

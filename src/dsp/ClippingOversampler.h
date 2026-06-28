@@ -28,11 +28,17 @@ namespace tommy::dsp
  *
  * factorLog2: 0 = 1x (no oversampling), 1 = 2x, 2 = 4x, 3 = 8x.
  * Mono (single Stage1 instance); the plugin instantiates one per channel.
+ *
+ * Templated on Stage 1's omega provider only so the feature-profiling test can run the whole clip
+ * path with chowdsp's fast omega4 for A/B; production code uses the `ClippingOversampler` alias.
  */
-class ClippingOversampler
+template <typename OmegaProvider = AccurateOmega>
+class ClippingOversamplerT
 {
 public:
     using OS = juce::dsp::Oversampling<double>;
+    using Stage1Type = Stage1T<OmegaProvider>;
+    using ClipMode = typename Stage1Type::ClipMode;
 
     void prepare (double baseSampleRate, int maxBlockSize, int factorLog2)
     {
@@ -81,7 +87,7 @@ public:
             oversampler->reset();
     }
 
-    void setMode (Stage1::ClipMode m) { stage1.setMode (m); }
+    void setMode (typename Stage1Type::ClipMode m) { stage1.setMode (m); }
     void setParams (double bassR, double driveR) { stage1.setParams (bassR, driveR); }
     void setAsymMismatch (double m) { stage1.setAsymMismatch (m); }
     void setSymMismatch (double m) { stage1.setSymMismatch (m); }
@@ -125,11 +131,14 @@ public:
     }
 
 private:
-    Stage1 stage1;
+    Stage1Type stage1;
     std::array<std::unique_ptr<OS>, 3> oversamplers; // index = factorLog2 - 1, for 2x/4x/8x
     OS* oversampler = nullptr; // active oversampler (points into oversamplers[]), or null at 1x
     double baseRate = 48000.0;
     int maxBlock = 512;
     int osLog2 = 3;
 };
+
+/** Production clip/oversampling stage (accurate Wright-omega). */
+using ClippingOversampler = ClippingOversamplerT<AccurateOmega>;
 } // namespace tommy::dsp

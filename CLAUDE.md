@@ -44,10 +44,17 @@ Format:  clang-format -i src/**/*.{cpp,h}
 **Status: SHIPPABLE, v1.0.** All 9 build-sequence steps are complete. Full DSP chain
 (`src/dsp/`: InputBuffer → Stage1+SW1 clipping, oversampled with ADAA on the rail clip and
 `AccurateOmega` → TrebleNetwork → Stage2, wired via `TommyDSP.h`) is validated; op-amp output
-rails are modelled on both stages. `auval` passes; 8 test executables pass (one, `PerfBenchmark`,
-is a CPU/latency measurement probe rather than pass/fail accuracy — see README's Performance
-table). UI (Step 8) is a
+rails are modelled on both stages. `auval` passes; 9 test executables pass (two, `PerfBenchmark`
+and `FeatureProfile`, are measurement probes rather than pass/fail accuracy — `PerfBenchmark` →
+README's Performance table; `FeatureProfile` → the v1.1 roadmap's CPU-vs-accuracy data). UI
+(Step 8) is a
 fixed 480×480 three-column layout — full design in `ui.md`. No open modelling items remain.
+
+> **DSP stage classes are templated on the diode omega provider** (`Stage1T`/`ClippingOversamplerT`/
+> `TommyDSPT`, all defaulting to `AccurateOmega`; `Stage1`/`ClippingOversampler`/`TommyDSP` are the
+> production aliases). The template parameter exists solely so `FeatureProfile` can A/B the accurate
+> solver against chowdsp's fast `omega4` — production code is byte-for-byte unchanged. `ClipMode` is
+> namespace-scoped (one type across all instantiations) with a `Stage1::ClipMode` member alias.
 
 ### Calibration constants (`PluginProcessor.h` / `TaperUtils.h`)
 
@@ -116,18 +123,30 @@ See `analysis/README.md` for harness usage and `analysis/CAPTURE_SPEC.md` for ca
     Developer ID **Installer** cert, distinct from the Application cert already configured — see
     `pedal-plugin-template/.claude/rules/build.md`'s macOS signing section for how to obtain one).
     The release workflow's "Sign + notarize installer" step will fail until these are set.
-- **v1.1 TODO — CPU/latency/memory optimisation pass.**
-  - Profile the full DSP chain (Stage 1 R-type solve, SW1 Newton-Raphson, oversampling,
-    Stage 2) to find the actual hot spots before optimising blind.
-  - Add CPU-usage and latency measurement to the test suite (e.g. a timed render of N seconds
-    of audio at a fixed block size/sample rate, reported as % of realtime, plus
-    `getLatencySamples()` reported per oversampling factor) — wire the results into `ctest`
-    output and summarise them in the README (a small "Performance" table: CPU % and latency
-    per OS factor/clip mode).
-  - While profiling, identify which currently-on features are "a few % CPU for a small
-    accuracy/quality gain" candidates (e.g. diode-pair ADAA if added, the `AccurateOmega` solve
-    vs. the cheaper default `omega4`, the linear-stage-inside-oversampling treble/Stage2 pass)
-    that could be gated behind an optional "HQ" mode rather than always-on.
-  - **Discuss with the user before adding an HQ toggle or removing/gating any existing accuracy
-    feature** — this is a UX/CPU tradeoff decision, not a pure cleanup, and changes user-facing
-    behaviour (`architecture.md`'s parameter table would need a new APVTS parameter).
+- **v1.1 — CPU/latency/memory optimisation pass (in progress).**
+  - **DONE — measurement harness.** `tests/PerfBenchmark.cpp` (CPU % of realtime + latency per OS
+    factor/clip mode → README Performance table) and `tests/FeatureProfile.cpp` (per-feature
+    CPU-vs-accuracy, below). Both registered with ctest as finite-only probes (CI speed varies, so
+    no absolute-CPU gate). To enable the feature A/B, the DSP stage classes were templated on the
+    diode omega provider (defaulted, production-unchanged — see Current State note).
+  - **DONE — feature CPU-vs-accuracy data** (from `FeatureProfile`, Apple Silicon, 48 kHz, single
+    channel, clipping engaged). Classifies each performance-affecting feature:
+    - **Omega solver — the ONLY real CPU/accuracy lever.** `omega4` is ~45% cheaper full-chain
+      (4×: 3.0%→1.6% RT; 8×: 5.7%→3.0%) — the diode solve dominates DSP cost — but introduces a
+      **−30 dB (1×) … −38…−44 dB (4×/8×) null error** vs `AccurateOmega`. Real, potentially
+      audible on a transparent pedal → NOT a free swap; the sole legitimate "HQ" candidate.
+    - **Rail-clip ADAA — STRAIGHT WIN, keep always on.** ~0% CPU (4×: 2.98%→2.99%) for a **+26 dB**
+      aliasing reduction (4×: −47.9→−74.1 dB). No reason to ever gate it.
+    - **Treble+Stage2 in the OS region — STRAIGHT WIN, keep always on.** Costs only **0.12%** at 4×
+      but buys **+2.4 dB @12 kHz / +5.0 dB @16 kHz** top octave vs running them at base rate.
+    - **Diode mismatch — free** (0.02% @4×); it's a faithfulness feature (even harmonics), not a
+      quality/CPU tradeoff. Keep always on.
+  - **OPEN — HQ-button decision (discuss with user).** The data says only the omega solver is worth
+    a toggle, and even `AccurateOmega` at the 4× default is just ~3% of one core — so the simplest
+    product call may be to ship everything accurate and add NO button. If a toggle is wanted it's an
+    "Eco/HQ" = `omega4`/`AccurateOmega` switch (would need a new APVTS choice param +
+    `architecture.md` table entry + templating `PluginProcessor`'s DSP on the provider or a runtime
+    provider switch). **Do not add the toggle or downgrade any always-on feature without sign-off.**
+  - **NOT YET DONE:** memory profiling; the optional fine-grained hot-spot profile (per-adaptor) —
+    `FeatureProfile` already localised the dominant cost to the diode/omega solve, so a deeper
+    per-adaptor breakdown is likely unnecessary unless a specific optimisation is pursued.

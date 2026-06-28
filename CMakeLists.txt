@@ -168,3 +168,17 @@ target_link_libraries(PerfBenchmark PRIVATE
     juce::juce_dsp
     juce::juce_recommended_config_flags)
 add_test(NAME PerfBenchmark COMMAND PerfBenchmark)
+
+# v1.1 feature CPU-vs-accuracy profiler (omega solver / ADAA / OS-region / mismatch). Measurement
+# probe (asserts finite output only) — informs the HQ-mode decision. See FeatureProfile.cpp header.
+juce_add_console_app(FeatureProfile PRODUCT_NAME "FeatureProfile")
+target_sources(FeatureProfile PRIVATE tests/FeatureProfile.cpp)
+target_compile_definitions(FeatureProfile PRIVATE
+    JUCE_USE_CURL=0
+    JUCE_WEB_BROWSER=0
+    JUCE_STANDALONE_APPLICATION=1)
+target_link_libraries(FeatureProfile PRIVATE
+    chowdsp::chowdsp_wdf
+    juce::juce_dsp
+    juce::juce_recommended_config_flags)
+add_test(NAME FeatureProfile COMMAND FeatureProfile)

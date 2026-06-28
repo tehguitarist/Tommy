@@ -20,8 +20,13 @@ namespace tommy::dsp
  * removes the base-rate bilinear top-octave droop (~2.3 dB at 12 kHz even after prewarp) — a pure
  * linear-discretisation fix, identical in every clip mode. InputBuffer (an ~8 Hz HP, no audible-band
  * HF caps) and the C6 output DC block stay at base rate.
+ *
+ * Templated on Stage 1's omega provider (default AccurateOmega = shipped behaviour) so the
+ * feature-profiling test can build a full chain with chowdsp's fast omega4 for A/B measurement.
+ * All production code uses the `TommyDSP` alias and is unaffected.
  */
-class TommyDSP
+template <typename OmegaProvider = AccurateOmega>
+class TommyDSPT
 {
 public:
     void prepare (double baseSampleRate, int maxBlockSize, int factorLog2)
@@ -121,11 +126,14 @@ public:
 
 private:
     InputBuffer input;
-    ClippingOversampler clipper; // owns Stage 1 + the oversampler
+    ClippingOversamplerT<OmegaProvider> clipper; // owns Stage 1 + the oversampler
     TrebleNetwork treble;
     Stage2 stage2;
 
     // C6 output-coupling DC blocker (see prepare()).
     double dcR = 0.0, dcX1 = 0.0, dcY1 = 0.0;
 };
+
+/** Production per-channel chain (accurate Wright-omega). PluginProcessor uses this alias. */
+using TommyDSP = TommyDSPT<AccurateOmega>;
 } // namespace tommy::dsp

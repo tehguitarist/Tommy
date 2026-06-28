@@ -145,17 +145,27 @@ private:
  * SW1 modes (circuit.md): Soft = two antiparallel 1N4148 pairs (D5+D6 ∥ D3+D4) => one
  * DiodePairT with 2*Is; Medium = one antiparallel pair (D5+D6) => DiodePairT with Is; Hard =
  * single diode (D1) => DiodeT (asymmetric). Linear (no diodes) is retained for validation.
+ *
+ * Templated on the diode Wright-omega provider (default AccurateOmega — the shipped behaviour).
+ * The template parameter exists so the feature-profiling test (tests/FeatureProfile.cpp) can A/B
+ * AccurateOmega against chowdsp's fast omega4 for the CPU-vs-accuracy data behind the HQ-mode
+ * decision; production code uses the `Stage1` alias below and is unaffected.
  */
-class Stage1
+/** SW1 clipping mode. Namespace-scoped (not nested in Stage1T) so it is ONE type across every
+ *  omega-provider instantiation — `Stage1::ClipMode` still resolves via the member alias below. */
+enum class ClipMode
+{
+    Linear, // no diodes (Step-4 validation reference)
+    Soft,   // 4 diodes: two antiparallel pairs (2*Is)
+    Medium, // 2 diodes: one antiparallel pair (Is)
+    Hard    // "Asymmetric": mismatched diode pair (AsymDiodePairT) — strong-ish even harmonics
+};
+
+template <typename OmegaProvider = AccurateOmega>
+class Stage1T
 {
 public:
-    enum class ClipMode
-    {
-        Linear, // no diodes (Step-4 validation reference)
-        Soft,   // 4 diodes: two antiparallel pairs (2*Is)
-        Medium, // 2 diodes: one antiparallel pair (Is)
-        Hard    // "Asymmetric": mismatched diode pair (AsymDiodePairT) — strong-ish even harmonics
-    };
+    using ClipMode = tommy::dsp::ClipMode;
 
     // 1N4148 datasheet/Shockley params. nDiodes folds the ideality factor (n=1.752) into Vt
     // (chowdsp computes Vt_eff = nDiodes * Vt), giving the correct ~45.3 mV effective thermal
@@ -193,7 +203,7 @@ public:
                                                   // pair; symmetric about Vt so it does NOT run hot.
     static constexpr double kSymMismatch  = 0.06; // Soft/Medium diode Vf tolerance (real H2 ≈ −50)
 
-    Stage1() = default;
+    Stage1T() = default;
 
     void prepare (double sampleRate)
     {
@@ -428,7 +438,7 @@ private:
     // polarity's reflection is 0 at a=0), so the symmetric behaviour is preserved; a small mismatch
     // adds the measured even harmonics with NO small-signal gain shift. AccurateOmega removes the
     // omega4 distortion floor.
-    AsymDiodePairT<double, decltype (zfP), AccurateOmega> diodePair { zfP, kIs, kVt, kN, kSymMismatch };
+    AsymDiodePairT<double, decltype (zfP), OmegaProvider> diodePair { zfP, kIs, kVt, kN, kSymMismatch };
 
     // --- Asymmetric-pair feedback (mode Hard/"Asymmetric"): Norton(R7+DRIVE) || C1, asym pair root.
     // Mild 2-sided asymmetric clip (n_pos vs n_neg diodes) — matches the captures' odd-dominant +
@@ -436,6 +446,10 @@ private:
     chowdsp::wdft::ResistiveCurrentSourceT<double> nortonA { 503.3e3 };
     Cap c1A { 100.0e-12 };
     Parallel<decltype (nortonA), decltype (c1A)> zfA { nortonA, c1A };
-    AsymDiodePairT<double, decltype (zfA), AccurateOmega> diodeA { zfA, kIs, kVt, kN, kAsymMismatch };
+    AsymDiodePairT<double, decltype (zfA), OmegaProvider> diodeA { zfA, kIs, kVt, kN, kAsymMismatch };
 };
+
+/** Production Stage 1: accurate Wright-omega (no omega4 distortion floor). All non-test code uses
+ *  this alias, so `Stage1::ClipMode` / `Stage1::kRailPosDefault` etc. resolve exactly as before. */
+using Stage1 = Stage1T<AccurateOmega>;
 } // namespace tommy::dsp

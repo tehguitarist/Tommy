@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.15)
 
-project(Tommy VERSION 0.9.0)
+project(Tommy VERSION 1.0.0)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)

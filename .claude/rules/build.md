@@ -7,9 +7,9 @@
 - JUCE 8+ via CMake submodule or FetchContent
 - `chowdsp_wdf` as CMake submodule (header-only)
 - `xsimd` as CMake submodule (header-only; SIMD-accelerates the R-type adaptor matrix math)
-- Targets: AU + VST3 (`FORMATS AU VST3` in `CMakeLists.txt`'s `juce_add_plugin` call — wired up
-  2026-06-27). JUCE's CMake layer only produces AU on macOS regardless of this list, so the same
-  one-line FORMATS change covers macOS/Windows/Linux. Built locally via `Tommy_AU`/`Tommy_VST3`
+- Targets: AU + VST3 (`FORMATS AU VST3` in `CMakeLists.txt`'s `juce_add_plugin` call). JUCE's
+  CMake layer only produces AU on macOS regardless of this list, so the same one-line FORMATS
+  change covers macOS/Windows/Linux. Built locally via `Tommy_AU`/`Tommy_VST3`
   targets; built/packaged for all three OSes via `.github/workflows/ci.yml` (build+test) and
   `.github/workflows/release.yml` (manual-trigger packaging, one zip per platform).
 - Author: Leigh Pierce | Company: Leigh Pierce
@@ -55,7 +55,6 @@ Tommy/
 │   ├── chowdsp_wdf/            ← git submodule
 │   └── xsimd/                  ← git submodule
 ├── analysis/                   ← offline render tool + Python A/B comparison scripts
-├── schematics/                 ← source schematics the circuit model is built from
 └── tests/
     ├── SmokeTest_RC.cpp            ← chowdsp_wdf smoke test (step 3)
     ├── Stage0_FreqResponse.cpp

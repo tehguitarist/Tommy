@@ -18,13 +18,10 @@
 Every `CapacitorT` (and `CapacitorAlphaT`) must have `.prepare(sampleRate)` called in `prepareToPlay`. Forgetting this leaves the capacitor at its initial state with an undefined sample rate and produces silence or wrong behaviour. Call prepare on every capacitor in every WDF stage. Also reset the oversampler in `prepareToPlay`.
 
 ### PolarityInverterT
-**Corrected 2026-06-16:** IC1_A is **non-inverting** (verified against `updated schematic -
-timmy.png` — see the circuit.md audit banner). Earlier guidance here claiming IC1_A is
-inverting and needs a `PolarityInverterT` was wrong. **Neither op-amp stage inverts**, so
-neither IC1_A nor IC1_B needs a `PolarityInverterT` for op-amp polarity. (Stage 0 also needed
-no inverter — confirmed by its DC-step polarity test.) Use `PolarityInverterT` only if a
-specific WDF sub-tree's sign convention requires it for a correct voltage readout, not because
-of op-amp inversion. Confirm output polarity with a DC-step test in every stage's validation.
+Neither op-amp stage inverts (IC1_A and IC1_B are both non-inverting, per `circuit.md`), so
+neither needs a `PolarityInverterT` for op-amp polarity, and neither does Stage 0. Use
+`PolarityInverterT` only if a specific WDF sub-tree's sign convention requires it for a correct
+voltage readout — confirm output polarity with a DC-step test in every stage's validation.
 
 ## chowdsp_wdf API Reference (key types)
 
@@ -67,14 +64,14 @@ wdft::DiodeT<double, decltype(next), wdft::DiodeQuality::Best, AccurateOmega> d 
 // Same parameter convention as DiodePairT
 ```
 
-**Omega accuracy (2026-06-16, Step 6) — do NOT revert to the default omega4:** chowdsp's default
-`Omega::omega` (= `omega4`) uses bit-trick `log_approx`/`exp_approx` that impose a ~-35 dB
-oversampling-immune distortion floor — audible on a transparent pedal. We supply a custom
-`AccurateOmega` provider (std::log/exp + Newton solve of `w + ln(w) = x`) in `Stage1.h`.
-**Gotcha:** `DiodePairT`'s `DiodeQuality::Best` path HARDCODES `omega4` and ignores the
-OmegaProvider — so for the pair use `DiodeQuality::Good` (eqn-18; accurate once given a true
-omega). `DiodeT` and the pair's `Good` path both honour the provider. Verified via the Step-6
-audible-band aliasing test. (Perf: accurate omega is heavier than omega4 — profile at Step 7.)
+**Omega accuracy — do NOT revert to the default omega4:** chowdsp's default `Omega::omega`
+(= `omega4`) uses bit-trick `log_approx`/`exp_approx` that impose a ~-35 dB oversampling-immune
+distortion floor — audible on a transparent pedal. We supply a custom `AccurateOmega` provider
+(std::log/exp + Newton solve of `w + ln(w) = x`) in `Stage1.h`. **Gotcha:** `DiodePairT`'s
+`DiodeQuality::Best` path hardcodes `omega4` and ignores the OmegaProvider — for the pair use
+`DiodeQuality::Good` (eqn-18; accurate once given a true omega). `DiodeT` and the pair's `Good`
+path both honour the provider. Accurate omega is heavier than omega4 — a candidate for gating
+behind an "HQ" mode in the v1.1 optimisation pass (see `CLAUDE.md` Roadmap).
 
 ### Ideal op-amp
 ```cpp
@@ -159,15 +156,13 @@ constexpr double n_1N4148  = 1.752;     // ideality factor — passed as nDiodes
 - Minimum 4x, prefer **8x** for the clipping stage
 - User-selectable: 1x / 2x / 4x / 8x — expose in UI
 - Oversampling factor change must be glitch-free (handle transition cleanly)
-- **The oversampled region SPANS Stage 1 → Treble → Stage 2 (UPDATED 2026-06-21).** The earlier
-  "oversample the nonlinear stage only / do NOT oversample linear stages" rule was too strict: the
-  downstream linear stages have audible-band HF caps (Treble C5, Stage 2 C11) whose base-rate bilinear
-  discretisation droops the top octave (~2.3 dB @12k even after prewarp; worse above). Running them at
-  the oversampled rate fixes it — a pure linear-discretisation correction, identical in every clip
-  mode. Implemented via `ClippingOversampler::processBlock(data, n, postFn)`: the postFn (treble +
+- **The oversampled region spans Stage 1 → Treble → Stage 2**, not just the nonlinear clipper.
+  Reason: the downstream linear stages have audible-band HF caps (Treble C5, Stage 2 C11) whose
+  base-rate bilinear discretisation droops the top octave (~2.3 dB @12k even after prewarp).
+  Implemented via `ClippingOversampler::processBlock(data, n, postFn)`: the postFn (treble +
   Stage 2) runs per oversampled sample; prepare those stages at `getOversampledRate()`. Do NOT
-  oversample stages with NO audible-band HF caps (e.g. the InputBuffer ≈8 Hz HP) — no benefit, just
-  cost. Keep the prewarp (`Prewarp.h`) too: it still helps at the 1x setting.
+  oversample stages with no audible-band HF caps (e.g. the InputBuffer ≈8 Hz HP) — no benefit,
+  just cost. Keep the prewarp (`Prewarp.h`) too — it still helps at the 1x setting.
 
 ## ADAA
 
@@ -175,22 +170,22 @@ constexpr double n_1N4148  = 1.752;     // ideality factor — passed as nDiodes
 - ADAA must be transparent — must not colour the sound
 - Reference: DAFx2020 paper "Antiderivative antialiasing in nonlinear wave digital filters" — 2x ADAA + oversampling outperforms higher oversampling alone
 
-**IMPLEMENTED 2026-06-16 (Step 6) — ADAA is on the RAIL CLIP, not the diodes (deliberate, do
-not re-litigate at Step 9):** Measured audible-band aliasing shows the hard op-amp rail clip is
-the dominant aliasing source; the soft diodes already produce fast-decaying harmonics that
-oversampling alone crushes (Soft 8x = -81 dB; ADAA there is a 0.03 dB no-op). The chowdsp diode
-models also expose no closed-form antiderivative, so diode ADAA would require a bespoke
-omega-antiderivative implementation for ~no audible gain. So 1st-order ADAA wraps `railClip`
-(exact piecewise antiderivative `railAntideriv` in `Stage1.h`); diodes rely on oversampling +
-the AccurateOmega fix. Hard mode: 8x -54 dB → 8x+ADAA -60 dB. If Step 9 listening reveals
-residual diode aliasing at low OS factors, revisit diode ADAA (Esqueda 2020, omega antiderivative).
+**ADAA is applied to the op-amp rail clip, not the diodes (deliberate — do not re-litigate
+without new measurement data):** the hard op-amp rail clip is the dominant aliasing source; the
+soft diodes already produce fast-decaying harmonics that oversampling alone crushes (Soft 8x =
+-81 dB; ADAA there measured as a 0.03 dB no-op). The chowdsp diode models also expose no
+closed-form antiderivative, so diode ADAA would need a bespoke omega-antiderivative
+implementation for ~no audible gain. 1st-order ADAA wraps `railClip` (exact piecewise
+antiderivative `railAntideriv` in `Stage1.h`); diodes rely on oversampling + the `AccurateOmega`
+fix. Hard mode: 8x -54 dB → 8x+ADAA -60 dB. If diode-pair ADAA is revisited, it's a v1.1 "HQ
+mode" candidate (see `CLAUDE.md` Roadmap) — discuss with the user first.
 
 ## Potentiometer Tapers
 
-- All four pots are **audio taper (A)** — use approximated exponential curve
-- Never use linear mapping for an A-designation pot
+- Taper type is per-control and version-dependent — see `circuit.md`'s Pot Tapers section and
+  `CLAUDE.md`'s Calibration constants for the shipped formulas. Do not assume audio (log) taper
+  for all four controls (TREBLE is a linear taper on the targeted pedal revision).
 - Apply taper conversion before passing value to WDF node
-- Recommended: `R = R_max * pow(10.0, 2.0 * x - 2.0)` or equivalent two-segment approx
 
 ## Component Values
 

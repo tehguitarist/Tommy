@@ -103,7 +103,6 @@ tests/                      Per-stage validation executables (frequency response
                              clipping behavior, aliasing reduction, full-chain checks)
 analysis/                   Offline render tool + Python scripts used to compare the
                              plugin's output against real-pedal reamp captures
-schematics/                 Source schematics the circuit model is built from
 
 .claude/rules/               Detailed circuit/DSP/architecture/UI/build references —
                              read circuit.md if you want the full component-by-component

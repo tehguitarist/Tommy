@@ -182,3 +182,17 @@ target_link_libraries(FeatureProfile PRIVATE
     juce::juce_dsp
     juce::juce_recommended_config_flags)
 add_test(NAME FeatureProfile COMMAND FeatureProfile)
+
+# v1.1 OS-factor fidelity probe (how close 1x/2x/4x are to 8x for FR + distortion). Measurement
+# probe (finite-only) — see OSFidelity.cpp header.
+juce_add_console_app(OSFidelity PRODUCT_NAME "OSFidelity")
+target_sources(OSFidelity PRIVATE tests/OSFidelity.cpp)
+target_compile_definitions(OSFidelity PRIVATE
+    JUCE_USE_CURL=0
+    JUCE_WEB_BROWSER=0
+    JUCE_STANDALONE_APPLICATION=1)
+target_link_libraries(OSFidelity PRIVATE
+    chowdsp::chowdsp_wdf
+    juce::juce_dsp
+    juce::juce_recommended_config_flags)
+add_test(NAME OSFidelity COMMAND OSFidelity)

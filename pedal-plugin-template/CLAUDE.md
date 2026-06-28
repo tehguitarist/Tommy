@@ -20,6 +20,10 @@ Format: clang-format -i src/**/*.{cpp,h}
 Put the schematic images in `schematics/` and load them whenever verifying a circuit detail.
 `.claude/rules/circuit.md` is the source of truth for values/topology — fill it in first.
 
+**Use the `schematic-checker` agent any time a circuit value or topology is in doubt; use
+`dsp-validator` after any DSP stage change.** Both read `.claude/rules/circuit.md`/`dsp.md` —
+keep those current and the agents stay useful with no extra setup.
+
 @.claude/rules/circuit.md
 @.claude/rules/dsp.md
 @.claude/rules/architecture.md
@@ -44,14 +48,19 @@ Put the schematic images in `schematics/` and load them whenever verifying a cir
 
 ## Build sequence (validate each step before the next — do not skip ahead)
 
-1. **Schematic analysis** → fill `circuit.md`. Heed the schematic-reading gotchas there.
+1. **Schematic analysis** → fill `circuit.md`. Heed the schematic-reading gotchas there. Use the
+   `schematic-checker` agent to cross-check any value/topology question against what's already
+   captured, rather than re-reading the schematic image from scratch each time.
 2. **CMake scaffold** — APVTS + AU/VST3 targets loading in a DAW.
 3. **chowdsp_wdf smoke test** — trivial RC lowpass, confirm −3 dB point within 1% (offline/unit
    test, not a visual guess).
 4. **Stage-by-stage DSP**, validated at each step:
    - Linear stages: frequency response vs expected transfer function.
    - Nonlinear stage: sine-clipping behaviour; confirm output polarity with a DC-step test.
+   - Run the `dsp-validator` agent against each stage before moving to the next — it cross-checks
+     component values, taper curves, and WDF topology against `circuit.md`/`dsp.md` for you.
 5. **Switch topologies** — verify each position independently (precomputed scattering matrices).
+   `dsp-validator` covers this too (topology + `setSMatrixData()` usage).
 6. **Oversampling + ADAA** on the nonlinear stage — verify aliasing reduction. Use AccurateOmega
    (not chowdsp's default omega4). Add a separate render-time OS factor.
 7. **Full-chain integration + level calibration** — anchor `kInputRef` from a real measurement;

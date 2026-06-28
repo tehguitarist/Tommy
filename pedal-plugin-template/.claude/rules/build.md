@@ -48,6 +48,7 @@ remove/re-add the plugin.
 ├── CMakeLists.txt
 ├── CLAUDE.md
 ├── .claude/rules/{build,architecture,dsp,ui,circuit}.md
+├── .claude/agents/{schematic-checker,dsp-validator}.md
 ├── docs/{calibration-and-gain-staging,ui-peripheral-spec,validation-and-capture}.md
 ├── analysis/                   # gen_test_signal.py + analyze.py (A/B harness) + offline_render.cpp
 ├── schematics/                 # the source-of-truth images

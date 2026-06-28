@@ -15,6 +15,9 @@ CLAUDE.md                          project-memory template + the build/validatio
   architecture.md                  threading, plugin structure, processBlock, bypass, OS, state
   ui.md                            UI contract (points at the spec + provided components)
   build.md                         CMake, submodules, layout, testing, CI, validation gates
+.claude/agents/
+  schematic-checker.md             reads circuit.md, answers component/topology questions exactly
+  dsp-validator.md                 checks a DSP stage's implementation against circuit.md/dsp.md
 docs/
   calibration-and-gain-staging.md  ★ the hard-won DSP/level lessons — read first
   validation-and-capture.md        ★ how to measure accuracy vs the real pedal + capture protocol

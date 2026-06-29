@@ -74,6 +74,7 @@ int main (int argc, char** argv)
     const double driveR = (driveCoeff > 0.0) ? driveCoeff * std::pow (driveX, driveExp)
                                              : tp::driveResistance (driveX);
     dsp.setControls (bassR, driveR, trebR, mode);
+    dsp.setDrivePosition (driveX); // drive-faded top-octave tilt correction (matches PluginProcessor)
     dsp.setSupplyVoltage (supplyV);
     if (asymBias >= 0.0)
         dsp.setAsymMismatch (asymBias);

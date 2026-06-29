@@ -42,6 +42,7 @@ Tommy/
 │   │   ├── Stage2.h
 │   │   ├── Prewarp.h              ← bilinear-warp correction for tone/feedback caps
 │   │   ├── TopOctaveRestore.h     ← base-rate high-shelf: corrects low-OS top-octave droop
+│   │   ├── DriveTilt.h            ← base-rate drive-faded shelf: corrects low-drive top-octave tilt
 │   │   └── TommyDSP.h             ← top-level DSP wrapper
 │   ├── ui/
 │   │   ├── TommyLookAndFeel.h / .cpp  ← all procedural drawing lives here

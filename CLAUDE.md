@@ -41,10 +41,11 @@ Format:  clang-format -i src/**/*.{cpp,h}
 
 ## Current State
 
-**Status: SHIPPABLE, v1.1.** All 9 build-sequence steps are complete. Full DSP chain
+**Status: SHIPPABLE, v1.2.** All 9 build-sequence steps are complete. Full DSP chain
 (`src/dsp/`: InputBuffer → Stage1+SW1 clipping, oversampled with ADAA on the rail clip and
-`AccurateOmega` → TrebleNetwork → Stage2, wired via `TommyDSP.h`, then a base-rate
-`TopOctaveRestore` shelf that corrects the low-OS top-octave droop) is validated; op-amp output
+`AccurateOmega` → TrebleNetwork → Stage2, wired via `TommyDSP.h`, then base-rate
+`TopOctaveRestore` (corrects the low-OS top-octave droop) + `DriveTilt` (corrects a low-drive
+top-octave tilt vs the real pedal) shelves) is validated; op-amp output
 rails are modelled on both stages. `auval` passes; 9 test executables pass (two, `PerfBenchmark`
 and `FeatureProfile`, are measurement probes rather than pass/fail accuracy — `PerfBenchmark` →
 README's Performance table; `FeatureProfile` → the v1.1 roadmap's CPU-vs-accuracy data). UI
@@ -80,10 +81,19 @@ These are load-bearing — verified against the authoritative batch-3/4/5 NAM ca
 
 ### Known residuals (not masked with extra makeup gain — documented limits, not bugs)
 
-- ~2 dB quiet at full drive — clip-output scaling ceiling.
-- ±2 dB @ 12 kHz, +2 dB @ 8 kHz — HF-shape/measurement confound (driven captures carry clip
-  harmonics in the top octave); the bilinear-warp part of this was fixed by oversampling
-  Treble+Stage2 alongside the clipper (see `dsp.md` Oversampling section).
+- High drive (G0.65+): ~3.5–4 dB quiet vs pedal2 — the clip-output scaling ceiling (the plugin
+  compresses more at high drive). A distortion-DEPTH residual, not EQ: an HF/harmonic shelf does NOT
+  fix it (tried in v1.2 dev — it broke the level-normalised SHAPE match; a flat broadband deficit,
+  not a tilt). Fixing it would need drive-scaled makeup (masks the ceiling — avoided) or a clip-depth
+  change. Left as-is.
+- B0.65 SHAPE fails (2 of 16 pedal2 settings): the plugin's bass is ~+3 dB hot at BASS≈0.65. In the
+  pedal2 captures B0.65 only appears with high drive, so it's confounded (bass taper vs BASS/DRIVE
+  coupling) — needs a dedicated bass-sweep-at-fixed-drive capture to fix safely (the BASS taper is
+  validated against batch 3/4/5, not in-repo). Deferred.
+- Top octave: the low-OS bilinear droop is fixed by oversampling Treble+Stage2 + `TopOctaveRestore`;
+  the low-DRIVE linear tilt is fixed by `DriveTilt` (v1.2, calibrated to pedal2 — SHAPE 8/16→14/16).
+  The hot tone-set pedal1 disagrees with pedal2 on the top octave; **pedal2 is the definitive tone
+  reference** (user decision).
 - 2–6 kHz null-test residual — harmonic phase decorrelation vs. the NAM capture, not a
   magnitude error.
 
@@ -163,3 +173,12 @@ See `analysis/README.md` for harness usage and `analysis/CAPTURE_SPEC.md` for ca
   - **NOT YET DONE:** memory profiling; the optional fine-grained hot-spot profile (per-adaptor) —
     `FeatureProfile` already localised the dominant cost to the diode/omega solve, so a deeper
     per-adaptor breakdown is likely unnecessary unless a specific optimisation is pursued.
+- **v1.2 — low-drive top-octave tilt fit (shipped).** `src/dsp/DriveTilt.h`: a base-rate,
+  DRIVE-faded high-shelf (fc≈2.5k, full at low drive → 0 by ~G0.8) that corrects a low-drive
+  top-octave roll-off (~2–3 dB across 2–8 kHz) the model had vs the real pedal. **pedal2 is the
+  definitive tone reference** (user decision) — took pedal2 `knob_tracking` SHAPE 8/16 → 14/16; high
+  drive is bit-unchanged (the shelf has faded out), so the validated high-drive match is preserved.
+  A first attempt (a drive-SCALED-UP harmonic/EQ shelf to fix the *high*-drive deficit) was tried and
+  reverted: the high-drive gap is a flat broadband LEVEL deficit (clip-output ceiling), not a tilt, so
+  an HF shelf there broke SHAPE — see Known residuals. Two residuals deliberately left: B0.65 bass
+  (confounded, needs a targeted capture) and the high-drive level ceiling.

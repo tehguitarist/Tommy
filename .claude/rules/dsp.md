@@ -175,6 +175,17 @@ constexpr double n_1N4148  = 1.752;     // ideality factor — passed as nDiodes
   in `TommyDSP::processBlock`; one biquad, ~0 CPU, no added latency. Also restores the clipped
   harmonics' top octave (1x harmonic fidelity vs 8x went −2.6 dB → −0.4 dB), and barely touches
   aliasing. Always-on (it self-disables where there's no droop) — NOT gated behind any toggle.
+- **Drive-faded top-octave tilt (`DriveTilt.h`) — corrects a LOW-DRIVE linear-FR tilt vs the real
+  pedal.** Separate from the bilinear droop above: measured at 8x against the authoritative pedal2
+  NAM captures (level-normalised to 1 kHz — the `knob_tracking.py` SHAPE metric), the model's linear
+  top octave rolls off ~2–3 dB more than the real pedal across 2–8 kHz, *worst when clean* and
+  shrinking as drive rises (clip harmonics fill the top at high drive). So it's a base-rate high-shelf
+  (fc≈2.5k) whose gain is FULL at low drive and **fades to 0 by ~G0.8** (keyed to the DRIVE pot via
+  `setDrivePosition`). The fade is essential — a fixed top lift would over-brighten high drive (where
+  the tilt is already gone) and break the validated high-drive match. Took pedal2 SHAPE 8/16 → 14/16
+  (residual 2 fails are an unrelated B0.65 bass deviation). One biquad, ~0 CPU, high drive
+  bit-unchanged. **pedal2 is the definitive tone reference for this** (user decision); the hot
+  tone-set pedal1 disagrees on the top octave, but pedal2 is authoritative.
 
 ## ADAA
 

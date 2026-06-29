@@ -45,6 +45,7 @@ void configure (TommyDSP& d, int factorLog2, ClipMode mode, int maxBlock = 512, 
 {
     d.prepare (fs, maxBlock, factorLog2);
     d.setControls (kBassR, kDriveR, trebR, mode);
+    d.setDrivePosition (0.7); // match kDriveR so DriveTilt is at its real (faded) gain for this drive
     d.setSupplyVoltage (9.0);
     d.setAdaaEnabled (true);
 }

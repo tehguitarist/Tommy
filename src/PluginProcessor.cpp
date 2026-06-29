@@ -181,9 +181,11 @@ void TommyAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::
 
     const bool highQ = pHQ->load() > 0.5f;
 
+    const double driveX = (double) pDrive->load();
     for (auto& ch : dsp)
     {
         ch.setControls (bassR, driveR, trebR, mode);
+        ch.setDrivePosition (driveX); // drive-faded low-drive top-octave tilt correction
         ch.setSupplyVoltage (supplyV);
         ch.setHighQuality (highQ);
     }

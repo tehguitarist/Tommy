@@ -1,6 +1,7 @@
 #pragma once
 
 #include "ClippingOversampler.h"
+#include "DriveTilt.h"
 #include "InputBuffer.h"
 #include "Stage1.h"
 #include "Stage2.h"
@@ -47,6 +48,9 @@ public:
         // Top-octave restore runs at BASE rate (after downsampling), correcting the low-OS bilinear
         // droop of Treble+Stage2; transparent (≈0 dB) at 4x/8x. See TopOctaveRestore.h.
         topRestore.prepare (baseSampleRate, factorLog2);
+        // Drive-faded top-octave tilt correction (base rate): lifts the linear top octave at low
+        // drive, fading to 0 by high drive (where clip harmonics fill it). See DriveTilt.h.
+        driveTilt.prepare (baseSampleRate);
     }
 
     void reset()
@@ -57,6 +61,7 @@ public:
         stage2.reset();
         dcX1 = dcY1 = 0.0;
         topRestore.reset();
+        driveTilt.reset();
     }
 
     void setControls (double bassR, double driveR, double trebR, Stage1::ClipMode mode)
@@ -65,6 +70,10 @@ public:
         clipper.setMode (mode);
         treble.setParams (trebR);
     }
+
+    /** DRIVE pot position (0..1), for the drive-faded top-octave tilt correction (see DriveTilt.h).
+     *  Pass the raw normalised drive parameter, NOT the tapered resistance. */
+    void setDrivePosition (double driveX) { driveTilt.setDrive (driveX); }
 
     /** Selectable supply voltage (9 / 12 / 18 V). Scales BOTH op-amp output rails — at a higher
      *  supply the op-amp can swing further before clipping (more headroom / "more open"), exactly as
@@ -130,7 +139,8 @@ public:
             const double out = y - dcX1 + dcR * dcY1; // C6 output coupling (DC block), base rate
             dcX1 = y;
             dcY1 = out;
-            data[i] = topRestore.processSample (out); // restore low-OS top-octave droop
+            const double restored = topRestore.processSample (out); // restore low-OS top-octave droop
+            data[i] = driveTilt.processSample (restored);           // low-drive top-octave tilt fix
         }
     }
 
@@ -144,6 +154,7 @@ private:
     double dcR = 0.0, dcX1 = 0.0, dcY1 = 0.0;
 
     TopOctaveRestore topRestore; // base-rate low-OS top-octave correction
+    DriveTilt driveTilt;         // base-rate drive-faded low-drive top-octave tilt correction
 };
 
 /** Production per-channel chain (accurate Wright-omega). PluginProcessor uses this alias. */

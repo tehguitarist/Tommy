@@ -42,7 +42,16 @@ jobs:
       - name: Configure
         run: cmake -B build -DCMAKE_BUILD_TYPE=Release
 
+      # Tommy + the 7 JUCE-console-app test/probe targets each independently recompile the
+      # heavy JUCE amalgamated module .cpp files (juce_dsp.cpp, juce_core.cpp, etc — see
+      # CMakeLists.txt). Unbounded --parallel runs 4 of those multi-GB compiles at once on
+      # ubuntu-latest's 4 cores and OOM-kills the job; macOS/Windows runners don't trip this.
+      - name: Build (Linux — capped parallelism to avoid OOM)
+        if: runner.os == 'Linux'
+        run: cmake --build build --config Release --parallel 2
+
       - name: Build
+        if: runner.os != 'Linux'
         run: cmake --build build --config Release --parallel
 
       - name: Run tests (Linux, headless display)

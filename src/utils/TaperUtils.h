@@ -78,33 +78,39 @@ inline double driveResistance (double x)
     return 1.0e6 * std::pow (x, 2.2);
 }
 
-/** TREBLE knob up (x->1) => MORE cut (darker). TREB feeds the R5(1k)/C5(10n) low-pass;
+/** TREBLE knob up (x->1) => MORE cut (darker). TREB rheostat feeds the R5(1k)/C5(10n) low-pass;
  *  more series R => lower corner => more HF cut. x=0: R=0 => corner ~15.9 kHz (no cut).
  *
- *  TAPER — CONVEX, matched to BASS (2026-07-05): identical formula to `bassResistance`
- *  (50k * x^2.41), replacing the earlier V4 linear-pot rheostat law (`50k*x/(x+1)`, R_eff =
- *  Ra ∥ (Ra+Rb) for the real linear pot's wiper-jumpered rheostat — see circuit.md), which was
- *  front-loaded: ~70% of the total cut landed in the first 30% of knob travel, then flattened out.
- *  The convex law inverts that feel — barely perceptible for roughly the first third of travel,
- *  cutting hard only near the top.
- *
- *  IMPORTANT PROVENANCE NOTE: independently re-deriving a taper directly from the pedal2 captures
- *  (fitting TREB_R via offline_render overrides against each capture's own B/G/mode, isolating
- *  >2kHz to sidestep BASS coupling) gave x=0.20 -> R~=8950, x=0.35 -> R~=12900 (RMS fit error
- *  <0.35 dB) — a CONCAVE curve (exponent ~0.65) landing almost exactly on the old V4 law at every
- *  knob position, not on this convex one. So the pedal2 capture set itself supports the old
- *  concave/front-loaded law, not this one. This convex law is shipped anyway on the strength of
- *  the user's own independent physical-pedal measurement (2026-07-05), which the user judges to
- *  support the slower/convex feel over what pedal2 implies — treat this as a deliberate,
- *  user-confirmed choice, NOT a hardware-accuracy fit to the in-repo capture data. If pedal2-style
- *  validation ever needs to pass again, the concave law is the one to restore (either the old
- *  `50k*x/(x+1)`, or the freshly re-derived `25611*x^0.653`, whichever fits better next time).
- */
+ *  TAPER (corrected 2026-06-19): the generic audio approximation 10^(2x-2) was far too aggressive
+ *  (only 10% of R at the midpoint), giving much too little cut. Extracting the treble corner vs
+ *  knob from the NAM captures and fitting the actual plugin RENDER (not just a 1st-order estimate)
+ *  to the real pedal gives a clean power law:
+ *      TREB_R ≈ 70k * x^1.43
+ *  which matches the captured 8 kHz cut to within ~0.3 dB from no-cut through the noon depth. The
+ *  exponent (taper SHAPE) is the key correction; the ~70k range is close to the schematic 50k pot
+ *  (the pot/cap/topology were right — only the taper curve was wrong). A real audio-ish taper
+ *  (slow start) but much gentler than 10^(2x-2): ~37% of R at the midpoint, not 10%. NOTE: the same
+ *  over-aggressive-audio-approx caveat may apply to BASS/DRIVE if they later need tuning.
+ *  (x>0.5 is extrapolated — the captures only reached the noon cut depth.) */
 inline double trebleResistance (double x)
 {
     if (x <= 0.0)
         return 0.0;
-    return 50.0e3 * std::pow (x, 2.41);
+    if (x >= 1.0)
+        return 25.0e3;
+    // V4 TREBLE (2026-06-21, user-chosen final state) — LINEAR (B) 50k pot. Later "V4" Timmy units
+    // changed the treble pot from audio (A, reverse-wired) to LINEAR to remove a 7-10 o'clock dead
+    // spot (web research; see timmy-pot-taper-research memory). Modelled as the genuine linear-pot
+    // RHEOSTAT law (wiper jumpered to pin 3, per circuit.md): R_eff = Ra ∥ (Ra+Rb) with Ra=50k*x and
+    // Ra+Rb=50k  ->  50k*x ∥ 50k = 50k*x/(x+1). Naturally R(0)=0 (no cut at CCW) and R(1)=25k (the
+    // physical rheostat max; corner ~612 Hz). Note it's still mildly concave from the ∥ loading.
+    //   ACCURACY TRADE (accepted by user): our batch-3 captures (which look like an EARLY reverse-log
+    //   unit) want a bit MORE cut at low-mid treble (x=0.4->16k, 0.5->20k, 0.8->25k); this linear law
+    //   gives 14.3k/16.7k/22.2k, i.e. ~1-2 dB BRIGHTER at low-mid treble vs those captures. That's the
+    //   known cost of matching the V4 (linear) pedal rather than the early-unit captures. (The earlier
+    //   capture-fit law was 29k*x^0.625 concave, kept here for reference if we revert to an early unit.)
+    //   The top-octave HF-SHAPE deficit (12k) is a separate circuit-model limit, not the taper.
+    return 50.0e3 * x / (x + 1.0);
 }
 
 /** VOLUME divider gain (A25K with R11 across the upper section). x = rotation 0..1.

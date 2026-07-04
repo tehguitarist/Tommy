@@ -166,18 +166,6 @@ IC1_A and IC1_B are both **JRC4559** (= NJM4559, equivalent to RC4559).
 > this plugin targets V4. The exact shipped taper formulas and their calibration provenance are
 > in `CLAUDE.md`'s Calibration constants section (single source of truth — don't duplicate the
 > numbers here); `src/utils/TaperUtils.h` is the implementation.
->
-> **As of v1.3 (2026-07-05), the SHIPPED software taper for TREBLE deliberately does NOT
-> implement the V4 linear-pot law above.** This table and the node-graph description below still
-> describe the real V4 hardware faithfully — that hasn't changed. What changed is a user-requested
-> feel choice: `trebleResistance()` now uses the same convex power law as `bassResistance`
-> (`50k·x^2.41`), which doesn't correspond to any pot the real pedal (V4 or otherwise) has
-> installed. An independent taper re-derived directly from the pedal2 captures (not just re-fit to
-> the old formula) confirmed the in-repo capture data itself wants a CONCAVE curve, landing almost
-> exactly on the old law — so this convex law is shipped on the strength of the user's own
-> physical-pedal measurement (2026-07-05), against what pedal2 implies. This is a deliberate
-> accuracy-for-feel trade, not a correction — see `TaperUtils.h`'s `trebleResistance` comment and
-> `CLAUDE.md`'s Known residuals for the resulting real-pedal SHAPE impact.
 
 ---
 

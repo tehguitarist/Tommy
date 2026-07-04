@@ -41,7 +41,7 @@ Format:  clang-format -i src/**/*.{cpp,h}
 
 ## Current State
 
-**Status: SHIPPABLE, v1.3.** All 9 build-sequence steps are complete. Full DSP chain
+**Status: SHIPPABLE, v1.2.1.** All 9 build-sequence steps are complete. Full DSP chain
 (`src/dsp/`: InputBuffer → Stage1+SW1 clipping, oversampled with ADAA on the rail clip and
 `AccurateOmega` → TrebleNetwork → Stage2, wired via `TommyDSP.h`, then base-rate
 `TopOctaveRestore` (corrects the low-OS top-octave droop) + `DriveTilt` (corrects a low-drive
@@ -68,13 +68,9 @@ These are load-bearing — verified against the authoritative batch-3/4/5 NAM ca
   constant ~2.6 dB quiet at every clean setting independent of input level/volume position).
 - Tapers (`utils/TaperUtils.h`, V4 — final, user-chosen pedal revision):
   BASS `50k·x^2.41` (convex — validated ±0.6 dB), DRIVE `1e6·x^2.2`,
-  TREBLE `50k·x^2.41` (v1.3, 2026-07-05 — CONVEX, deliberately matched to BASS's formula for a
-  slower/gentler cut ramp as the knob turns up; a **feel choice, not a hardware fit** — the real
-  V4 pot's linear rheostat law (`50k·x/(x+1)`, concave/front-loaded) is what pedal2's captures
-  actually support, confirmed by an independent re-derivation from the raw capture data landing
-  back on that same concave law. Shipped anyway on the user's own physical-pedal measurement. See
-  Known residuals for the resulting SHAPE impact vs pedal2), VOLUME = A25K pot + R11 18k.
-  BASS/TREBLE are cut controls: knob up = more cut.
+  TREBLE `50k·x/(x+1)` (linear-pot rheostat — V4 units use a linear pot, not the earlier
+  reverse-log audio pot; trades ~+1.5–2.8 dB brightness at high cut for matching the real V4
+  unit), VOLUME = A25K pot + R11 18k. BASS/TREBLE are cut controls: knob up = more cut.
 - Diode mismatch (`AsymDiodePairT`, all clip modes) models the even-harmonic content real
   diode tolerance adds: `kSymMismatch = 0.06` (Soft/Medium), `kAsymMismatch = 0.45` (Hard).
   Per-polarity Vt mismatch, not a DC bias — leaves small-signal gain unperturbed.
@@ -115,20 +111,6 @@ These are load-bearing — verified against the authoritative batch-3/4/5 NAM ca
   reference** (user decision).
 - 2–6 kHz null-test residual — harmonic phase decorrelation vs. the NAM capture, not a
   magnitude error.
-- **TREBLE SHAPE — 0/16 pedal2 pass, EXPECTED and ACCEPTED (v1.3, 2026-07-05).** TREBLE's taper
-  was deliberately switched from the V4-hardware-accurate concave/linear-pot law to a convex law
-  matching BASS's formula, purely for knob feel (see Calibration constants above). Before shipping
-  it, independently re-derived a taper directly from the pedal2 captures (offline_render R-overrides
-  fit against each capture's own B/G/mode, isolating >2 kHz to sidestep BASS coupling): the data
-  itself wants a CONCAVE curve landing almost exactly on the old law (x=0.20→R~8950Ω, x=0.35→
-  R~12900Ω, both within a few % of `50k·x/(x+1)`) — confirming the mismatch isn't a fittable gap,
-  it's a direct conflict between "matches pedal2" and "feels slower to start." Shipped the convex
-  law anyway on the user's own independent physical-pedal measurement, which the user judges
-  supports it. SHAPE deviations are large (5.4–9.6 dB, worst at low treble settings, since a convex
-  curve is nearly flat through the low end where pedal2's only captures happen to sit) — this is
-  not a regression to chase, it's the direct, known cost of the feel choice. If pedal2-style
-  validation ever needs to pass again, restore a concave law (the old `50k*x/(x+1)`, or the
-  freshly re-derived `25611*x^0.653`).
 
 ### Analysis harness (`analysis/`)
 
@@ -221,14 +203,3 @@ See `analysis/README.md` for harness usage and `analysis/CAPTURE_SPEC.md` for ca
   justified by normal unit-to-unit Is spread). Closes pedal2's LEVEL check 12/16 → 16/16; harmonic
   content and the ClippingStage_Sine/full ctest suite unaffected. See Known residuals for the full
   derivation. B0.65 bass remains the one open residual.
-- **v1.3 — TREBLE taper switched to convex, matched to BASS (deliberate feel choice).**
-  `trebleResistance()` now uses BASS's exact formula (`50k·x^2.41`), replacing the V4-hardware-
-  accurate concave/linear-pot law, so the cut ramps in more gradually as the knob turns up instead
-  of front-loading most of the cut into the first third of travel. Before shipping, independently
-  re-derived a taper straight from the pedal2 captures to check this wasn't just a worse fit to a
-  reachable curve — it landed back on the OLD concave law almost exactly (see Known residuals),
-  confirming the two goals (matches pedal2 vs. feels slower to start) are in direct conflict for
-  this control, not a fittable gap. Shipped anyway on the user's own independent physical-pedal
-  measurement. Known, accepted cost: pedal2 SHAPE drops from 12/16 to 0/16 (5.4–9.6 dB deviations,
-  worst at low treble settings) — not a bug, the direct consequence of the choice. All 7 ctest
-  suite tests and `auval` still pass.

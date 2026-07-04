@@ -146,6 +146,36 @@ setColour(PopupMenu::highlightedBackgroundColourId,       Colour(cOSBtnActiveBg)
 setColour(PopupMenu::highlightedTextColourId,             Colour(0xFFF5F5F5u));
 ```
 
+### Version stamp (self-updating, no manual edits)
+
+A small, muted, non-interactive `juce::Label` dropped into whatever space is left in the strip
+between the last quality control (HQ, if present) and the UI SIZE group — don't reserve fixed
+width for it, just hand it the leftover `Rectangle<int>` after laying out everything else so it
+never fights the other elements for room:
+
+```cpp
+// Constructor:
+versionLabel.setText("v" JucePlugin_VersionString, dontSendNotification);
+versionLabel.setFont(Font(FontOptions(7.0f, Font::plain)).withExtraKerningFactor(0.1f));
+versionLabel.setColour(Label::textColourId, Colour(cOSLabel));
+versionLabel.setJustificationType(Justification::centred);
+versionLabel.setInterceptsMouseClicks(false, false);
+addAndMakeVisible(versionLabel);
+
+// resized(), after the last left-aligned control (e.g. the HQ toggle) is placed:
+versionLabel.setBounds(op);   // whatever's left of the strip's Rectangle before the right-side group
+
+// refreshFonts(sc), alongside the other OS-strip labels:
+versionLabel.setFont(Font(FontOptions(7.0f * sc, Font::plain)).withExtraKerningFactor(0.1f));
+```
+
+`JucePlugin_VersionString` is a compile-time macro (a string-literal token, so `"v" JucePlugin_VersionString`
+is plain adjacent-string-literal concatenation — no runtime `String` building needed) that JUCE's CMake
+support sets straight from `project(<Pedal> VERSION ...)` in `CMakeLists.txt` — bump the version there
+and the UI updates on next build automatically, with zero UI-file edits. This is also why `build.md`
+already says to bump `VERSION` to force a Logic AU rescan: the two now serve double duty, and a build
+that forces a rescan will always show a UI version that matches.
+
 ---
 
 ## Live vs Render Oversampling

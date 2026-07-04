@@ -71,6 +71,9 @@ private:
     juce::TextButton scaleBtn;
     juce::TextButton hqButton { "HQ" };
     std::unique_ptr<juce::ButtonParameterAttachment> hqAttach;
+    // Build version, read from JucePlugin_VersionString (== the CMake project() VERSION) so this
+    // never needs a manual edit when the version bumps.
+    juce::Label    versionLabel;
 
     juce::TooltipWindow tooltipWindow { this }; // shows the HQ button's hover tooltip
 

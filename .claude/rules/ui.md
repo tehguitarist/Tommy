@@ -209,6 +209,10 @@ oversampling rates plus a UI-scale control):
   (`setTooltip`, shown via a `juce::TooltipWindow` member on the editor): "HQ: most accurate diode
   modelling. Turn off to save CPU." Toggles the accurate vs fast diode solver (see `architecture.md`
   `hq` / `dsp.md` Omega accuracy).
+- **Version stamp** (`versionLabel`, plain `juce::Label`, muted `cOSLabel` colour, non-interactive)
+  — fills whatever space is left between the HQ toggle and the UI SIZE controls. Text is
+  `"v" JucePlugin_VersionString`, a compile-time macro CMake sets from the `project()` VERSION —
+  it always tracks `CMakeLists.txt` and never needs a manual edit when the version bumps.
 - **"UI SIZE"** label (`sizeLabel`) + `scaleBtn` (`juce::TextButton`, componentID `"os"`, shows
   the current scale e.g. `"100%"`) at the far right — opens `showScaleMenu()`, a preset picker
   (50%–250% in 25% steps) for `currentScale` (see Plugin Window)

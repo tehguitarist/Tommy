@@ -204,6 +204,14 @@ TommyAudioProcessorEditor::TommyAudioProcessorEditor(TommyAudioProcessor& p)
     scaleBtn.onClick = [this] { showScaleMenu(); };
     addAndMakeVisible(scaleBtn);
 
+    // ── Version stamp (fills the leftover middle gap in the OS strip) ─────────
+    versionLabel.setText("v" JucePlugin_VersionString, juce::dontSendNotification);
+    versionLabel.setFont(juce::Font(juce::FontOptions(7.0f, juce::Font::plain)).withExtraKerningFactor(0.1f));
+    versionLabel.setColour(juce::Label::textColourId, juce::Colour(TommyLookAndFeel::cOSLabel));
+    versionLabel.setJustificationType(juce::Justification::centred);
+    versionLabel.setInterceptsMouseClicks(false, false);
+    addAndMakeVisible(versionLabel);
+
     // ── HQ toggle (accurate vs fast diode solve) ──────────────────────────────
     hqButton.setComponentID("ostoggle"); // lit when on, dim when off
     hqButton.setClickingTogglesState(true);
@@ -447,6 +455,9 @@ void TommyAudioProcessorEditor::resized()
         // HQ toggle sits just after the OS selectors (it's a quality control, same group)
         op.removeFromLeft(sep);
         hqButton.setBounds(op.removeFromLeft(i(28)).withSizeKeepingCentre(i(28), op.getHeight()));
+
+        // Whatever's left between HQ and the UI SIZE controls is free — drop the version stamp there.
+        versionLabel.setBounds(op);
     }
 
     scaleBtn.setButtonText(juce::String(juce::roundToInt(currentScale * 100.0f)) + "%");
@@ -471,6 +482,7 @@ void TommyAudioProcessorEditor::refreshFonts(float sc)
     osLiveLabel     .setFont(bold(7.0f  * sc).withExtraKerningFactor(0.15f));
     osBncLabel      .setFont(bold(7.0f  * sc).withExtraKerningFactor(0.15f));
     sizeLabel       .setFont(bold(7.0f  * sc).withExtraKerningFactor(0.15f));
+    versionLabel.setFont(juce::Font(juce::FontOptions(7.0f * sc, juce::Font::plain)).withExtraKerningFactor(0.1f));
 
     auto kFont = bold(8.5f * sc).withExtraKerningFactor(0.15f);
     for (auto* l : { &bassLabel, &gainLabel, &volumeLabel, &trebleLabel })

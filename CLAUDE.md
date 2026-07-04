@@ -41,7 +41,7 @@ Format:  clang-format -i src/**/*.{cpp,h}
 
 ## Current State
 
-**Status: SHIPPABLE, v1.2.** All 9 build-sequence steps are complete. Full DSP chain
+**Status: SHIPPABLE, v1.2.1.** All 9 build-sequence steps are complete. Full DSP chain
 (`src/dsp/`: InputBuffer → Stage1+SW1 clipping, oversampled with ADAA on the rail clip and
 `AccurateOmega` → TrebleNetwork → Stage2, wired via `TommyDSP.h`, then base-rate
 `TopOctaveRestore` (corrects the low-OS top-octave droop) + `DriveTilt` (corrects a low-drive
@@ -81,15 +81,30 @@ These are load-bearing — verified against the authoritative batch-3/4/5 NAM ca
 
 ### Known residuals (not masked with extra makeup gain — documented limits, not bugs)
 
-- High drive (G0.65+): ~3.5–4 dB quiet vs pedal2 — the clip-output scaling ceiling (the plugin
-  compresses more at high drive). A distortion-DEPTH residual, not EQ: an HF/harmonic shelf does NOT
-  fix it (tried in v1.2 dev — it broke the level-normalised SHAPE match; a flat broadband deficit,
-  not a tilt). Fixing it would need drive-scaled makeup (masks the ceiling — avoided) or a clip-depth
-  change. Left as-is.
-- B0.65 SHAPE fails (2 of 16 pedal2 settings): the plugin's bass is ~+3 dB hot at BASS≈0.65. In the
-  pedal2 captures B0.65 only appears with high drive, so it's confounded (bass taper vs BASS/DRIVE
-  coupling) — needs a dedicated bass-sweep-at-fixed-drive capture to fix safely (the BASS taper is
-  validated against batch 3/4/5, not in-repo). Deferred.
+- **High drive (G0.65+) quiet residual — FIXED (2026-07-04).** Was ~2–3.5 dB quiet vs pedal2 at
+  moderate signal levels, worst at quiet/moderate input and vanishing at -3 dBFS (signal pinned
+  against the clip ceiling) — proving the diode/rail clip depth itself was accurate and the
+  shortfall was in the PRE-CLIP gain, not clip depth. Ruled out the DRIVE taper and BASS/DRIVE
+  coupling (sweeping `drive` to 50x its normal range only closed ~0.2 dB — gain hard-asymptotes
+  regardless). Root cause, confirmed by schematic-checker + dsp-validator: past a certain DRIVE
+  setting the R7+DRIVE branch's impedance dominates itself out of the feedback parallel
+  combination, so gain is set almost entirely by the diode network's own incremental impedance —
+  no WDF/topology bug (Norton injection, impedance propagation, and the Wright-omega solve all
+  verified numerically correct), so the gap was a genuine parameter mismatch. **Fix: `Stage1.h`'s
+  `kIs` (1N4148 saturation current) 2.52e-9 → 1.26e-9** — exactly half the datasheet-typical value,
+  justified by normal unit-to-unit 1N4148 Is spread (the datasheet figure was never a per-unit
+  measurement). Closes pedal2's LEVEL check from 12/16 to 16/16 pass; all 7 ctest suite tests still
+  pass (a steeper ~6.5x reduction closed the gap almost exactly but failed `ClippingStage_Sine`'s
+  large-signal Hard-mode check — half was the best-supported trade-off). Residual after the fix:
+  ~1.1–1.6 dB at the asymptote (down from ~1.8–2.6 dB), and two ALREADY-marginal SHAPE cases
+  (G0.20 "up", G0.80 "mid" — both ~1.4–1.5 dB, just under/over the 1.5 dB threshold) shifted to a
+  FAIL; harmonic content (H2-H7, THD, even/odd character) unaffected. See `Stage1.h`'s `kIs`
+  comment and `dsp.md`'s 1N4148 section for the full derivation. Rs (0.568Ω, omitted as negligible)
+  was checked and ruled out as a cause — its ohmic drop is orders of magnitude too small.
+- B0.65 SHAPE fails (2 of 16 pedal2 settings, independent of the fix above): the plugin's bass is
+  ~+3 dB hot at BASS≈0.65. In the pedal2 captures B0.65 only appears with high drive, so it's
+  confounded (bass taper vs BASS/DRIVE coupling) — needs a dedicated bass-sweep-at-fixed-drive
+  capture to fix safely (the BASS taper is validated against batch 3/4/5, not in-repo). Deferred.
 - Top octave: the low-OS bilinear droop is fixed by oversampling Treble+Stage2 + `TopOctaveRestore`;
   the low-DRIVE linear tilt is fixed by `DriveTilt` (v1.2, calibrated to pedal2 — SHAPE 8/16→14/16).
   The hot tone-set pedal1 disagrees with pedal2 on the top octave; **pedal2 is the definitive tone
@@ -180,5 +195,11 @@ See `analysis/README.md` for harness usage and `analysis/CAPTURE_SPEC.md` for ca
   drive is bit-unchanged (the shelf has faded out), so the validated high-drive match is preserved.
   A first attempt (a drive-SCALED-UP harmonic/EQ shelf to fix the *high*-drive deficit) was tried and
   reverted: the high-drive gap is a flat broadband LEVEL deficit (clip-output ceiling), not a tilt, so
-  an HF shelf there broke SHAPE — see Known residuals. Two residuals deliberately left: B0.65 bass
-  (confounded, needs a targeted capture) and the high-drive level ceiling.
+  an HF shelf there broke SHAPE — see Known residuals. Two residuals deliberately left at the time:
+  B0.65 bass (confounded, needs a targeted capture — still open) and the high-drive level ceiling
+  (fixed in v1.2.1, below).
+- **v1.2.1 — high-drive quiet residual fix.** Root-caused and fixed the high-drive level ceiling
+  left open above: `Stage1.h`'s 1N4148 `kIs` 2.52e-9 → 1.26e-9 (half the datasheet-typical value,
+  justified by normal unit-to-unit Is spread). Closes pedal2's LEVEL check 12/16 → 16/16; harmonic
+  content and the ClippingStage_Sine/full ctest suite unaffected. See Known residuals for the full
+  derivation. B0.65 bass remains the one open residual.

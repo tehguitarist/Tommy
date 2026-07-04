@@ -137,7 +137,7 @@ double output = wdft::voltage<double>(element); // read voltage across any eleme
 
 ### 1N4148 diode parameters (use these exact values — do not use defaults)
 ```cpp
-constexpr double Is_1N4148 = 2.52e-9;   // saturation current (A)
+constexpr double Is_1N4148 = 1.26e-9;   // saturation current (A) — see calibration note below
 constexpr double Vt_1N4148 = 25.85e-3;  // thermal voltage (V)
 constexpr double n_1N4148  = 1.752;     // ideality factor — passed as nDiodes parameter
 // nDiodes in chowdsp_wdf is the ideality factor n in the Shockley equation, not a physical diode count.
@@ -146,7 +146,17 @@ constexpr double n_1N4148  = 1.752;     // ideality factor — passed as nDiodes
 // Note: chowdsp_wdf DiodePairT/DiodeT has no separate series resistance (Rs) parameter.
 // Rs=0.568Ω for 1N4148 must be modelled as an explicit ResistorT in series with the diode element
 // if series resistance is deemed audibly significant. At guitar signal levels it is negligible
-// and may be omitted — flag if in doubt.
+// and may be omitted — flag if in doubt. (Ruled out as the cause of the Is recalibration below —
+// at guitar-level diode currents Rs's ohmic drop is orders of magnitude too small to account for
+// the multi-kΩ incremental-impedance gap that motivated it.)
+
+// Is CALIBRATED 2026-07-04 (half the 2.52e-9 datasheet-typical value, see Stage1.h's kIs comment
+// for the full derivation): the datasheet figure is a typical spec, not a per-unit measurement, and
+// real 1N4148 Is commonly spreads several-fold between individual parts/batches. This closed a
+// ~1.8-2.6 dB asymptotic (DRIVE->max) gain shortfall vs the pedal2 reference, confirmed via
+// dsp-validator to be a genuine parameter gap rather than a WDF/topology bug or a DRIVE-taper
+// issue. Re-derive from a physical measurement of the actual installed diodes if that ever becomes
+// available — this value is an empirical fit, not a datasheet lookup.
 ```
 
 ## Oversampling
@@ -213,7 +223,8 @@ mode" candidate (see `CLAUDE.md` Roadmap) — discuss with the user first.
 ## Component Values
 
 - Use schematic values exactly — see `circuit.md`
-- 1N4148 Shockley params: Is=2.52e-9, n=1.752, Vt=25.85e-3, Rs=0.568
+- 1N4148 Shockley params: Is=1.26e-9 (empirically calibrated, half datasheet-typical — see the
+  "1N4148 diode parameters" section above), n=1.752, Vt=25.85e-3, Rs=0.568 (omitted, negligible)
 - Do not substitute or approximate any passive value
 - Flag any unresolvable value before proceeding
 

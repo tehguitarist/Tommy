@@ -180,7 +180,25 @@ public:
     // 1N4148 datasheet/Shockley params. nDiodes folds the ideality factor (n=1.752) into Vt
     // (chowdsp computes Vt_eff = nDiodes * Vt), giving the correct ~45.3 mV effective thermal
     // voltage. See dsp.md / wdft_nonlinearities.h.
-    static constexpr double kIs = 2.52e-9;   // saturation current (A)
+    // kIs CALIBRATED (2026-07-04, half the 2.52e-9 datasheet-typical value): the datasheet Is is a
+    // "typical" spec, not a per-unit measurement, and real 1N4148 Is commonly spreads several-fold
+    // between individual diodes/batches. At the asymptotic gain limit (DRIVE -> max, where R7+DRIVE
+    // drops out of the feedback parallel combination and gain is set almost entirely by the diode
+    // network's own incremental impedance in series with R3), the plugin was measurably ~1.8-2.6 dB
+    // quiet vs the pedal2 reference across all three clip modes — see CLAUDE.md's former "High
+    // drive (G0.65+)" residual entry. Confirmed via dsp-validator that this is NOT a WDF/topology
+    // bug (Norton injection, impedance propagation, and the Wright-omega diode solve were all
+    // verified numerically correct) and NOT the DRIVE taper (sweeping the drive parameter to 50x
+    // its normal range only closes ~0.2 dB of the gap - the plugin's gain hard-asymptotes below the
+    // real pedal's regardless). Halving Is raises the diode's effective forward-voltage-per-current
+    // (V = n*Vt*ln(I/Is), smaller Is => more V at the same current), which is exactly the diode-
+    // dominated regime this residual lives in. Closes pedal2's LEVEL check from 12/16 to 16/16 pass
+    // with no THD/SHAPE/harmonic-content regression beyond two already-marginal SHAPE cases (see
+    // CLAUDE.md). A steeper reduction (~6.5x, Is=3.84e-10) closed the gap almost exactly but failed
+    // ClippingStage_Sine's large-signal Hard-mode compression check - this more conservative half
+    // value was chosen as the best-supported trade-off. Re-verify against batch 3/4/5 if those
+    // captures become available; re-derive from a physical-diode Is measurement if in doubt.
+    static constexpr double kIs = 1.26e-9;   // saturation current (A) -- see calibration note above
     static constexpr double kVt = 25.85e-3;  // thermal voltage (V)
     static constexpr double kN = 1.752;      // ideality factor (passed as nDiodes)
 

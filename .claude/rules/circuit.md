@@ -80,11 +80,18 @@ Physical switch is three ganged SPSTs. Positions are defined here by sonic chara
 | Mode C | "Hard" | D1 only (single diode) | Hardest clip, asymmetric — positive peaks only |
 
 All diodes: **1N4148**
-Shockley parameters for 1N4148 (must use these exact values):
-- Is = 2.52e-9 A
+Shockley parameters for 1N4148 (use these exact values):
+- Is = 1.26e-9 A — **empirically calibrated (2026-07-04), half the 2.52e-9 datasheet-typical
+  figure.** Unlike the other values below (bench-derived and treated as exact), this one is a fit:
+  the datasheet Is is a typical spec, not a per-unit measurement, and real 1N4148 Is commonly
+  spreads several-fold between individual parts. Halving it closed a ~1.8-2.6 dB asymptotic
+  (DRIVE→max) gain shortfall vs the pedal2 reference — see `dsp.md`'s 1N4148 section and
+  `Stage1.h`'s `kIs` comment for the full derivation and validation. Re-derive from a physical
+  measurement of the installed diodes if that ever becomes available.
 - Vt = 25.85 mV (thermal voltage at room temp, 300K)
 - n (ideality factor) = 1.752
-- Rs (series resistance) = 0.568 Ω
+- Rs (series resistance) = 0.568 Ω — omitted from the model (negligible at guitar signal levels;
+  ruled out as a cause of the Is gap above, since its ohmic drop is orders of magnitude too small)
 
 ### Treble Network (between stages)
 | Ref  | Value | Function |

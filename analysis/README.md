@@ -81,14 +81,25 @@ Headline numbers from the validation pass that drove the v0.8 calibration change
 NAM reference — see Capture batches above); the raw WAVs are local-only (`.gitignore`'d, not in the
 repo) so these figures are carried over from that session rather than re-derived live.
 
-**Null depth** (`null_test.py`, sub-sample-aligned, level-matched):
-- Best clean null: **−13.5 dB** residual.
-- Below ~2 kHz: −5 to −6 dB residual in every clip mode.
-- 2–6 kHz: residual closes to ≈0 dB (i.e. no further cancellation) in every mode.
-- Diagnosis: the 2–6 kHz residual is harmonic **phase** decorrelation, not a magnitude/level error —
-  expected for a null test against a separately-recorded NAM capture, not a sign of a tone/level bug.
-  Magnitude (the EQ/level numbers below) already matches; this is the ceiling of what a null test can
-  show here.
+**Null depth** (`null_test.py` + `null_optimize.py`/`null_floor.py`, sub-sample fractional-delay
+aligned, level-matched; re-measured against `analysis/pedal2` — the v2-signal batch-6 recapture,
+`SIGNAL=v2`). Gain-at-noon (G=0.5), one capture per clip mode (Soft/Medium/Hard), averaged:
+- **As-shipped (nominal capture settings, B0.50/T0.20):** clean-sweep null averages **−10.4 dB**
+  (Soft −10.6, Medium −10.0, Hard −10.7); driven-sweep averages **−11.2 dB**. Better than this
+  batch's worst case (−7.9 dB at high drive) but short of the old −13.5 dB headline from the
+  earlier batch-3 capture.
+- **Best achievable (small Bass/Treble/Drive retune, coordinate-descent search):** clean-sweep
+  null averages **−12.4 dB** (Soft −12.3, Medium −12.2, Hard −12.8 at B≈0.30–0.34/T≈0.14–0.17/
+  G≈0.30–0.34); driven-sweep averages **−13.1 dB** — deeper than the old headline. The knobs that
+  null deepest sit slightly below the capture's nominal Bass/Treble/Drive in every mode, consistent
+  with our pot-taper mapping being close but not pixel-perfect to the real unit (Treble moves the
+  most, ~0.03–0.06 lower than nominal) — not a sign of a bigger modelling error.
+- **Diagnosis (`null_floor.py`, coherence-based linear-vs-nonlinear split):** at the nominal
+  settings, removing the optimal LTI (EQ+phase) filter instead of just a gain pushes the null to
+  **−18.7 to −22.8 dB** (avg ≈ −20.8 dB) in every mode — ~10 dB deeper than the raw null. So the
+  raw-null residual is overwhelmingly **linear** (EQ shape / group-delay / sub-sample skew vs a
+  separately-recorded NAM capture), not a nonlinear clipping-model mismatch; the nonlinear floor
+  itself is comfortably below what the raw null currently shows.
 
 **THD by band / harmonic profile** (`swept_thd.py --matrix`, `harmonics.py`):
 - Odd-harmonic content and overall THD track the real pedal within ~1 dB across the drive × clipping

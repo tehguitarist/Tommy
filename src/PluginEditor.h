@@ -23,6 +23,10 @@ public:
     static constexpr int kBaseW = 420;
     static constexpr int kBaseH = 458;
 
+    // Trim knob range, +/- dB. Must match the input_trim/output_trim NormalisableRange in
+    // PluginProcessor::createParameterLayout().
+    static constexpr double kTrimRange = 18.0;
+
 private:
     TommyAudioProcessor& audioProcessor;
     TommyLookAndFeel laf;
@@ -34,6 +38,16 @@ private:
 
     void refreshFonts(float sc);
     void showScaleMenu();
+
+    // Trim lock: applies the equal-and-opposite CHANGE to the other trim, so whatever offset the
+    // pair already had is preserved (in +3 / out 0, then +3 on input -> in +6 / out -3). That's why
+    // the last-seen values are cached: the coupling is on the delta, not on the absolute value, so
+    // enabling the lock never snaps either knob. `trimLinkBusy` breaks the A->B->A feedback loop the
+    // parameter attachments would otherwise bounce through.
+    void mirrorTrim(bool sourceIsInput);
+    bool   trimLinkBusy   { false };
+    double lastInputTrim  { 0.0 };
+    double lastOutputTrim { 0.0 };
 
     // ── Side panels ──────────────────────────────────────────────────────────
     juce::Label  inputPanelLabel  { {}, "INPUT"  };
@@ -71,6 +85,8 @@ private:
     juce::TextButton scaleBtn;
     juce::TextButton hqButton { "HQ" };
     std::unique_ptr<juce::ButtonParameterAttachment> hqAttach;
+    juce::TextButton trimLockButton { "LOCK" };
+    std::unique_ptr<juce::ButtonParameterAttachment> trimLockAttach;
     // Build version, read from JucePlugin_VersionString (== the CMake project() VERSION) so this
     // never needs a manual edit when the version bumps.
     juce::Label    versionLabel;
@@ -93,6 +109,10 @@ private:
     void configureLabel(juce::Label& l, float fontSize, juce::uint32 colour,
                         juce::Justification just = juce::Justification::centred);
     void configureTrimValueLabel(juce::Label& l);
+
+    // Parses a trim value typed into one of the editable dB labels and applies it via `paramID`
+    // (so the trim lock and host automation both see it), then restores canonical "<v> dB" text.
+    void commitTrimText(juce::Label& label, const juce::String& paramID, juce::Slider& knob);
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(TommyAudioProcessorEditor)
 };

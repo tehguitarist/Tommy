@@ -76,6 +76,19 @@ Each side panel is identical in structure. Top-to-bottom:
    `"+3.0 dB"`), range -12.0–+12.0. Updated live via the slider's `onValueChange` callback, not an
    APVTS listener — purely a display convenience, the trim knob itself still owns the parameter via
    `SliderParameterAttachment`. 8.5 px font, same blue (`cTrimLabel`) as the section title.
+   **Double-click to type an exact dB value** (`setEditable(false, true, false)` — double-click only;
+   single-click would open a caret on stray clicks under the knob). These are the only two labels
+   that take mouse clicks; `configureLabel` makes all others click-through, so
+   `configureTrimValueLabel` re-enables it. The typed value is parsed in
+   `PluginEditor::commitTrimText`: an optional unit suffix is stripped ("−4.5 dB" and "−4.5" both
+   work), the result is clamped to ±18 dB, and it is applied **via the APVTS parameter** — never
+   `Slider::setValue` — so a typed value drives the same attachment → `onValueChange` → `mirrorTrim`
+   chain as a dragged one and therefore respects the trim LOCK and reports a proper host gesture.
+   Non-numeric input ("abc", "1.2.3", empty) is rejected and leaves the trim untouched rather than
+   falling back to `getFloatValue`'s 0.0; the label then re-renders the canonical "<v> dB" text.
+   Trim
+   range is **±18 dB** (`PluginEditor::kTrimRange`, mirrored in the `input_trim`/`output_trim`
+   `NormalisableRange`). See the LOCK toggle under Oversampling Strip for the input/output coupling.
 5. **VU bar meter** — fills all remaining height (flex:1). 22 segments, `flex-direction: column` (index 0 = top = loud/red), `gap: 2 px`. Segment colours: red (top ~14%), yellow (next ~21%), green (lower ~65%); lit vs unlit variants for each zone. Updated by `juce::Timer`.
 
 JUCE implementation: plain `juce::Slider` members directly on `PluginEditor` (`inputTrimKnob`/
@@ -209,6 +222,16 @@ oversampling rates plus a UI-scale control):
   (`setTooltip`, shown via a `juce::TooltipWindow` member on the editor): "HQ: most accurate diode
   modelling. Turn off to save CPU." Toggles the accurate vs fast diode solver (see `architecture.md`
   `hq` / `dsp.md` Omega accuracy).
+- **"LOCK" toggle** (`trimLockButton`, `juce::TextButton`, componentID `"ostoggle"` — same lit/dim
+  styling as HQ, `ButtonParameterAttachment` to the `trim_lock` parameter) — sits **immediately
+  after the HQ toggle**. Default ON. Ties the input/output trim knobs together: while lit, moving
+  either trim applies the equal-and-opposite **change** to the other (delta-linked — the pair's
+  existing offset is preserved, so enabling it never snaps a knob). Hover tooltip: "LOCK: ties the
+  input and output trims together — raising one lowers the other by the same amount." Its box is a
+  touch wider than HQ's (`i(38)` vs `i(24)`) because `drawButtonText` floors the font at 7 px while
+  the box scales down, so the 4-glyph word needs the extra width at 0.5× (HQ's 2 glyphs don't). The
+  coupling logic lives in `PluginEditor::mirrorTrim` (see `architecture.md` `trim_lock`), not in the
+  DSP. At 0.5× the version stamp yields its space to keep every control legible.
 - **Version stamp** (`versionLabel`, plain `juce::Label`, muted `cOSLabel` colour, non-interactive)
   — fills whatever space is left between the HQ toggle and the UI SIZE controls. Text is
   `"v" JucePlugin_VersionString`, a compile-time macro CMake sets from the `project()` VERSION —

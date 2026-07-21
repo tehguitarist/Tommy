@@ -52,10 +52,10 @@ juce::AudioProcessorValueTreeState::ParameterLayout TommyAudioProcessor::createP
         juce::StringArray { "Asymmetric", "Open", "Symmetric" }, 1)); // default: middle (Open)
 
     params.push_back (std::make_unique<juce::AudioParameterFloat> ("input_trim", "Input Trim",
-        juce::NormalisableRange<float> (-12.0f, 12.0f), 0.0f));
+        juce::NormalisableRange<float> (-18.0f, 18.0f), 0.0f));
 
     params.push_back (std::make_unique<juce::AudioParameterFloat> ("output_trim", "Output Trim",
-        juce::NormalisableRange<float> (-12.0f, 12.0f), 0.0f));
+        juce::NormalisableRange<float> (-18.0f, 18.0f), 0.0f));
 
     params.push_back (std::make_unique<juce::AudioParameterChoice> ("oversampling", "Oversampling",
         juce::StringArray { "1x", "2x", "4x", "8x" }, 1)); // default 2x for live playback
@@ -72,6 +72,13 @@ juce::AudioProcessorValueTreeState::ParameterLayout TommyAudioProcessor::createP
     // HQ: accurate Wright-omega diode solve (on, default) vs fast omega4 (off, ~45% cheaper diode
     // solve at a slight distortion-floor cost). The only feature that's a real CPU/accuracy lever.
     params.push_back (std::make_unique<juce::AudioParameterBool> ("hq", "HQ", true));
+
+    // Trim lock: while on, moving either trim knob mirrors the other around 0 dB
+    // (output_trim = -input_trim). Purely a UI-side coupling — no DSP behaviour of its own — but it
+    // lives in the APVTS so it saves/restores with the session and is host-automatable. Appended
+    // LAST deliberately: parameter order is the host's automation index, so new parameters must go
+    // on the end or existing sessions' automation lanes shift.
+    params.push_back (std::make_unique<juce::AudioParameterBool> ("trim_lock", "Trim Lock", true));
 
     return { params.begin(), params.end() };
 }

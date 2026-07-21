@@ -37,13 +37,14 @@ TommyAudioProcessor          ← AudioProcessor subclass
 | `treble` | Treble | 0.0–1.0 | 0.0 (knob at minimum) | Linear in APVTS; audio taper applied in DSP |
 | `volume` | Volume | 0.0–1.0 | 0.5 + 30/288 ≈ 0.6042 (knob at 1 o'clock) | Linear in APVTS; audio taper applied in DSP (A25K pot + R11 18k, see `circuit.md`). The 0.5→noon mapping comes from the LookAndFeel's default 288° rotary sweep; see `ui.md` Controls — Knobs. |
 | `clipping_mode` | Clipping | 0/1/2 | 1 (Open) | `AudioParameterChoice`: "Asymmetric" (top lever, single diode, = Hard) / "Open" (middle, one diode pair, = Medium) / "Symmetric" (bottom, all four diodes, = Soft). UI shows these as A/O/S — see `ui.md` SW1 section. |
-| `input_trim` | Input Trim | -12.0 to +12.0 dB | 0.0 | Linear dB; `AudioParameterFloat` |
-| `output_trim` | Output Trim | -12.0 to +12.0 dB | 0.0 | Linear dB; `AudioParameterFloat` |
+| `input_trim` | Input Trim | -18.0 to +18.0 dB | 0.0 | Linear dB; `AudioParameterFloat` |
+| `output_trim` | Output Trim | -18.0 to +18.0 dB | 0.0 | Linear dB; `AudioParameterFloat` |
 | `oversampling` | Oversampling (live) | 0/1/2/3 | 1 (2x) | `AudioParameterChoice`: "1x" / "2x" / "4x" / "8x" — used during real-time playback |
 | `render_oversampling` | Oversampling (render) | 0/1/2/3 | 3 (8x) | Same choices; independent factor used for offline rendering/export (CPU is free offline → cleanest render) |
 | `bypass` | Bypass | true/false | false | `AudioParameterBool` — APVTS does support bool via this type |
 | `supply_voltage` | Supply | 0/1/2 | 0 (9V) | `AudioParameterChoice`: "9V" / "12V" / "18V" — scales op-amp rail headroom only, diode thresholds unchanged |
 | `hq` | HQ | true/false | true | `AudioParameterBool` — diode solve quality: on = `AccurateOmega` (shipped), off = fast `omega4` (~45% cheaper diode solve, ~−30..−44 dB distortion floor). Runtime switch in `AsymDiodePairT::setHighQuality` (no template re-instantiation). See `dsp.md` Omega accuracy + `CLAUDE.md` v1.1. |
+| `trim_lock` | Trim Lock | true/false | true | `AudioParameterBool` — UI-only coupling of the two trim knobs; no DSP of its own. While on, moving either trim applies the equal-and-opposite **change** to the other (delta-linked, so the pair's existing offset is preserved and enabling it never snaps). Implemented in `PluginEditor::mirrorTrim` off the knobs' `onValueChange`, guarded against A→B→A feedback. See `ui.md` Oversampling Strip. |
 
 Note: APVTS does not accept raw `bool` in `createParameterLayout()`. Use `std::make_unique<AudioParameterBool>("bypass", "Bypass", false)`.
 

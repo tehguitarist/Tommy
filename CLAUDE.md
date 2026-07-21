@@ -41,7 +41,7 @@ Format:  clang-format -i src/**/*.{cpp,h}
 
 ## Current State
 
-**Status: SHIPPABLE, v1.2.1.** All 9 build-sequence steps are complete. Full DSP chain
+**Status: SHIPPABLE, v1.3.0.** All 9 build-sequence steps are complete. Full DSP chain
 (`src/dsp/`: InputBuffer → Stage1+SW1 clipping, oversampled with ADAA on the rail clip and
 `AccurateOmega` → TrebleNetwork → Stage2, wired via `TommyDSP.h`, then base-rate
 `TopOctaveRestore` (corrects the low-OS top-octave droop) + `DriveTilt` (corrects a low-drive
@@ -203,3 +203,15 @@ See `analysis/README.md` for harness usage and `analysis/CAPTURE_SPEC.md` for ca
   justified by normal unit-to-unit Is spread). Closes pedal2's LEVEL check 12/16 → 16/16; harmonic
   content and the ClippingStage_Sine/full ctest suite unaffected. See Known residuals for the full
   derivation. B0.65 bass remains the one open residual.
+- **v1.3.0 — trim lock + editable trim labels.** Widened `input_trim`/`output_trim` from ±12 dB to
+  **±18 dB** (`PluginEditor::kTrimRange`, mirrored in each parameter's `NormalisableRange`). Added a
+  `trim_lock` `AudioParameterBool` (default **true**) and a "LOCK" toggle in the oversampling strip
+  (same lit/dim `"ostoggle"` styling as HQ): while on, moving either trim knob applies the
+  equal-and-opposite **change** to the other (delta-linked — preserves whatever offset the pair
+  already had, so enabling the lock never snaps a knob), implemented in `PluginEditor::mirrorTrim`
+  with a re-entrancy guard against the two attachments' feedback loop. Also made both trim value
+  labels **double-click editable** (`PluginEditor::commitTrimText`): typing a value applies it via
+  the APVTS parameter (never `Slider::setValue`), so it drives the same attachment chain and
+  respects the lock and host automation; non-numeric input is rejected rather than falling back to
+  `String::getFloatValue()`'s silent 0.0. See `architecture.md`'s `trim_lock` row and `ui.md`'s
+  Oversampling Strip / Side Panels sections for the full spec.

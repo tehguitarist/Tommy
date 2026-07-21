@@ -30,6 +30,98 @@ void TommyAudioProcessorEditor::configureLabel(juce::Label& l, float fontSize,
 void TommyAudioProcessorEditor::configureTrimValueLabel(juce::Label& l)
 {
     configureLabel(l, 8.5f, TommyLookAndFeel::cTrimLabel);
+
+    // Unlike the other labels (decorative, click-through via configureLabel), these two are
+    // interactive: double-click to type an exact dB value. Single-click is deliberately NOT an
+    // edit trigger — the label sits under the trim knob and a stray click shouldn't open a caret.
+    l.setInterceptsMouseClicks(true, false);
+    l.setEditable(false, true, false); // (singleClick, doubleClick, lossOfFocusDiscardsChanges)
+    l.setTooltip("Double-click to type an exact dB value.");
+    l.setColour(juce::Label::backgroundWhenEditingColourId, juce::Colour(TommyLookAndFeel::cOSBtnActiveBg));
+    l.setColour(juce::Label::textWhenEditingColourId,       juce::Colour(TommyLookAndFeel::cOSBtnActive));
+    l.setColour(juce::Label::outlineWhenEditingColourId,    juce::Colour(TommyLookAndFeel::cOSBtnActiveBdr));
+}
+
+// Is `s` a bare decimal number (optional sign, digits, at most a decimal point)? Deliberately
+// stricter than String::getFloatValue, which silently yields 0.0 for junk like "abc" — typing
+// nonsense should leave the trim where it was, not slam it to 0 dB.
+static bool isPlainNumber(const juce::String& s)
+{
+    if (s.isEmpty())
+        return false;
+
+    int i = (s[0] == '+' || s[0] == '-') ? 1 : 0;
+    bool sawDigit = false, sawPoint = false;
+
+    for (; i < s.length(); ++i)
+    {
+        const auto c = s[i];
+        if (juce::CharacterFunctions::isDigit(c)) { sawDigit = true; continue; }
+        if (c == '.' && ! sawPoint)              { sawPoint = true; continue; }
+        return false;
+    }
+    return sawDigit;
+}
+
+void TommyAudioProcessorEditor::commitTrimText(juce::Label& label, const juce::String& paramID,
+                                                juce::Slider& knob)
+{
+    // Accept what the label itself displays ("-3.5 dB") as well as a bare number, so the user can
+    // edit in place without deleting the unit.
+    auto text = label.getText().trim();
+    if (text.endsWithIgnoreCase("dB"))
+        text = text.dropLastCharacters(2).trim();
+
+    if (isPlainNumber(text))
+    {
+        const auto v = (float) juce::jlimit(-kTrimRange, kTrimRange, (double) text.getFloatValue());
+
+        // Route through the PARAMETER, not knob.setValue: that drives the attachment -> slider ->
+        // onValueChange -> mirrorTrim chain, so a typed value respects the trim lock exactly like a
+        // dragged one, and the host sees a proper gesture.
+        if (auto* param = audioProcessor.apvts.getParameter(paramID))
+        {
+            param->beginChangeGesture();
+            param->setValueNotifyingHost(param->convertTo0to1(v));
+            param->endChangeGesture();
+        }
+    }
+
+    // Re-render the canonical "<v> dB" text — this both restores the old value after rejected input
+    // and reformats accepted input that was typed bare or out of range. Safe to invoke directly:
+    // the knob is already at its final value, so mirrorTrim sees a zero delta and no-ops.
+    knob.onValueChange();
+}
+
+void TommyAudioProcessorEditor::mirrorTrim(bool sourceIsInput)
+{
+    const juce::Slider& src = sourceIsInput ? inputTrimKnob  : outputTrimKnob;
+    double&         srcLast = sourceIsInput ? lastInputTrim  : lastOutputTrim;
+    const double    dstLast = sourceIsInput ? lastOutputTrim : lastInputTrim;
+
+    // Cache the new source value FIRST and unconditionally — the delta must be measured against the
+    // previous position even when the lock is off, otherwise the first move after switching it on
+    // would be computed from a stale reference and jump the other knob.
+    const double delta = src.getValue() - srcLast;
+    srcLast = src.getValue();
+
+    // trimLinkBusy: this call is the echo of our own write to the other parameter — its slider's
+    // onValueChange has just refreshed that side's cache above, which is all this pass needs to do.
+    if (trimLinkBusy || ! trimLockButton.getToggleState() || delta == 0.0)
+        return;
+
+    // Equal and opposite CHANGE, relative to where the other knob already sits — so the pair's
+    // existing offset is preserved and the starting values don't matter. Clamped at the rails
+    // (past which the offset necessarily shifts; nothing sensible to do but stop).
+    const auto target = (float) juce::jlimit(-kTrimRange, kTrimRange, dstLast - delta);
+
+    if (auto* param = audioProcessor.apvts.getParameter(sourceIsInput ? "output_trim" : "input_trim"))
+    {
+        const juce::ScopedValueSetter<bool> guard(trimLinkBusy, true);
+        param->beginChangeGesture();
+        param->setValueNotifyingHost(param->convertTo0to1(target));
+        param->endChangeGesture();
+    }
 }
 
 // ── Constructor ───────────────────────────────────────────────────────────────
@@ -58,13 +150,19 @@ TommyAudioProcessorEditor::TommyAudioProcessorEditor(TommyAudioProcessor& p)
 {
     setLookAndFeel(&laf);
 
+    // Seed the trim-lock deltas from the values the attachments (constructed above) have already
+    // pushed into the knobs, so a session restored with non-zero trims doesn't read as a jump the
+    // first time either knob moves.
+    lastInputTrim  = inputTrimKnob.getValue();
+    lastOutputTrim = outputTrimKnob.getValue();
+
     // ── Side panel: Input ────────────────────────────────────────────────────
     configureLabel(inputPanelLabel, 8.0f, TommyLookAndFeel::cTrimLabel);
     inputPanelLabel.setFont(
         juce::Font(juce::FontOptions(8.0f, juce::Font::bold)).withExtraKerningFactor(0.2f));
 
     configureTrimKnob(inputTrimKnob);
-    inputTrimKnob.setRange(-12.0, 12.0);
+    inputTrimKnob.setRange(-kTrimRange, kTrimRange);
 
     configureLabel(inputTrimLabel, 7.5f, TommyLookAndFeel::cTrimLabel - 0x001A0000u);
 
@@ -73,8 +171,13 @@ TommyAudioProcessorEditor::TommyAudioProcessorEditor(TommyAudioProcessor& p)
     {
         inputTrimValueLabel.setText(juce::String(inputTrimKnob.getValue(), 1) + " dB",
                                      juce::dontSendNotification);
+        mirrorTrim(true);
     };
     inputTrimKnob.onValueChange();
+    inputTrimValueLabel.onTextChange = [this]
+    {
+        commitTrimText(inputTrimValueLabel, "input_trim", inputTrimKnob);
+    };
 
     addAndMakeVisible(inputVU);
 
@@ -84,7 +187,7 @@ TommyAudioProcessorEditor::TommyAudioProcessorEditor(TommyAudioProcessor& p)
         juce::Font(juce::FontOptions(8.0f, juce::Font::bold)).withExtraKerningFactor(0.2f));
 
     configureTrimKnob(outputTrimKnob);
-    outputTrimKnob.setRange(-12.0, 12.0);
+    outputTrimKnob.setRange(-kTrimRange, kTrimRange);
 
     configureLabel(outputTrimLabel, 7.5f, TommyLookAndFeel::cTrimLabel - 0x001A0000u);
 
@@ -93,8 +196,13 @@ TommyAudioProcessorEditor::TommyAudioProcessorEditor(TommyAudioProcessor& p)
     {
         outputTrimValueLabel.setText(juce::String(outputTrimKnob.getValue(), 1) + " dB",
                                       juce::dontSendNotification);
+        mirrorTrim(false);
     };
     outputTrimKnob.onValueChange();
+    outputTrimValueLabel.onTextChange = [this]
+    {
+        commitTrimText(outputTrimValueLabel, "output_trim", outputTrimKnob);
+    };
 
     addAndMakeVisible(outputVU);
 
@@ -220,6 +328,16 @@ TommyAudioProcessorEditor::TommyAudioProcessorEditor(TommyAudioProcessor& p)
     addAndMakeVisible(hqButton);
     hqAttach = std::make_unique<juce::ButtonParameterAttachment>(*p.apvts.getParameter("hq"), hqButton);
 
+    // ── Trim LOCK toggle (couples the input/output trim knobs) ────────────────
+    trimLockButton.setComponentID("ostoggle"); // same lit/dim styling as HQ
+    trimLockButton.setClickingTogglesState(true);
+    trimLockButton.setLookAndFeel(&laf);
+    trimLockButton.setTooltip("LOCK: ties the input and output trims together - raising one lowers "
+                              "the other by the same amount.");
+    addAndMakeVisible(trimLockButton);
+    trimLockAttach = std::make_unique<juce::ButtonParameterAttachment>(*p.apvts.getParameter("trim_lock"),
+                                                                      trimLockButton);
+
     // ── Load UI scale (per-session from APVTS state; falls back to user default) ──
     {
         juce::PropertiesFile::Options opts;
@@ -262,6 +380,7 @@ TommyAudioProcessorEditor::~TommyAudioProcessorEditor()
     osRenderBox.setLookAndFeel(nullptr);
     scaleBtn.setLookAndFeel(nullptr);
     hqButton.setLookAndFeel(nullptr);
+    trimLockButton.setLookAndFeel(nullptr);
 }
 
 // ── Timer — update meters + LED ───────────────────────────────────────────────
@@ -433,18 +552,21 @@ void TommyAudioProcessorEditor::resized()
         auto op = osRow.reduced(i(10), 0);
 
         // "OS" label on far left
-        osLabel.setBounds(op.removeFromLeft(i(20)));
-        op.removeFromLeft(i(8));
+        osLabel.setBounds(op.removeFromLeft(i(16)));
+        op.removeFromLeft(i(6));
 
         // Far right: [UI SIZE] [scale %]
-        scaleBtn.setBounds(op.removeFromRight(i(48)).withSizeKeepingCentre(i(48), op.getHeight()));
+        scaleBtn.setBounds(op.removeFromRight(i(42)).withSizeKeepingCentre(i(42), op.getHeight()));
         op.removeFromRight(i(5));
         sizeLabel.setBounds(op.removeFromRight(i(42)).withSizeKeepingCentre(i(42), i(14)));
-        op.removeFromRight(i(8)); // breathing room before the OS controls end
+        op.removeFromRight(i(6)); // breathing room before the OS controls end
 
-        // Left-aligned: LIVE [gap] liveBox [sep] RENDER [gap] renderBox [sep] HQ
-        // RENDER label is wider than LIVE to avoid truncation
-        const int liveW = i(26), renderW = i(40), innerGap = i(5), boxW = i(36), sep = i(12);
+        // Left-aligned: LIVE [gap] liveBox [sep] RENDER [gap] renderBox [sep] HQ [sep] LOCK
+        // RENDER label is wider than LIVE to avoid truncation. The strip was already full, so LOCK's
+        // ~38px came out of the over-provisioned elements — the OS/HQ/scale buttons and the combo
+        // boxes, all of which held far more width than their short text needs — and NOT out of the
+        // text labels, whose original widths were already snug against their strings.
+        const int liveW = i(26), renderW = i(40), innerGap = i(5), boxW = i(33), sep = i(8);
         osLiveLabel.setBounds(op.removeFromLeft(liveW));
         op.removeFromLeft(innerGap);
         osRealtimeBox.setBounds(op.removeFromLeft(boxW));
@@ -454,9 +576,14 @@ void TommyAudioProcessorEditor::resized()
         osRenderBox.setBounds(op.removeFromLeft(boxW));
         // HQ toggle sits just after the OS selectors (it's a quality control, same group)
         op.removeFromLeft(sep);
-        hqButton.setBounds(op.removeFromLeft(i(28)).withSizeKeepingCentre(i(28), op.getHeight()));
+        hqButton.setBounds(op.removeFromLeft(i(24)).withSizeKeepingCentre(i(24), op.getHeight()));
+        // Trim LOCK — not an OS control, but styled/grouped with them as the strip's toggle row.
+        // Wider than HQ's box: the button font floors at 7px (drawButtonText's jmax) while the box
+        // scales down, so at 0.5x this 4-glyph word needs the extra width HQ's 2 glyphs don't.
+        op.removeFromLeft(sep);
+        trimLockButton.setBounds(op.removeFromLeft(i(38)).withSizeKeepingCentre(i(38), op.getHeight()));
 
-        // Whatever's left between HQ and the UI SIZE controls is free — drop the version stamp there.
+        // Whatever's left before the UI SIZE controls is free — drop the version stamp there.
         versionLabel.setBounds(op);
     }
 

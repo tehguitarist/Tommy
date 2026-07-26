@@ -51,8 +51,9 @@ rails are modelled on both stages. `auval` passes; 9 test executables pass (two,
 and `FeatureProfile`, are measurement probes rather than pass/fail accuracy — `PerfBenchmark` →
 README's Performance table; `FeatureProfile` → the v1.1 roadmap's CPU-vs-accuracy data). UI
 (Step 8) is a
-fixed 480×480 three-column layout — full design in `ui.md`. Open modelling items: v1.4's W2/W3/W4
-(W4 next; nothing is "blocked on captures" any more — W6 is struck, see Roadmap).
+fixed 480×480 three-column layout — full design in `ui.md`. Open modelling items: v1.4's W3 (which
+now also carries W7) and **W4 (still OPEN — two levers refuted, five untried; see the W4 roadmap
+entry)**. Nothing is "blocked on captures" any more — W6 is struck, see Roadmap.
 
 > **DSP stage classes are templated on the diode omega provider** (`Stage1T`/`ClippingOversamplerT`/
 > `TommyDSPT`, all defaulting to `AccurateOmega`; `Stage1`/`ClippingOversampler`/`TommyDSP` are the
@@ -347,7 +348,8 @@ See `analysis/README.md` for harness usage and `analysis/CAPTURE_SPEC.md` for ca
     columns are safer than the clean-sweep column — see the handover's caveat).
     **This also qualifies W5's `@1 kHz` FR view:** 1 kHz is not anchor-safe at D ≥ 0.50, and at
     D ≥ 0.65 no band on the clean sweep is (20 Hz is +5.2 dB over clamp at D1.00).
-  - **DONE — W4 empirical-shelf fit: TESTED AND REFUTED (no DSP change).** The handover's plan (fit
+  - **W4 empirical-shelf fit: TESTED AND REFUTED (no DSP change). This closes ONE LEVER, NOT W4 —
+    W4 REMAINS OPEN; see "W4 — remaining untried levers" below.** The handover's plan (fit
     the LF excess as an empirical low shelf, since unlike W3 it only needs to CUT) was carried out
     via a new `correction()` probe in `analysis/w4_bassdrive.py` (probe 5). The direction was never
     the problem; two other things are. **(1) The excess is a genuine shape error** — it decays from
@@ -363,8 +365,9 @@ See `analysis/README.md` for harness usage and `analysis/CAPTURE_SPEC.md` for ca
     SHAPE stays 13/16. **(4) The failures that matter are mode-ordered** — 2.24 dB spread across the
     switch at identical (BASS, DRIVE), ordering Soft +0.79 < Hard +2.02 < Medium +3.03 exactly as
     probe 4's anchor-compression prediction. Soft *passes* where Medium fails by 3 dB; no
-    bass-network error can do that. **So the residual is clip threshold/onset accuracy (W2), not
-    EQ — W4 closes as characterised-not-fixable and folds into W2. Do not ship a low shelf.**
+    bass-network error can do that. **So the dominant term is clip threshold/onset accuracy, not
+    EQ. Do not ship a STATIC low shelf** — but that is a verdict on the static-shelf lever only, not
+    on W4 as a work item (see the untried-levers list below).
     Two side findings: the plan's handover table had **every sign inverted** relative to its own
     caption (following it literally builds a shelf that BOOSTS LF, doubling the error) — flagged in
     the plan and superseded by the probe, which states one explicit convention; and a W5-class
@@ -410,8 +413,60 @@ See `analysis/README.md` for harness usage and `analysis/CAPTURE_SPEC.md` for ca
     segment at the wrong offset. This is why v1.2.1's "LEVEL 16/16" and W1's "LEVEL 8/16 → 10/16"
     disagree — **both are wrong**; the correct pre-W2 baseline is SHAPE 13/16 · LEVEL 14/16 ·
     THD 15/16. `analysis/pedal1` is also not a usable cross-check (0/8 on every gate at baseline).
-  - **STILL OPEN — W3 (fix; likely unfixable), W7 (new, not urgent — see below), and W4's LF
-    residual (see below).**
+  - **STILL OPEN — W3 (fix; likely unfixable — now also carries W7), W4 (OPEN — levers below).**
+  - **W4 — remaining untried levers (do NOT mark W4 done until these are tried or explicitly
+    refuted with numbers).** Two levers have been refuted so far — clip-mode spread as a
+    *mechanism-identification* tool (probes 1–4) and a *static* 1st-order low shelf (probe 5).
+    Neither exhausts the item. What has never been tested:
+    1. **BASS taper shape between x = 0.50 and 0.65** — named in the W2 entry as "the next untested
+       lever" and deliberately left out of W2's scope. The LF now see-saws with DRIVE (shy at
+       D0.35, hot at D0.65) and B steps 0.50→0.65 at exactly that point, so a taper-shape error is
+       still live. Risky: the BASS taper is validated against batches 3/4/5, not pedal2.
+    2. **A DRIVE- or LEVEL-faded low shelf** (`DriveTilt`-style). Probe 5 fitted a **static** shelf
+       only. The handover's own reading of the driven-sweep table says the required cut "looks
+       closer to fading out with LEVEL" — never fitted.
+    3. **Per-mode correction.** The residual's large part is mode-ordered (Soft +0.79 / Hard +2.02 /
+       Medium +3.03 at matched BASS/DRIVE). A per-clip-mode LF term, or a revisit of `kNMedium`
+       (1.5× was the better THD fit but is rail-capped), was never tried against the LF metric.
+    4. **Fix the SHAPE metric first** (W5-class): `knob_tracking.py` scores SHAPE on `sweep_clean`
+       only, whose 1 kHz anchor is past the diode clamp at D ≥ 0.50 — exactly where the two "bass"
+       failures live, and they collapse on every driven sweep. Until SHAPE is scored on an
+       anchor-safe reference, the size of the real residual is unknown.
+    5. **Re-check the bass network itself** (C3 39n, C4 1µ, BASS pot wiring at node_X) with
+       `schematic-checker`. Never done for W4; the excess is localised below ~100 Hz, which is that
+       network's territory.
+  - **DONE — W7 characterisation: real but ~1–2.4 dB, clip-mediated, MERGES INTO W3 (no DSP
+    change).** New probe `analysis/w7_hf_thd.py` (`bands`/`tone`/`energy`/`products`), run against a
+    **regenerated** `comprehensive_data.json` (the old one predated W2's taper change, so §2.5's
+    plugin figures were measured on superseded DSP — regenerate before quoting that section).
+    (a) **The "10–20× shortfall" headline is dead.** It reproduces (12.0×/17.3× at 6450.8/8127.5 Hz,
+    `sweep_drv_-6`) but jumps discontinuously exactly where `thd_band_orders` drops 3 → 2: at
+    4063.7/5120.0 Hz the plugin is **1.2×** light, at the two order-2 bands 12–17×. Those bands
+    measure **H2 alone**, not THD. Don't quote the ratio again.
+    (b) **The deficit is real, not measurement noise** — §2.5's stated worry is refuted directly.
+    The v2 signal carries **fixed 4 kHz/8 kHz tone segments**, so harmonics read out with a plain
+    windowed DFT (no Farina, no order ceiling), and every one sits **80–126 dB** above its local
+    neighbour-bin level in all 16 captures.
+    (c) **True size ~1–2.4 dB.** Total in-band energy at 6.3–8 kHz: **−0.62/−0.60/−0.77/−1.02 dB**
+    (clean/−18/−12/−6) — milder than 8–10k (−0.73…−1.64) or 10–13k (−1.01…−1.80). Distortion
+    products actually landing in the band (harmonics of the fixed 1/2/4 kHz tones — what a guitar
+    puts up here, having no fundamentals there): median **−1.18/−1.00/−1.50/−2.42 dB**.
+    (d) **Clip-mediated ⇒ inherits W3's wall.** By DRIVE, the deficit is ≈0 at the anchor-safe
+    drives (D0.35 clean **+0.24**, D0.20 −0.67) and grows with both drive and level to −1.3 dB at
+    D0.80–1.00/−6. Not present unclipped, so **no linear filter can fix it** — W7 merges into W3
+    rather than being tracked separately.
+    (e) **New side finding, separate from W3 and possibly actionable:** Soft/Medium's **even**-order
+    HF products are **7–15 dB light** at high drive while Hard's are within ±3 dB — that is the
+    `kSymMismatch = 0.06` term, a targeted lever (W2 established the mismatch parameters "move H2
+    and almost nothing else"). **But they sit at −55…−76 dBc, below W5's −45 dBc audibility floor**
+    — check audibility before touching `kSymMismatch`.
+    (f) **`analysis/pedal2` has an extremely clean floor** — 18–23 kHz energy is **−160 dBFS**
+    during a −29 dBFS segment and the file head is 57% exact zeros, i.e. no measurable
+    recording-chain noise. **This is expected of a NAM capture, not a sign of inaccuracy** — NAM
+    reamps of this pedal null to ≈−45 dB against the real hardware, well inside what any conclusion
+    here depends on. Consequence: noise floor is never the limit in a pedal2 measurement, and
+    W3/W7's "the pedal expands its top octave under drive" should be read as a genuine property of
+    the real pedal that the capture faithfully preserved, not a modelling artefact to be discounted.
   - **W7 — THD light at 6.3–8 kHz (added 2026-07-27, not started, low priority).** User's ear
     flagged it; likely the same gap §2.5 already found (pedal 1.49%/2.16% vs plugin 0.11%/0.12% at
     `sweep_drv_-6`, 6.4/8.1 kHz) but that was marked unvalidated — those bands have only order-2
@@ -439,14 +494,16 @@ See `analysis/README.md` for harness usage and `analysis/CAPTURE_SPEC.md` for ca
     LEVEL deficit, not a tilt" — **that premise died with v1.2.1's `kIs` fix** (LEVEL now 16/16);
     what remains is a genuine tilt. **Superseded by the W3 characterisation above** — it is half
     linear / half clip-mediated, and NO linear filter (shelf, pole or EQ) can fix the latter half.
-  - **BASS↔DRIVE coupling (W4) — CLOSED as characterised-not-fixable; residual folded into W2.**
-    The LF excess below ~100 Hz is real and is a genuine shape error (not an anchor artefact), but
-    it is **not correctable by a shelf**: its mode-independent part is subsonic (−0.23 dB at 60 Hz)
-    and the part that fails SHAPE is mode-dependent (2.24 dB spread across the switch at matched
-    BASS/DRIVE) and of **both signs**. Fixing it is clip-threshold work, not EQ. Full numbers in the
+  - **BASS↔DRIVE coupling (W4) — OPEN. Two levers refuted, five untried (listed in the W4 roadmap
+    entry above).** The LF excess below ~100 Hz is real and is a genuine shape error (not an anchor
+    artefact), but it is **not correctable by a STATIC shelf**: that shelf's mode-independent part is
+    subsonic (−0.23 dB at 60 Hz) and the part that fails SHAPE is mode-dependent (2.24 dB spread
+    across the switch at matched BASS/DRIVE) and of **both signs**. The dominant term looks like
+    clip-threshold work rather than EQ. Full numbers in the
     W4 roadmap entry above and the plan's W4 OUTCOME block; reproduce with
-    `w4_bassdrive.py --only correction`. **Do not fit an empirical low shelf against this** — and
-    ignore the plan's handover table, whose signs are inverted.
+    `w4_bassdrive.py --only correction`. **Do not fit a *static* empirical low shelf against this**
+    (a faded or per-mode one is untried) — and ignore the plan's handover table, whose signs are
+    inverted.
     **Update (2026-07-27, W2):** W2's DRIVE-taper fix moved this residual the right way — the two
     standing LF SHAPE failures improve monotonically with the exponent (`Hard D0.65` +2.00 → +1.66,
     `Medium D0.65` +3.00 → +2.58 dB at 60 Hz) — which is direct support for W4's "it's clip onset,

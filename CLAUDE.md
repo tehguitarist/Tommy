@@ -52,7 +52,7 @@ and `FeatureProfile`, are measurement probes rather than pass/fail accuracy — 
 README's Performance table; `FeatureProfile` → the v1.1 roadmap's CPU-vs-accuracy data). UI
 (Step 8) is a
 fixed 480×480 three-column layout — full design in `ui.md`. Open modelling items: v1.4's W2/W3/W4
-(W2 and W4 blocked on capture batch 7 — see Roadmap).
+(W4 next; nothing is "blocked on captures" any more — W6 is struck, see Roadmap).
 
 > **DSP stage classes are templated on the diode omega provider** (`Stage1T`/`ClippingOversamplerT`/
 > `TommyDSPT`, all defaulting to `AccurateOmega`; `Stage1`/`ClippingOversampler`/`TommyDSP` are the
@@ -264,7 +264,49 @@ See `analysis/README.md` for harness usage and `analysis/CAPTURE_SPEC.md` for ca
     Two harness additions support this: `offline_render.cpp` modeIdx **3 = Linear** (used to refute
     the "SW1 mid is an open circuit" hypothesis) and argv[21]/[22] Medium diode overrides, plus
     `Stage1T::setMediumDiodeParams` (calibration-only; Soft is deliberately unreachable from it).
-  - **STILL OPEN — W2, W3, W4, W6** (below). W2/W4 remain blocked on capture batch 7.
+  - **DONE — W3 characterisation (no DSP change).** Added `analysis/w3_topoctave.py` (four probes:
+    `confound`/`compression`/`metric`/`energy`) and an ADAA-disable override to `offline_render.cpp`
+    (argv[23], measurement-only; default ON so shipped renders are bit-identical). Four results, two
+    of which change what the fix must be — full numbers in the plan's W3 block:
+    (a) the "onset at DRIVE ≥ 0.65" is genuinely DRIVE, but §1.3 was **confounded** — pedal2 steps
+    TREBLE 0.20→0.35 and BASS 0.50→0.65 at the same point; `Medium D0.65 T0.20` breaks the tie and
+    carries the full tilt, and BASS is excluded analytically (C3 shorts node_X at HF).
+    (b) it is ~0.5 dB **linear** (present on the clean sweep) + ~2.0 dB **clipping-mediated** at
+    10.2 kHz, so **a `DriveTilt`-style shelf cannot fix it** — being level-independent, one fitted at
+    −6 dBFS would over-brighten the same setting by ~2 dB played clean. This is a second and stronger
+    reason than v1.2's, and it supersedes the plan's "shelf is the fallback".
+    (c) the Farina metric is **sound** here — fixed tones reproduce the plugin's swept-sine
+    compression to within 0.02 dB, so §2.5's near-the-ceiling caveat doesn't discredit §1.3.
+    (d) the deficit is **real energy** (total in-band, no deconvolution): Hard D1.00 is −1.87 dB at
+    7–11 kHz and −2.51 at 11–16 kHz vs the pedal at −6 dBFS, low drive clean at every level. §1.3 and
+    §2.5 are therefore ONE phenomenon: the model makes too little top-octave energy when driven hard.
+    **Rail-clip ADAA is ELIMINATED as the cause** (off recovers only 0.04–0.09 dB, and identically at
+    clean and −6 dBFS, so it can't be the level-dependent half). The leading remaining candidate is
+    the **ideal op-amp model** — but see the next entry: it was tested and eliminated.
+  - **DONE — W3 finite-op-amp-GBW experiment: TESTED AND ELIMINATED (no DSP change shipped).**
+    Implemented finite GBW on Stage 1 (per-sample one-pole at f_p = GBW/A_cl, A_cl from the previous
+    sample's solved gain so the clipping-driven loop-gain collapse was picked up), swept
+    8/4/3/2/1 MHz, then **reverted** — the DSP is untouched and `ctest` is 10/10. It cannot work:
+    the driven case did not move at all (−1.87 → −1.89 dB at 7–11 kHz) while the clean case got
+    monotonically worse (−0.66 → −0.96 at 3 MHz). Reason: under clipping the output is clamped while
+    the input keeps rising, so A_cl collapses to ≈2.5 and f_p ≈ 1.2 MHz — the filter self-disables
+    exactly when clipping engages. Slew limiting is out too, on the numbers (~0.09 V/µs required at
+    1.5 V / 10 kHz, far inside any JRC4559 spec). **Generalise the lesson: the pedal *expands* its
+    top octave under drive (+2.19 dB at 10.2 kHz vs the model's +0.44), and no linear filter can add
+    energy — so no shelf, pole or EQ of any kind can fix the clip-mediated half.** What is left is
+    unverifiable without hardware: diode charge-storage/reverse-recovery (the WDF diode model is
+    quasi-static) or a capture-chain contribution with no bypass anchor to rule it out.
+  - **W6 STRUCK — no further pedal captures are possible** (user, 2026-07-26). Batches 1/2/3/4/5 and
+    `pedal2` (batch 6) are all there will ever be, so nothing may be deferred "pending captures"
+    again, and hardware re-verification is no longer available for `circuit.md`'s open questions
+    (Mode B's threshold, the op-amp rail estimates). W2/W4 must be fitted from `pedal2` or
+    documented as residuals; the one de-confounding lever left is clip-mode dependence at matched
+    (BASS, DRIVE), which pedal2 does provide at D0.50/B0.50 and D0.65/B0.65.
+  - **STILL OPEN — W4 (recommended next), W2, W3 (fix; may be unfixable).** **W4 is the priority:
+    it is the largest real error left and it alone explains BOTH dashboard symptoms — the uniformly
+    hot bass and the apparent midband deficit are one error (§1.1), the latter being the LF excess
+    re-appearing through `null_depth`'s least-squares gain fit. The raw FR view still shows it; the
+    `@1 kHz` toggle W5 added is the honest one.**
   Findings re-derived from `analysis/reports/comprehensive_data.json` (16 pedal2 captures, 30
   1/3-octave bands, 4 sweep levels). Four real errors, one artefact, two harness fixes:
   - **Medium-mode clip threshold (W1) — FIXED, see above.** Medium was the only clip mode with a
@@ -282,11 +324,13 @@ See `analysis/README.md` for harness usage and `analysis/CAPTURE_SPEC.md` for ca
   - **High-drive top-octave tilt (W3).** −2…−3 dB at 8–10 kHz, onset sharply at DRIVE ≥ 0.65,
     clip-mode independent. v1.2 reverted an HF-shelf attempt because the high-drive gap "is a flat
     LEVEL deficit, not a tilt" — **that premise died with v1.2.1's `kIs` fix** (LEVEL now 16/16);
-    what remains is a genuine tilt. Investigate C1 (100p) × DRIVE-taper top end before any shelf.
+    what remains is a genuine tilt. **Superseded by the W3 characterisation above** — it is half
+    linear / half clip-mediated, and NO linear filter (shelf, pole or EQ) can fix the latter half.
   - **BASS↔DRIVE coupling (W4).** LF excess below ~100 Hz (+2.8 dB @20 Hz clean) is real but is
     *clipping-mediated* (mode-dependent: Medium > Hard > Soft), not a taper error — the model's
-    bass boost grows with DRIVE faster than the pedal's. Blocked: BASS and DRIVE are perfectly
-    confounded in pedal2. Supersedes/explains the "B0.65 SHAPE fails" residual above.
+    bass boost grows with DRIVE faster than the pedal's. BASS and DRIVE are perfectly confounded in
+    pedal2, so fit against the **clip-mode spread at matched (BASS, DRIVE)** — that comparison is
+    confound-free. Supersedes/explains the "B0.65 SHAPE fails" residual above.
   - **NOT a real error:** the apparent ~0.9 dB deficit across 40 Hz–2 kHz is an artefact of
     `null_depth`'s least-squares broadband gain being dragged down by the LF excess. Normalised at
     1 kHz, 200 Hz–5 kHz sits within ±0.35 dB at all four levels. Don't "fix" it.
@@ -294,5 +338,6 @@ See `analysis/README.md` for harness usage and `analysis/CAPTURE_SPEC.md` for ca
     (−45 dBc) — the +12…+25 dB H2/H4/H6 deltas it reports for Soft/Medium are noise-floor
     comparisons at −50…−62 dBc, and they dominate its per-mode score. Also add a 1 kHz-normalised
     FR view alongside the null-gain-matched one.
-  - **Capture batch 7 (W6) unblocks W2 and W4:** `CAPTURE_SPEC.md`'s bypass anchor + BASS sweep at
-    fixed DRIVE were never actually captured, plus (new) a low-DRIVE × 3 switch × 3 level block.
+  - **Capture batch 7 (W6) — STRUCK, see above.** It would have unblocked W2/W4 (`CAPTURE_SPEC.md`'s
+    bypass anchor + a BASS sweep at fixed DRIVE were never captured, nor a low-DRIVE × switch × level
+    block), but no further captures are possible. The confounds are permanent; fit or document.

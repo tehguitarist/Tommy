@@ -54,6 +54,11 @@ int main (int argc, char** argv)
     // <=0 = keep the shipped kIsMedium/kNMedium). Soft is intentionally NOT overridable.
     const double medIs = (argc > 21) ? std::atof (argv[21]) : -1.0;
     const double medN = (argc > 22) ? std::atof (argv[22]) : -1.0;
+    // Optional rail-clip ADAA disable (argv[23]: 0 = off, anything else/absent = shipped ON). Exists
+    // for v1.4 W3: ADAA band-limits the rail-clip corner, so it is a candidate for the model's
+    // top-octave energy deficit at high drive. Off is NOT a shipping configuration (it re-opens the
+    // aliasing ADAA exists to suppress) — measurement only.
+    const bool adaaOn = (argc > 23) ? (std::atoi (argv[23]) != 0) : true;
 
     // modeIdx 3 = Linear (NO clipping diodes at all; the op-amp rail clip still applies). Not a
     // shipped plugin mode — it exists so the analysis harness can test the hypothesis that SW1's
@@ -90,7 +95,7 @@ int main (int argc, char** argv)
         dsp.setSymMismatch (symBias);
     if (medIs > 0.0 || medN > 0.0)
         dsp.setMediumDiodeParams (medIs, medN);
-    dsp.setAdaaEnabled (true);
+    dsp.setAdaaEnabled (adaaOn);
 
     const double outGain = kOutputMakeup * tp::volumeGain (volX) / kInputRef;
 

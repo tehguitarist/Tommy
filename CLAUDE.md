@@ -341,7 +341,13 @@ See `analysis/README.md` for harness usage and `analysis/CAPTURE_SPEC.md` for ca
     **This also qualifies W5's `@1 kHz` FR view:** 1 kHz is not anchor-safe at D ≥ 0.50, and at
     D ≥ 0.65 no band on the clean sweep is (20 Hz is +5.2 dB over clamp at D1.00).
   - **STILL OPEN — W2, W3 (fix; likely unfixable), W4 (fittable as an empirical shelf — plan has a
-    full handover, next up).**
+    full handover, next up), W7 (new, not urgent — see below).**
+  - **W7 — THD light at 6.3–8 kHz (added 2026-07-27, not started, low priority).** User's ear
+    flagged it; likely the same gap §2.5 already found (pedal 1.49%/2.16% vs plugin 0.11%/0.12% at
+    `sweep_drv_-6`, 6.4/8.1 kHz) but that was marked unvalidated — those bands have only order-2
+    Farina resolution near the measurement ceiling. Probably the same phenomenon as W3 (clip-driven
+    top-octave energy the model can't produce, which no linear filter can fix), but not confirmed.
+    See `.claude/plans/v1.4-fidelity.md`'s W7 for the next-steps checklist before touching any DSP.
   Findings re-derived from `analysis/reports/comprehensive_data.json` (16 pedal2 captures, 30
   1/3-octave bands, 4 sweep levels). Four real errors, one artefact, two harness fixes:
   - **Medium-mode clip threshold (W1) — FIXED, see above.** Medium was the only clip mode with a

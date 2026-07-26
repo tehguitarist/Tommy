@@ -105,6 +105,10 @@ These are load-bearing — verified against the authoritative batch-3/4/5 NAM ca
   ~+3 dB hot at BASS≈0.65. In the pedal2 captures B0.65 only appears with high drive, so it's
   confounded (bass taper vs BASS/DRIVE coupling) — needs a dedicated bass-sweep-at-fixed-drive
   capture to fix safely (the BASS taper is validated against batch 3/4/5, not in-repo). Deferred.
+  **Update (2026-07-26, `.claude/plans/v1.4-fidelity.md` §1.2):** the per-band data narrows this —
+  the LF excess is *clip-mode dependent* (Medium > Hard > Soft at matched drive) and shrinks as the
+  clipper is driven, so it is a BASS↔DRIVE **coupling** error, not a BASS taper error. Still needs
+  the bass-sweep-at-fixed-drive capture to fit.
 - Top octave: the low-OS bilinear droop is fixed by oversampling Treble+Stage2 + `TopOctaveRestore`;
   the low-DRIVE linear tilt is fixed by `DriveTilt` (v1.2, calibrated to pedal2 — SHAPE 8/16→14/16).
   The hot tone-set pedal1 disagrees with pedal2 on the top octave; **pedal2 is the definitive tone
@@ -215,3 +219,32 @@ See `analysis/README.md` for harness usage and `analysis/CAPTURE_SPEC.md` for ca
   respects the lock and host automation; non-numeric input is rejected rather than falling back to
   `String::getFloatValue()`'s silent 0.0. See `architecture.md`'s `trim_lock` row and `ui.md`'s
   Oversampling Strip / Side Panels sections for the full spec.
+- **v1.4 — fidelity pass (PLANNED, nothing implemented). Plan: `.claude/plans/v1.4-fidelity.md`.**
+  Findings re-derived from `analysis/reports/comprehensive_data.json` (16 pedal2 captures, 30
+  1/3-octave bands, 4 sweep levels). Four real errors, one artefact, two harness fixes:
+  - **Medium-mode clip threshold (W1, top priority).** Medium is the only clip mode with a
+    level-dependent THD error (−0.2/−1.0/−1.9 dB at −18/−12/−6 dBFS; H3/H5/H7 all ~−1.8 dB at −6).
+    **Soft is exact at every level and drive** — which pins the shared diode parameters and makes
+    Medium separable for the first time. Related: the modelled Soft↔Medium threshold gap
+    (`2·kIs` vs `kIs` ⇒ only ~31 mV) is far smaller than the pedal's — run `schematic-checker` on
+    the SW1 "mid" position before changing any DSP.
+  - **Low-drive clip onset (W2).** At D0.20/−18 dBFS the plugin distorts ~4.4× the pedal (11.3% vs
+    2.55% @101 Hz), collapsing as level rises. Edge-of-breakup region; largest single error in the
+    dataset. Pulls opposite to v1.2.1's `kIs` halving — do NOT chase it with global `kIs`.
+  - **High-drive top-octave tilt (W3).** −2…−3 dB at 8–10 kHz, onset sharply at DRIVE ≥ 0.65,
+    clip-mode independent. v1.2 reverted an HF-shelf attempt because the high-drive gap "is a flat
+    LEVEL deficit, not a tilt" — **that premise died with v1.2.1's `kIs` fix** (LEVEL now 16/16);
+    what remains is a genuine tilt. Investigate C1 (100p) × DRIVE-taper top end before any shelf.
+  - **BASS↔DRIVE coupling (W4).** LF excess below ~100 Hz (+2.8 dB @20 Hz clean) is real but is
+    *clipping-mediated* (mode-dependent: Medium > Hard > Soft), not a taper error — the model's
+    bass boost grows with DRIVE faster than the pedal's. Blocked: BASS and DRIVE are perfectly
+    confounded in pedal2. Supersedes/explains the "B0.65 SHAPE fails" residual above.
+  - **NOT a real error:** the apparent ~0.9 dB deficit across 40 Hz–2 kHz is an artefact of
+    `null_depth`'s least-squares broadband gain being dragged down by the LF excess. Normalised at
+    1 kHz, 200 Hz–5 kHz sits within ±0.35 dB at all four levels. Don't "fix" it.
+  - **Harness (W5, cheap, do first):** `report_audit.py`'s harmonic median needs an absolute floor
+    (−45 dBc) — the +12…+25 dB H2/H4/H6 deltas it reports for Soft/Medium are noise-floor
+    comparisons at −50…−62 dBc, and they dominate its per-mode score. Also add a 1 kHz-normalised
+    FR view alongside the null-gain-matched one.
+  - **Capture batch 7 (W6) unblocks W2 and W4:** `CAPTURE_SPEC.md`'s bypass anchor + BASS sweep at
+    fixed DRIVE were never actually captured, plus (new) a low-DRIVE × 3 switch × 3 level block.

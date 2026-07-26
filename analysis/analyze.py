@@ -125,6 +125,92 @@ def thd(x, f0):
     harm = np.sqrt(sum(amp(f0 * k) ** 2 for k in range(2, 9)))
     return 100 * harm / (fund + 1e-20), fund
 
+# --- Continuous (Farina) THD + sub-sample null test (added for comprehensive_report.py) --------
+# SWEEP_F0/F1 match both gen_test_signal.py and gen_test_signal_v2.py's log_sweep(20, 20000, ...)
+# endpoints, so these hold under either SIGNAL=v1/v2 layout. frac_align/null_depth are otherwise
+# duplicated locally in null_test.py (this project's existing convention of small standalone
+# scripts each carrying their own copy) — these are the shared versions comprehensive_report.py
+# imports from analyze.py, per the analysis-template's library/orchestrator split.
+SWEEP_F0 = 20.0
+SWEEP_F1 = 20000.0
+ORDER_LIMIT_MARGIN = 0.95  # keep order N only while N*f <= SWEEP_F1*this (edge spike sits AT f1/N)
+
+def harmonic_thd_curve(capture_sweep, ref_sweep, max_order=7, order_limit=True):
+    """Continuous THD(f) via Farina exponential-sweep harmonic separation. Deconvolve the captured
+    driven sweep against the clean reference sweep; the N-th harmonic IR is time-advanced by
+    dt_N = T*ln(N)/ln(f1/f0), so gate each, FFT, and map to the fundamental axis. Returns
+    (freqs, thd_pct, {order: |H|}).
+
+    Order limiting (default on): the reference sweep has no energy above SWEEP_F1 (20 kHz), so
+    order N is only measurable while N*f <= SWEEP_F1 — past that the regularised division blows up
+    and produces a spurious edge spike at f = SWEEP_F1/N. Masking order N above
+    SWEEP_F1*ORDER_LIMIT_MARGIN/N avoids this; nothing below ~2714 Hz changes (every order still
+    in-band there)."""
+    n = min(len(capture_sweep), len(ref_sweep))
+    y = capture_sweep[:n].astype(np.float64); x = ref_sweep[:n].astype(np.float64)
+    nfft = 1 << int(np.ceil(np.log2(2 * n)))
+    X = np.fft.rfft(x, nfft); Y = np.fft.rfft(y, nfft)
+    eps = 1e-6 * np.mean(np.abs(X) ** 2)
+    ir = np.fft.irfft(Y * np.conj(X) / (np.abs(X) ** 2 + eps), nfft)
+    T_sweep = n / FS
+    R = np.log(SWEEP_F1 / SWEEP_F0)
+
+    def gated_spectrum(order):
+        dt = T_sweep * np.log(order) / R
+        center = int(round((-dt) * FS)) % nfft
+        if order == 1:
+            half = int(0.04 * FS)
+        else:
+            gap = (T_sweep / R) * np.log((order + 1) / order)   # secs to the next-higher order
+            half = int(0.35 * gap * FS)                          # 35% of the gap -> no overlap
+        half = max(half, int(0.01 * FS))
+        idx = (np.arange(center - half, center + half) % nfft)
+        spec = np.fft.rfft(ir[idx] * np.hanning(len(idx)), nfft)
+        return np.fft.rfftfreq(nfft, 1 / FS), np.abs(spec)
+
+    fr, H1 = gated_spectrum(1)
+    Hn = {1: H1}
+    for N in range(2, max_order + 1):
+        frN, mag = gated_spectrum(N)
+        Hn[N] = np.interp(fr, frN / N, mag, left=0.0, right=0.0)   # remap harmonic->fundamental axis
+        if order_limit:
+            Hn[N] = np.where(N * fr <= SWEEP_F1 * ORDER_LIMIT_MARGIN, Hn[N], 0.0)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        harm = np.sqrt(sum(Hn[N] ** 2 for N in range(2, max_order + 1)))
+        thd_pct = 100.0 * harm / (H1 + 1e-20)
+    return fr, thd_pct, Hn
+
+def thd_max_measurable_hz(max_order=2):
+    """Highest fundamental at which THD is measurable from this sweep, using orders up to
+    `max_order`. THD needs at least H2, so the ceiling is SWEEP_F1*margin/2 ~= 9.5 kHz — and no
+    test signal can beat FS/4 = 12 kHz at 48 kHz, because H2 lands past Nyquist above that."""
+    return min(SWEEP_F1 * ORDER_LIMIT_MARGIN / max_order, FS / (2.0 * max_order))
+
+def frac_align(test, ref):
+    """Shift `test` by a FRACTIONAL number of samples to best line up with `ref` (FFT phase ramp;
+    parabolic refinement of the xcorr peak). Integer alignment isn't enough for a deep null —
+    1 sample at 20 kHz is ~150 deg of phase error."""
+    n = min(len(test), len(ref))
+    a = test[:n] - test[:n].mean(); b = ref[:n] - ref[:n].mean()
+    corr = sps.correlate(a, b, mode="full", method="fft")
+    k = int(np.argmax(np.abs(corr)))
+    if 0 < k < len(corr) - 1:
+        y0, y1, y2 = np.abs(corr[k - 1]), np.abs(corr[k]), np.abs(corr[k + 1])
+        denom = (y0 - 2 * y1 + y2); delta = 0.5 * (y0 - y2) / denom if denom else 0.0
+    else:
+        delta = 0.0
+    lag = (k - (n - 1)) + delta
+    X = np.fft.rfft(test); freqs = np.fft.rfftfreq(len(test))
+    return np.fft.irfft(X * np.exp(-1j * 2 * np.pi * freqs * (-lag)), len(test))
+
+def null_depth(ref, test):
+    """Optimal-gain-match `test` to `ref`, subtract, return (null_dB, applied_gain_dB). The gain
+    match measures TIMBRE/shape/phase agreement, NOT absolute level (report level separately)."""
+    g = float(np.dot(ref, test) / (np.dot(test, test) + 1e-30))
+    resid = ref - g * test
+    null_db = 20 * np.log10((np.sqrt(np.mean(resid ** 2)) + 1e-20) / (np.sqrt(np.mean(ref ** 2)) + 1e-20))
+    return null_db, 20 * np.log10(abs(g) + 1e-20)
+
 # --- Shared NAM-capture filename parsing (consolidated 2026-06-27) ---------------------------
 # The capture batches use TWO different knob notations, and this parser auto-detects both so every
 # downstream tool (run_compare, harmonics, swept_thd, null_test, knob_tracking) reads filenames the

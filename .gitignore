@@ -13,3 +13,10 @@ analysis/*.wav
 analysis/**/*.wav
 __pycache__/
 analysis/.venv/
+analysis/.cache/
+
+# comprehensive_report.py output — derived from the local-only pedal2 WAVs above, regenerate with
+# `analysis/comprehensive_report.py` + `dashboard_gen.py`/`report_audit.py` (reports/*.example.* stay)
+analysis/reports/comprehensive_data.json
+analysis/reports/dashboard.html
+analysis/reports/executive_summary.txt

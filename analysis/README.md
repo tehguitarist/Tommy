@@ -53,6 +53,9 @@ layout in `analyze.py` (`T{}`) must stay in lock-step with it. Segments: noise-f
 | `volume_supply_check.py` | Self-consistency for the two controls with no real reference: Volume monotonicity + Supply (9/12/18 V) headroom ordering. |
 | `harmonics.py` | Per-tone harmonic profile (H2…H7, even-vs-odd) vs a capture — clip-character detail. |
 | `treble_fit.py` / `treble_xcheck.py` / `sweep_kinput.py` | Taper/level fitting helpers used when refitting a control against the captures. |
+| `comprehensive_report.py` | Imported from the Guitar-Pedal-Plugin-Template analysis harness and adapted for Tommy. Renders every `pedal2` capture (the only batch with all three driven-sweep depths + full 8-tone THD anchor set — `pedal1` predates that spec) at matching settings, then writes per-1/3-octave-band FR, THD (Farina swept + discrete-tone crossover), and H2-H7 harmonic data to `analysis/reports/comprehensive_data.json`, grouped by SW1 clip mode. `captures.py` is the Tommy-specific capture-I/O/render-args glue this reads; `analyze.py`'s `harmonic_thd_curve`/`frac_align`/`null_depth`/`thd_max_measurable_hz` were added to support it. Parallelised across a process pool with a disk cache for the (plugin-independent) capture-side analysis — see the script's docstring. |
+| `dashboard_gen.py` | Also imported from the template — in the interactive tabbed/Chart.js format of `reports/example_dashboard.html` (NoAmp's reference dashboard), not a static-SVG layout. Reads `comprehensive_data.json`, embeds it directly into a self-contained `analysis/reports/dashboard.html` (FR comparison + error, FR error heatmap, THD comparison, harmonic breakdown, per-clip-mode summary + quick-take issues), so it opens pre-loaded; the file-input control still works if you want to load a different JSON snapshot without regenerating. Needs network access once (loads Chart.js from a CDN, same as the reference). Clip-mode badges/dropdown are driven by whatever `rev` values are actually in the data (Hard/Medium/Soft for Tommy), not hardcoded. |
+| `report_audit.py` | Also imported from the template. Audits `comprehensive_data.json` against FR/THD acceptance targets and writes `analysis/reports/executive_summary.txt` (`--write`): FR-vs-target grading per clip mode, THD data coverage (Farina ceiling vs discrete-tone bands), THD-vs-drive-level (clip-onset vs static fault), and per-harmonic (H2-H7) magnitude deltas. Tommy's circuit has no twin-T/bridged-T notch, so `CONFOUNDED_ANCHORS` is empty (unlike the template's default). |
 
 ## Typical workflow
 
@@ -72,6 +75,13 @@ analysis/.venv/bin/python3 analysis/knob_tracking.py analysis/pedal_results3 ana
 
 # Hot batch uses a higher input reference
 KIN=2.4 analysis/.venv/bin/python3 analysis/knob_tracking.py analysis/pedal_results5
+
+# Comprehensive per-band FR/THD/harmonic report across all of pedal2 -> reports/comprehensive_data.json
+analysis/.venv/bin/python3 analysis/comprehensive_report.py --os 8
+
+# HTML dashboard + text executive summary from that JSON (no re-rendering)
+analysis/.venv/bin/python3 analysis/dashboard_gen.py           # -> reports/dashboard.html
+analysis/.venv/bin/python3 analysis/report_audit.py --write    # -> reports/executive_summary.txt
 ```
 
 ## Validation summary (v0.8, 2026-06-28)

@@ -321,19 +321,27 @@ See `analysis/README.md` for harness usage and `analysis/CAPTURE_SPEC.md` for ca
     (Soft both-polarity 0.987 V < Hard one-polarity < Medium both at 1.194 V) is exactly the
     measured 5/5 order. Corroborated from the other side: the analytic LINEAR shelf is ~−10 dB at
     20 Hz while the rendered plugin shows ~+0.6 dB — clipping flattens nearly the whole shelf.
-    (d) **W4 is not fittable from `pedal2`.** The only anchor-safe capture (`Hard D0.20`) shows an
-    LF excess of **+0.25 dB**, i.e. essentially none, and regressing excess on anchor overdrive is
-    weak and non-monotone (r = +0.31, peaking at D0.65 where BASS also steps). Recommend
-    **documenting W4 as a residual rather than fitting it.**
-    **Recorded dead end:** treating the −30 dBFS sweep as linear makes the diodes' zero-bias
-    resistance the only switch-dependent term; it predicts a 0.07–0.68 dB spread that *matches the
-    plugin's measured* 0.08–0.6 dB and appears to imply an extra series element in the SW1 mid leg
-    (which W1 inferred independently!). It is wrong — the premise that the diodes are off is false.
-    **Check the anchor before trusting any 1 kHz-normalised LF number.**
+    (d) **W4 is not fittable AS A PHYSICAL BASS/DRIVE COUPLING PARAMETER from `pedal2`** — the
+    only anchor-safe capture (`Hard D0.20`) shows an LF excess of **+0.25 dB**, essentially none,
+    and regressing excess on anchor overdrive is weak/non-monotone (r = +0.31, peaking at D0.65
+    where BASS also steps). ~~Recommend documenting W4 as a residual rather than fitting it.~~
+    **RETRACTED same session, per the user:** the LF excess is real in 15/16 captures and, unlike
+    W3, only needs a filter to CUT — ordinary shelf territory, not the "no linear filter can add
+    energy" wall that killed W3. **Do not treat W4 as a closed residual.** Full handover with the
+    required-correction table (median plugin−pedal at 20/40/80/100.8 Hz across DRIVE, all four
+    sweep levels) and concrete next steps is in `.claude/plans/v1.4-fidelity.md`'s W4 section under
+    "HANDOVER (2026-07-26, mid-session)" — start there, not from scratch.
+    **Recorded dead end (still valid — this part was NOT retracted):** treating the −30 dBFS sweep
+    as linear makes the diodes' zero-bias resistance the only switch-dependent term; it predicts a
+    0.07–0.68 dB spread that *matches the plugin's measured* 0.08–0.6 dB and appears to imply an
+    extra series element in the SW1 mid leg (which W1 inferred independently!). It is wrong — the
+    premise that the diodes are off is false. **Check the anchor before trusting any
+    1 kHz-normalised LF number**, including the numbers in the plan's handover table (driven-sweep
+    columns are safer than the clean-sweep column — see the handover's caveat).
     **This also qualifies W5's `@1 kHz` FR view:** 1 kHz is not anchor-safe at D ≥ 0.50, and at
     D ≥ 0.65 no band on the clean sweep is (20 Hz is +5.2 dB over clamp at D1.00).
-  - **STILL OPEN — W2 (now the only fittable item left), W3 (fix; likely unfixable), W4 (recommend
-    documenting as a residual — see above).**
+  - **STILL OPEN — W2, W3 (fix; likely unfixable), W4 (fittable as an empirical shelf — plan has a
+    full handover, next up).**
   Findings re-derived from `analysis/reports/comprehensive_data.json` (16 pedal2 captures, 30
   1/3-octave bands, 4 sweep levels). Four real errors, one artefact, two harness fixes:
   - **Medium-mode clip threshold (W1) — FIXED, see above.** Medium was the only clip mode with a
@@ -354,9 +362,11 @@ See `analysis/README.md` for harness usage and `analysis/CAPTURE_SPEC.md` for ca
     what remains is a genuine tilt. **Superseded by the W3 characterisation above** — it is half
     linear / half clip-mediated, and NO linear filter (shelf, pole or EQ) can fix the latter half.
   - **BASS↔DRIVE coupling (W4).** LF excess below ~100 Hz (+2.8 dB @20 Hz clean) is real *as a
-    measurement*, but **superseded by the W4 characterisation above**: the mode dependence it rests
-    on is anchor compression, not a bass mechanism, and the one anchor-safe capture shows +0.25 dB.
-    The clip-mode-spread lever is refuted; do not fit against it.
+    measurement* and still needs fixing — **updated by the W4 characterisation above**: the mode
+    dependence this was originally attributed to is anchor compression, not a bass mechanism (the
+    clip-mode-spread lever is refuted, do not fit against it), but the underlying LF excess itself
+    is not explained away by that and is fittable as an empirical DRIVE/level-dependent low shelf.
+    See the plan's HANDOVER block for the required-correction numbers and next steps.
   - **NOT a real error:** the apparent ~0.9 dB deficit across 40 Hz–2 kHz is an artefact of
     `null_depth`'s least-squares broadband gain being dragged down by the LF excess. Normalised at
     1 kHz, 200 Hz–5 kHz sits within ±0.35 dB at all four levels. Don't "fix" it.

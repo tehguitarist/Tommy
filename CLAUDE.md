@@ -302,11 +302,38 @@ See `analysis/README.md` for harness usage and `analysis/CAPTURE_SPEC.md` for ca
     (Mode B's threshold, the op-amp rail estimates). W2/W4 must be fitted from `pedal2` or
     documented as residuals; the one de-confounding lever left is clip-mode dependence at matched
     (BASS, DRIVE), which pedal2 does provide at D0.50/B0.50 and D0.65/B0.65.
-  - **STILL OPEN — W4 (recommended next), W2, W3 (fix; may be unfixable).** **W4 is the priority:
-    it is the largest real error left and it alone explains BOTH dashboard symptoms — the uniformly
-    hot bass and the apparent midband deficit are one error (§1.1), the latter being the LF excess
-    re-appearing through `null_depth`'s least-squares gain fit. The raw FR view still shows it; the
-    `@1 kHz` toggle W5 added is the honest one.**
+  - **DONE — W4 characterisation: the proposed lever is REFUTED (no DSP change).** Added
+    `analysis/w4_bassdrive.py` (probes `spread`/`order`/`anchor`/`shelf`; pure analysis, no render
+    or build needed). W4's plan was to fit the BASS↔DRIVE coupling using **clip-mode spread at
+    matched (BASS, DRIVE)** — the one de-confounding lever left after W6 was struck. It does not
+    work, and the reason matters for every LF number in the report:
+    (a) The mode spread is on the **pedal** side, not the model's — plugin 0.08–0.14 dB vs pedal
+    1.57 dB (clean), up to 4.8 dB. §1.2(a)'s "the model's bass boost grows faster than the pedal's"
+    has the asymmetry backwards.
+    (b) Only the LF half is a mechanism: the pedal's spread is a V pinned to 0.00 at the 1 kHz
+    anchor, rising at both ends (2.12 dB @20 Hz, 2.47 dB @16 kHz). The 20 Hz ordering is
+    `Medium < Hard < Soft` in **5/5** groups but the 16 kHz ordering matches in only 1/5, and the
+    ends are uncorrelated (r = −0.30) — **the HF spread is capture noise, not a mechanism.**
+    (c) **The cause is anchor compression.** `sweep_clean` is −30 dBFS (37.9 mV in) but Stage 1's
+    midband gain is 25–44 dB here, so the **1 kHz normalisation anchor is past the diode clamp in
+    12/16 captures** (+15.3 dB over clamp at D1.00; only `Hard D0.20` is clear, at −12.2 dB). The
+    mode compressing the anchor least gets the deepest-*looking* shelf, and the predicted order
+    (Soft both-polarity 0.987 V < Hard one-polarity < Medium both at 1.194 V) is exactly the
+    measured 5/5 order. Corroborated from the other side: the analytic LINEAR shelf is ~−10 dB at
+    20 Hz while the rendered plugin shows ~+0.6 dB — clipping flattens nearly the whole shelf.
+    (d) **W4 is not fittable from `pedal2`.** The only anchor-safe capture (`Hard D0.20`) shows an
+    LF excess of **+0.25 dB**, i.e. essentially none, and regressing excess on anchor overdrive is
+    weak and non-monotone (r = +0.31, peaking at D0.65 where BASS also steps). Recommend
+    **documenting W4 as a residual rather than fitting it.**
+    **Recorded dead end:** treating the −30 dBFS sweep as linear makes the diodes' zero-bias
+    resistance the only switch-dependent term; it predicts a 0.07–0.68 dB spread that *matches the
+    plugin's measured* 0.08–0.6 dB and appears to imply an extra series element in the SW1 mid leg
+    (which W1 inferred independently!). It is wrong — the premise that the diodes are off is false.
+    **Check the anchor before trusting any 1 kHz-normalised LF number.**
+    **This also qualifies W5's `@1 kHz` FR view:** 1 kHz is not anchor-safe at D ≥ 0.50, and at
+    D ≥ 0.65 no band on the clean sweep is (20 Hz is +5.2 dB over clamp at D1.00).
+  - **STILL OPEN — W2 (now the only fittable item left), W3 (fix; likely unfixable), W4 (recommend
+    documenting as a residual — see above).**
   Findings re-derived from `analysis/reports/comprehensive_data.json` (16 pedal2 captures, 30
   1/3-octave bands, 4 sweep levels). Four real errors, one artefact, two harness fixes:
   - **Medium-mode clip threshold (W1) — FIXED, see above.** Medium was the only clip mode with a
@@ -326,11 +353,10 @@ See `analysis/README.md` for harness usage and `analysis/CAPTURE_SPEC.md` for ca
     LEVEL deficit, not a tilt" — **that premise died with v1.2.1's `kIs` fix** (LEVEL now 16/16);
     what remains is a genuine tilt. **Superseded by the W3 characterisation above** — it is half
     linear / half clip-mediated, and NO linear filter (shelf, pole or EQ) can fix the latter half.
-  - **BASS↔DRIVE coupling (W4).** LF excess below ~100 Hz (+2.8 dB @20 Hz clean) is real but is
-    *clipping-mediated* (mode-dependent: Medium > Hard > Soft), not a taper error — the model's
-    bass boost grows with DRIVE faster than the pedal's. BASS and DRIVE are perfectly confounded in
-    pedal2, so fit against the **clip-mode spread at matched (BASS, DRIVE)** — that comparison is
-    confound-free. Supersedes/explains the "B0.65 SHAPE fails" residual above.
+  - **BASS↔DRIVE coupling (W4).** LF excess below ~100 Hz (+2.8 dB @20 Hz clean) is real *as a
+    measurement*, but **superseded by the W4 characterisation above**: the mode dependence it rests
+    on is anchor compression, not a bass mechanism, and the one anchor-safe capture shows +0.25 dB.
+    The clip-mode-spread lever is refuted; do not fit against it.
   - **NOT a real error:** the apparent ~0.9 dB deficit across 40 Hz–2 kHz is an artefact of
     `null_depth`'s least-squares broadband gain being dragged down by the LF excess. Normalised at
     1 kHz, 200 Hz–5 kHz sits within ±0.35 dB at all four levels. Don't "fix" it.

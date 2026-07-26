@@ -20,6 +20,8 @@ static constexpr double kOutputMakeup = 1.217;
 
 int main (int argc, char** argv)
 {
+    // Optional overrides beyond argv[9] are documented at their point of use below (argv[10]
+    // kInputRef ... argv[24] DriveTilt shelf gain); all are calibration-only and default to shipped.
     if (argc < 9)
     {
         std::fprintf (stderr, "usage: %s in.f32 out.f32 bassX driveX trebX volX modeIdx factorLog2 [sr]\n", argv[0]);
@@ -59,6 +61,10 @@ int main (int argc, char** argv)
     // top-octave energy deficit at high drive. Off is NOT a shipping configuration (it re-opens the
     // aliasing ADAA exists to suppress) — measurement only.
     const bool adaaOn = (argc > 23) ? (std::atoi (argv[23]) != 0) : true;
+    // Optional DriveTilt shelf-gain override (argv[24]; <0 = keep the shipped kMaxGainDB). Exists
+    // for v1.4 W2: DriveTilt is fitted against the same low-drive captures the DRIVE taper is, so a
+    // taper re-fit has to be able to re-check the shelf jointly instead of assuming it still holds.
+    const double tiltGainDB = (argc > 24) ? std::atof (argv[24]) : -1.0;
 
     // modeIdx 3 = Linear (NO clipping diodes at all; the op-amp rail clip still applies). Not a
     // shipped plugin mode — it exists so the analysis harness can test the hypothesis that SW1's
@@ -96,6 +102,8 @@ int main (int argc, char** argv)
     if (medIs > 0.0 || medN > 0.0)
         dsp.setMediumDiodeParams (medIs, medN);
     dsp.setAdaaEnabled (adaaOn);
+    if (tiltGainDB >= 0.0)
+        dsp.setDriveTiltGainDB (tiltGainDB);
 
     const double outGain = kOutputMakeup * tp::volumeGain (volX) / kInputRef;
 

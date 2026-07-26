@@ -75,6 +75,9 @@ public:
      *  Pass the raw normalised drive parameter, NOT the tapered resistance. */
     void setDrivePosition (double driveX) { driveTilt.setDrive (driveX); }
 
+    /** CALIBRATION ONLY — override DriveTilt's shelf gain (see DriveTilt::setMaxGainDB). */
+    void setDriveTiltGainDB (double g) { driveTilt.setMaxGainDB (g); }
+
     /** Selectable supply voltage (9 / 12 / 18 V). Scales BOTH op-amp output rails — at a higher
      *  supply the op-amp can swing further before clipping (more headroom / "more open"), exactly as
      *  the real pedal responds to a higher supply. The diode clip thresholds are supply-INDEPENDENT

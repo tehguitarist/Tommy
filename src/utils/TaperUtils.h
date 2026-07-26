@@ -64,18 +64,43 @@ inline double bassResistance (double x)
 }
 
 /** DRIVE knob up => more gain => LARGER feedback resistance. Rmax = 1M (A1M pot).
- *  TAPER (corrected 2026-06-19): like treble/bass, the 10^(2x-2) audio approximation was too
- *  aggressive — it under-drove the mid of the sweep, so the plugin clipped far less than the real
- *  pedal there (THD 10.6% vs 16.6% at drive 10:30). Fitting THD-vs-drive to the gain-sweep
- *  captures gives a gentler power law 1e6 * x^2.2, which matches mid-drive THD within ~1% (clean
- *  stays clean; full drive = 1M unchanged). (Drive's exponent ~2.2 > treble/bass ~1.43 — the A1M
- *  pot's taper differs from the A50k tone pots.) NOTE: at full drive the plugin's THD caps ~3-4%
- *  below the real pedal (clipping-character ceiling, not gain — see project notes). */
+ *  TAPER: 1e6 * x^2.75. Power law throughout; only the exponent has ever moved. History:
+ *  the original 10^(2x-2) audio approximation under-drove the mid of the sweep, refitted
+ *  2026-06-19 to x^2.2 against the batch-3/4/5 gain-sweep captures by matching mid-drive THD.
+ *
+ *  RE-FITTED 2026-07-27 (v1.4 W2), 2.2 -> 2.75, against pedal2 — the definitive tone reference.
+ *  The 2.2 fit predates BOTH v1.2.1's kIs halving (which lowered the diode threshold, i.e. moved
+ *  clip onset EARLIER) and v1.4 W1's Medium threshold, so it was matching mid-drive THD through a
+ *  clipper that has since changed twice; and it was fitted at mid drive only, where THD saturates
+ *  and is nearly blind to pre-clip gain. The low-drive corner it left behind was v1.4 W2: at
+ *  D0.20/-18 dBFS the plugin distorted ~4.4x the pedal (11.3% vs 2.55% at 101 Hz), the largest
+ *  single error in the pedal2 dataset and squarely in the edge-of-breakup region.
+ *
+ *  The error is MODE-INDEPENDENT (at -18 dBFS, D0.35: Soft +1.0 / Hard +1.4 / Medium +2.8 dB, and
+ *  the ordering follows each mode's overdrive MARGIN, not its diode parameters), which is what
+ *  points at the shared pre-clip gain law rather than at the diodes. See
+ *  analysis/w2_clip_onset.py — probe 2 shows the whole dataset sits 8-40 dB past clip onset except
+ *  D0.20/-18 at +5.4 dB, so this is the ONLY region where pre-clip gain is observable at all;
+ *  everywhere else THD has saturated. Fitted by sweeping the exponent over all 16 pedal2 captures
+ *  x 3 sweep depths (probe 3b):
+ *      exp:              2.2(was)   2.5    2.6    2.7   2.75   2.8    3.0
+ *      rms dTHD D<=0.20    7.10    4.37   3.05   1.39   0.65   1.10   6.46
+ *      rms dTHD D>=0.35    0.71    0.46   0.43   0.43   0.45   0.50   0.84
+ *  2.75 minimises the joint cost, and note the well-sampled D >= 0.35 region IMPROVES (0.71 ->
+ *  0.45) rather than merely surviving — the evidence is four captures (Hard D0.20 plus D0.35 in
+ *  all three modes), not the single D0.20 one, which is what makes this defensible under W2's
+ *  "D0.20 appears once and no further captures exist" constraint.
+ *
+ *  Deliberately NOT a diode-parameter change: global kIs is v1.2.1's high-drive LEVEL fix and
+ *  pulls the opposite way, and Hard's kAsymMismatch was shown to move H2 without moving low-drive
+ *  THD (probe 3a). x=1 is unchanged at 1M, so full drive is bit-identical.
+ *  Physically 2.75 puts the pot at 15% of Rmax at mid-rotation vs 2.2's 22% — squarely inside the
+ *  10-20% range real A-taper pots specify, so it is not a strained value. */
 inline double driveResistance (double x)
 {
     if (x <= 0.0)
         return 0.0;
-    return 1.0e6 * std::pow (x, 2.2);
+    return 1.0e6 * std::pow (x, 2.75);
 }
 
 /** TREBLE knob up (x->1) => MORE cut (darker). TREB rheostat feeds the R5(1k)/C5(10n) low-pass;

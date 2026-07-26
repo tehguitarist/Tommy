@@ -42,7 +42,7 @@ Format:  clang-format -i src/**/*.{cpp,h}
 ## Current State
 
 **Status: SHIPPABLE, v1.3.0 + unreleased v1.4 fidelity work (W5 harness, W1 Medium clip
-threshold — see Roadmap).** All 9 build-sequence steps are complete. Full DSP chain
+threshold, W2 low-drive clip onset — see Roadmap).** All 9 build-sequence steps are complete. Full DSP chain
 (`src/dsp/`: InputBuffer → Stage1+SW1 clipping, oversampled with ADAA on the rail clip and
 `AccurateOmega` → TrebleNetwork → Stage2, wired via `TommyDSP.h`, then base-rate
 `TopOctaveRestore` (corrects the low-OS top-octave droop) + `DriveTilt` (corrects a low-drive
@@ -69,7 +69,9 @@ These are load-bearing — verified against the authoritative batch-3/4/5 NAM ca
 - `kOutputMakeup = 1.217f` — flat output-level correction (was 0.9; the plugin measured a
   constant ~2.6 dB quiet at every clean setting independent of input level/volume position).
 - Tapers (`utils/TaperUtils.h`, V4 — final, user-chosen pedal revision):
-  BASS `50k·x^2.41` (convex — validated ±0.6 dB), DRIVE `1e6·x^2.2`,
+  BASS `50k·x^2.41` (convex — validated ±0.6 dB), DRIVE `1e6·x^2.75` (**re-fitted 2026-07-27,
+  v1.4 W2, from `x^2.2`** — the 2.2 value predated both v1.2.1's `kIs` halving and W1 and was fitted
+  at mid drive, where THD saturates and is blind to pre-clip gain; see `driveResistance`'s comment),
   TREBLE `50k·x/(x+1)` (linear-pot rheostat — V4 units use a linear pot, not the earlier
   reverse-log audio pot; trades ~+1.5–2.8 dB brightness at high cut for matching the real V4
   unit), VOLUME = A25K pot + R11 18k. BASS/TREBLE are cut controls: knob up = more cut.
@@ -213,6 +215,11 @@ See `analysis/README.md` for harness usage and `analysis/CAPTURE_SPEC.md` for ca
   an HF shelf there broke SHAPE — see Known residuals. Two residuals deliberately left at the time:
   B0.65 bass (confounded, needs a targeted capture — still open) and the high-drive level ceiling
   (fixed in v1.2.1, below).
+  > ⚠️ **The "SHAPE 8/16 → 14/16" figure here (and v1.2.1's "LEVEL 12/16 → 16/16" below) does not
+  > reproduce** — both were measured without `SIGNAL=v2`, so `knob_tracking.py` read every segment
+  > of the v2-layout `pedal2` captures at the wrong offset. The improvements were real; the counts
+  > are not. Correct invocation: `SIGNAL=v2 … analysis/knob_tracking.py analysis/pedal2`. See the
+  > v1.4 W2 entry.
 - **v1.2.1 — high-drive quiet residual fix.** Root-caused and fixed the high-drive level ceiling
   left open above: `Stage1.h`'s 1N4148 `kIs` 2.52e-9 → 1.26e-9 (half the datasheet-typical value,
   justified by normal unit-to-unit Is spread). Closes pedal2's LEVEL check 12/16 → 16/16; harmonic
@@ -367,8 +374,44 @@ See `analysis/README.md` for harness usage and `analysis/CAPTURE_SPEC.md` for ca
     level (`Medium B0.65 D0.65` @60 Hz: +3.03 clean → +1.06/−18 → +0.69/−12 → +0.50/−6;
     `Hard B0.65 D0.65`: +2.02 → +0.52 → +0.26 → +0.01), so the two "bass" failures are substantially
     an artefact of scoring SHAPE on the clean sweep. Worth fixing before treating them as tone bugs.
-  - **STILL OPEN — W2 (now carries W4's residual too — recommended next), W3 (fix; likely
-    unfixable), W7 (new, not urgent — see below).**
+    - **DONE — W2 low-drive clip onset. The lever was the DRIVE TAPER, not the diodes.**
+    `TaperUtils.h` `driveResistance` **`x^2.2` → `x^2.75`**, with `DriveTilt::kMaxGainDB`
+    **2.5 → 1.0 dB** re-fitted jointly (it is fitted against the same low-drive captures, so the
+    taper change invalidated it by construction). New probe `analysis/w2_clip_onset.py` (4 probes);
+    calibration-only plumbing `DriveTilt::setMaxGainDB` → `TommyDSP::setDriveTiltGainDB` →
+    `offline_render.cpp` argv[24]. **Results:** `Hard D0.20` median 100 Hz–2 kHz THD error
+    **+11.61/+3.67/+1.26 → +0.40/−0.03/−0.70 dB** at −18/−12/−6; over all 16 captures × 3 depths
+    **rms 1.88 → 0.52 dB, worst 11.61 → 1.14**. `knob_tracking` (SIGNAL=v2, pedal2)
+    **THD 15/16 → 16/16** (G0.20 was the set's only THD failure), **LEVEL 14/16 → 15/16**,
+    SHAPE 13/16 → 12/16. ctest 10/10, `auval` passes. x=1 is unchanged at 1 MΩ so full drive is
+    bit-identical.
+    **Why the taper:** the error is mode-INDEPENDENT in trend (at −18 dBFS, D0.35 = Soft +1.0 /
+    Hard +1.4 / Medium +2.8 dB, ordering by each mode's overdrive *margin*, not its diode
+    parameters), and the closed-form onset table shows the whole dataset sits **8–40 dB past clip
+    onset except `Hard D0.20`/−18 at +5.4 dB** — pre-clip gain is observable at exactly one capture
+    and nowhere else, which is why the old mid-drive fit missed it and why the correction costs
+    nothing at D ≥ 0.35 (that region's THD rms actually *improves*, 0.71 → 0.45).
+    **`kAsymMismatch` is REFUTED as the lever** — it moves H2 and almost nothing else (dTHD at
+    D ≥ 0.35 is 0.57–0.62 dB rms for every value 0…0.45, dLEVEL invariant); m=0 halves the D0.20
+    error but destroys the even-harmonic match that holds at every other drive. Do not re-try it.
+    **Recorded side finding (not acted on):** `kAsymMismatch` being a *fractional* Vt spread
+    symmetric about vtBase puts Hard's low-side clamp at 0.231 V — **below Soft's 0.365 V**, so the
+    model's "hardest" mode starts clipping earliest, inverting the ordering the switch is named for.
+    **Cost, stated plainly:** SHAPE 13/16 → 12/16. It fixed `Hard D0.20` and improved both standing
+    D0.65 LF failures, but pushed `Soft`/`Medium D0.35` past the gate at 127 Hz — **on the clean
+    sweep only**; on every driven sweep those same captures improve (mean rms 1 kHz-normalised FR
+    deviation: clean 0.460 → 0.546 worse, but −18 0.309 → 0.223, −12 0.330 → 0.209, −6
+    0.345 → 0.263). That is SHAPE's known weakness (it reads `sweep_clean` only, whose 1 kHz anchor
+    is past the diode clamp at D ≥ 0.50 — see W4). **User decision: ship 2.75**; the conservative
+    2.6 alternative regressed no gate but left the plugin at ~1.8× the pedal's distortion at
+    D0.20/−18.
+    **Harness fact that cost time — `knob_tracking.py` needs `SIGNAL=v2` for `pedal2`.** It defaults
+    to the v1 segment layout and the v1/v2 segment *times* differ, so a bare invocation reads every
+    segment at the wrong offset. This is why v1.2.1's "LEVEL 16/16" and W1's "LEVEL 8/16 → 10/16"
+    disagree — **both are wrong**; the correct pre-W2 baseline is SHAPE 13/16 · LEVEL 14/16 ·
+    THD 15/16. `analysis/pedal1` is also not a usable cross-check (0/8 on every gate at baseline).
+  - **STILL OPEN — W3 (fix; likely unfixable), W7 (new, not urgent — see below), and W4's LF
+    residual (see below).**
   - **W7 — THD light at 6.3–8 kHz (added 2026-07-27, not started, low priority).** User's ear
     flagged it; likely the same gap §2.5 already found (pedal 1.49%/2.16% vs plugin 0.11%/0.12% at
     `sweep_drv_-6`, 6.4/8.1 kHz) but that was marked unvalidated — those bands have only order-2
@@ -386,9 +429,11 @@ See `analysis/README.md` for harness usage and `analysis/CAPTURE_SPEC.md` for ca
     Mode B description itself, which cannot be re-verified (schematic images were removed from the
     repo). Fixed by an empirical per-mode fit; the "SW1 mid is an open circuit" reading of the
     on/off/on wording + "Open" label was tested and **refuted** (+6.1 dB THD error).
-  - **Low-drive clip onset (W2).** At D0.20/−18 dBFS the plugin distorts ~4.4× the pedal (11.3% vs
-    2.55% @101 Hz), collapsing as level rises. Edge-of-breakup region; largest single error in the
-    dataset. Pulls opposite to v1.2.1's `kIs` halving — do NOT chase it with global `kIs`.
+  - **Low-drive clip onset (W2) — FIXED (2026-07-27), see the W2 entry above.** Was: at D0.20/−18
+    dBFS the plugin distorted ~4.4× the pedal (11.3% vs 2.55% @101 Hz), collapsing as level rises;
+    the largest single error in the dataset. The diagnosis recorded here at the time — that it was a
+    diode/`kIs` tension — was **wrong**; it was the DRIVE taper (pre-clip gain law). The warning not
+    to chase it with global `kIs` still stands and is now moot.
   - **High-drive top-octave tilt (W3).** −2…−3 dB at 8–10 kHz, onset sharply at DRIVE ≥ 0.65,
     clip-mode independent. v1.2 reverted an HF-shelf attempt because the high-drive gap "is a flat
     LEVEL deficit, not a tilt" — **that premise died with v1.2.1's `kIs` fix** (LEVEL now 16/16);
@@ -402,6 +447,14 @@ See `analysis/README.md` for harness usage and `analysis/CAPTURE_SPEC.md` for ca
     W4 roadmap entry above and the plan's W4 OUTCOME block; reproduce with
     `w4_bassdrive.py --only correction`. **Do not fit an empirical low shelf against this** — and
     ignore the plan's handover table, whose signs are inverted.
+    **Update (2026-07-27, W2):** W2's DRIVE-taper fix moved this residual the right way — the two
+    standing LF SHAPE failures improve monotonically with the exponent (`Hard D0.65` +2.00 → +1.66,
+    `Medium D0.65` +3.00 → +2.58 dB at 60 Hz) — which is direct support for W4's "it's clip onset,
+    not EQ" reading. They still fail, and the LF now **see-saws with DRIVE**: shy at D0.35
+    (−1.6…−2.0 dB @127 Hz), hot at D0.65 (+1.7…+2.6 @60 Hz). One taper exponent cannot straddle
+    that. The next untested lever is the **BASS taper's shape between x = 0.50 and 0.65** (it needs
+    *less* cut at B0.50 and *more* at B0.65); deliberately out of W2's scope, and risky because the
+    BASS taper is validated against batches 3/4/5 rather than pedal2.
   - **NOT a real error:** the apparent ~0.9 dB deficit across 40 Hz–2 kHz is an artefact of
     `null_depth`'s least-squares broadband gain being dragged down by the LF excess. Normalised at
     1 kHz, 200 Hz–5 kHz sits within ±0.35 dB at all four levels. Don't "fix" it.

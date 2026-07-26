@@ -44,8 +44,18 @@ public:
         lastDriveX = driveX;
         double t = (driveX - kDriveLo) / (kDriveHi - kDriveLo);
         t = t < 0.0 ? 0.0 : (t > 1.0 ? 1.0 : t);
-        t = t * t * (3.0 - 2.0 * t);           // smoothstep
-        updateCoeffs (kMaxGainDB * (1.0 - t)); // full when clean, 0 when driven
+        t = t * t * (3.0 - 2.0 * t);          // smoothstep
+        updateCoeffs (maxGainDB * (1.0 - t)); // full when clean, 0 when driven
+    }
+
+    /** CALIBRATION ONLY — override the shelf's full-drive-fade gain (defaults to kMaxGainDB).
+     *  Exists because the shelf is fitted against the SAME low-drive captures the DRIVE taper is,
+     *  so a taper re-fit (v1.4 W2) has to be able to re-check it jointly rather than assume it
+     *  still holds. Used by analysis/offline_render.cpp's fit sweep; production never calls it. */
+    void setMaxGainDB (double g)
+    {
+        maxGainDB = g;
+        setDrive (lastDriveX);
     }
 
     inline double processSample (double x) noexcept
@@ -90,12 +100,31 @@ private:
     // Calibrated against pedal2 low/mid-drive SHAPE (see class doc); tune here.
     static constexpr double kFc = 2500.0;     // shelf corner (Hz) — ramps the lift through 3–8 kHz
     static constexpr double kS = 0.7;         // gentle slope
-    static constexpr double kMaxGainDB = 2.5; // lift at/below kDriveLo (cleanest)
+    // RE-FITTED 2026-07-27 (v1.4 W2), 2.5 -> 1.0 dB. This shelf and the DRIVE taper are fitted
+    // against the SAME low-drive captures, so W2's taper re-fit (TaperUtils.h, x^2.2 -> x^2.75)
+    // invalidated the 2.5 dB value by construction and it had to be re-derived jointly, not
+    // assumed. It turns out 2.5 dB was partly compensating CLIPPING COMPRESSION rather than the
+    // linear tilt this shelf is for: under the old taper the model was over-driven at low DRIVE, so
+    // its top octave was being squashed by the clipper, and the shelf was sized to lift that back.
+    // With the pre-clip gain corrected the compression is gone and the same lift over-brightens.
+    // Fitted by crossing the shelf gain with the taper exponent over all 16 pedal2 captures at all
+    // four sweep depths (analysis/w2_clip_onset.py --only fit --fit-tilt ...). At the shipped
+    // x^2.75, rms 1 kHz-normalised FR deviation (60 Hz-8 kHz) vs shelf gain:
+    //     gain dB:   0.5    1.0    1.5    2.0    2.5(was)
+    //     FR -18:  0.259  0.247  0.277  0.339  0.419
+    //     FR -12:  0.247  0.229  0.257  0.320  0.401
+    //     FR  -6:  0.316  0.275  0.272  0.307  0.370
+    // 1.0 dB minimises it, and note the result is BETTER than the pre-W2 baseline at every driven
+    // depth (shipped 2.2/2.5 dB scored 0.339 / 0.360 / 0.363) — so this is a genuine improvement,
+    // not damage control. It also takes knob_tracking's LEVEL gate 14/16 -> 15/16. High drive is
+    // unaffected either way: the shelf has already faded to exactly transparent by kDriveHi.
+    static constexpr double kMaxGainDB = 1.0; // lift at/below kDriveLo (cleanest)
     static constexpr double kDriveLo = 0.35;  // at/below this: full lift
     static constexpr double kDriveHi = 0.80;  // at/above this: none (high drive unchanged)
 
     double fs = 48000.0;
     double lastDriveX = 0.0;
+    double maxGainDB = kMaxGainDB; // see setMaxGainDB — calibration override, kMaxGainDB in production
     double b0 = 1.0, b1 = 0.0, b2 = 0.0, a1 = 0.0, a2 = 0.0;
     double x1 = 0.0, x2 = 0.0, y1 = 0.0, y2 = 0.0;
 };

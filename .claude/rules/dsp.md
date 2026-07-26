@@ -196,14 +196,22 @@ constexpr double n_1N4148  = 1.752;     // ideality factor — passed as nDiodes
 - **Drive-faded top-octave tilt (`DriveTilt.h`) — corrects a LOW-DRIVE linear-FR tilt vs the real
   pedal.** Separate from the bilinear droop above: measured at 8x against the authoritative pedal2
   NAM captures (level-normalised to 1 kHz — the `knob_tracking.py` SHAPE metric), the model's linear
-  top octave rolls off ~2–3 dB more than the real pedal across 2–8 kHz, *worst when clean* and
+  top octave rolls off more than the real pedal across 2–8 kHz, *worst when clean* and
   shrinking as drive rises (clip harmonics fill the top at high drive). So it's a base-rate high-shelf
   (fc≈2.5k) whose gain is FULL at low drive and **fades to 0 by ~G0.8** (keyed to the DRIVE pot via
   `setDrivePosition`). The fade is essential — a fixed top lift would over-brighten high drive (where
-  the tilt is already gone) and break the validated high-drive match. Took pedal2 SHAPE 8/16 → 14/16
-  (residual 2 fails are an unrelated B0.65 bass deviation). One biquad, ~0 CPU, high drive
+  the tilt is already gone) and break the validated high-drive match. One biquad, ~0 CPU, high drive
   bit-unchanged. **pedal2 is the definitive tone reference for this** (user decision); the hot
   tone-set pedal1 disagrees on the top octave, but pedal2 is authoritative.
+  **`kMaxGainDB` RE-FITTED 2.5 → 1.0 dB (2026-07-27, v1.4 W2)** — this shelf and the DRIVE taper are
+  fitted against the SAME low-drive captures, so W2's taper re-fit (`x^2.2` → `x^2.75`) invalidated
+  the 2.5 dB by construction. It turned out 2.5 dB was partly compensating **clipping compression**
+  rather than the linear tilt this shelf is for: the old taper over-drove low DRIVE, the clipper
+  squashed the top octave, and the shelf was sized to lift that back. With the pre-clip gain
+  corrected the compression is gone and the same lift over-brightens. Re-fitting takes driven-sweep
+  FR *below* the pre-W2 baseline at every depth. **If the DRIVE taper is ever touched again, re-fit
+  this shelf in the same pass** — `analysis/w2_clip_onset.py --only fit --fit-tilt …` crosses the
+  two; do not assume either still holds after the other moves.
 
 ## ADAA
 

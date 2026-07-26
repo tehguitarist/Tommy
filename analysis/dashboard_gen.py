@@ -121,6 +121,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       <div class="controls">
         <label>Capture: <select id="frCapture"></select></label>
         <label>Sweep level: <span class="radio-group" id="frLevel"></span></label>
+        <label>Level match: <span class="radio-group" id="frNorm"></span></label>
       </div>
       <canvas id="frChart" height="400"></canvas>
     </div>
@@ -133,6 +134,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     <div class="card">
       <div class="controls">
         <label>Sweep level: <span class="radio-group" id="hmLevel"></span></label>
+        <label>Level match: <span class="radio-group" id="hmNorm"></span></label>
       </div>
       <div class="heatmap" id="heatmapGrid"></div>
     </div>
@@ -246,8 +248,26 @@ function getRadioValue(containerId) {
 }
 
 // --- Populate controls ---
-let frCaptureIdx = 0, frSweepLevel = 'sweep_clean';
-let hmSweepLevel = 'sweep_clean';
+let frCaptureIdx = 0, frSweepLevel = 'sweep_clean', frNorm1k = false;
+let hmSweepLevel = 'sweep_clean', hmNorm1k = false;
+
+// The FR deltas in the JSON already carry a null-optimal broadband gain (a least-squares fit over
+// the whole band), which is NOT a 1 kHz match: a genuine narrow error (Tommy's LF excess below
+// ~100 Hz) drags that fitted gain down and reappears as a phantom broadband midband deficit. The
+// '@1 kHz' view re-references the delta to the 1 kHz band, which is the honest SHAPE view. Both are
+// offered so the artefact is not re-discovered every time — see .claude/plans/v1.4-fidelity.md §1.1.
+function band1kIdx() {
+  const b = DATA.meta.bands;
+  let best = 0;
+  for (let i = 1; i < b.length; i++) if (Math.abs(b[i] - 1000) < Math.abs(b[best] - 1000)) best = i;
+  return best;
+}
+
+function normDelta(diff, on) {
+  if (!on) return diff;
+  const ref = diff[band1kIdx()];
+  return (ref == null || isNaN(ref)) ? diff : diff.map(v => (v == null || isNaN(v)) ? v : v - ref);
+}
 let thdCaptureIdx = 0, thdSweepLevel = 'sweep_drv_-18';
 let harRev = 'all', harSweepLevel = 'sweep_drv_-18', harAnchorIdx = 0;
 
@@ -264,9 +284,11 @@ function populateControls() {
   frSel.addEventListener('change', () => { frCaptureIdx = +frSel.value; updateFR(); });
 
   buildRadio('frLevel', levels.map(l => ({label: l.replace('sweep_',''), value: l})), 'sweep_clean', v => { frSweepLevel = v; updateFR(); });
+  buildRadio('frNorm', [{label:'raw (null gain)', value:'raw'}, {label:'@ 1 kHz', value:'1k'}], 'raw', v => { frNorm1k = (v === '1k'); updateFR(); });
 
   // Heatmap tab
   buildRadio('hmLevel', levels.map(l => ({label: l.replace('sweep_',''), value: l})), 'sweep_clean', v => { hmSweepLevel = v; updateHeatmap(); });
+  buildRadio('hmNorm', [{label:'raw (null gain)', value:'raw'}, {label:'@ 1 kHz', value:'1k'}], 'raw', v => { hmNorm1k = (v === '1k'); updateHeatmap(); });
 
   // THD tab
   const thdSel = document.getElementById('thdCapture');
@@ -317,7 +339,8 @@ function updateFR() {
   const fr = c.fr[frSweepLevel];
   if (!fr) return;
   const plugin = fr.plugin_db, pedal = fr.pedal_db;
-  const diff = plugin.map((v,i) => v - pedal[i]);
+  const diff = normDelta(plugin.map((v,i) => v - pedal[i]), frNorm1k);
+  const diffLabel = 'Plugin − Pedal (dB)' + (frNorm1k ? ' — normalised @ 1 kHz' : '');
 
   charts.fr = new Chart(document.getElementById('frChart'), {
     type: 'line',
@@ -343,7 +366,7 @@ function updateFR() {
     data: {
       labels: bands,
       datasets: [
-        { label: 'Plugin − Pedal (dB)', data: diff, borderColor: '#f59e0b', backgroundColor: 'rgba(245,158,11,0.08)', pointRadius: 0, borderWidth: 1.5, fill: true },
+        { label: diffLabel, data: diff, borderColor: '#f59e0b', backgroundColor: 'rgba(245,158,11,0.08)', pointRadius: 0, borderWidth: 1.5, fill: true },
         { label: '+3 dB', data: bands.map(() => 3), borderColor: 'rgba(239,68,68,0.4)', borderDash: [5,5], pointRadius: 0, borderWidth: 1 },
         { label: '−3 dB', data: bands.map(() => -3), borderColor: 'rgba(239,68,68,0.4)', borderDash: [5,5], pointRadius: 0, borderWidth: 1 }
       ]
@@ -378,6 +401,13 @@ function updateHeatmap() {
   const caps = DATA.captures;
   const grid = document.getElementById('heatmapGrid');
 
+  // Per-capture delta, computed once so the '@1 kHz' normalisation uses each capture's OWN
+  // 1 kHz band as its reference (it cannot be applied cell-by-cell inside the band loop).
+  const deltas = caps.map(c => {
+    const fr = c.fr[hmSweepLevel];
+    return fr ? normDelta(fr.plugin_db.map((v,i) => v - fr.pedal_db[i]), hmNorm1k) : null;
+  });
+
   let html = '';
   // Header row
   html += `<div class="hm-header"></div>`;
@@ -390,10 +420,9 @@ function updateHeatmap() {
   // Data rows
   bands.forEach((b, bi) => {
     html += `<div class="hm-row-label">${b >= 1000 ? (b/1000).toFixed(b>=10000?0:1)+'k' : Math.round(b)}</div>`;
-    caps.forEach(c => {
-      const fr = c.fr[hmSweepLevel];
-      if (!fr) { html += '<div class="hm-cell na-cell">—</div>'; return; }
-      const diff = fr.plugin_db[bi] - fr.pedal_db[bi];
+    caps.forEach((c, ci) => {
+      if (!deltas[ci]) { html += '<div class="hm-cell na-cell">—</div>'; return; }
+      const diff = deltas[ci][bi];
       if (diff == null || isNaN(diff)) { html += '<div class="hm-cell na-cell">—</div>'; return; }
       const bg = heatColor(diff);
       const fg = Math.abs(diff) > 3 ? '#fff' : '#c9cdd6';
@@ -422,14 +451,23 @@ function updateTHD() {
   const naPlugin = [];
   const naPedal = [];
 
+  // Bands where only ONE harmonic order is still measurable (Farina's ceiling falls with
+  // frequency) give a THD built from a single term, and that term's own H2 lands where both the
+  // pedal's C5/C11 and the capture chain roll off hard. The absolute % there is not trustworthy
+  // and nothing should be fitted to it — flag it rather than silently plotting it as equal.
+  // See .claude/plans/v1.4-fidelity.md §2.5.
+  const orders = DATA.meta.thd_band_orders || [];
+  const lowConf = i => orders.length > 0 && orders[i] != null && orders[i] <= 2;
+
   bands.forEach((b, i) => {
     const src = thd.source[i];
+    const name = b >= 1000 ? (b/1000).toFixed(b>=10000?0:1)+'k' : Math.round(b);
     if (src === 'na') {
-      naLabels.push(b >= 1000 ? (b/1000).toFixed(b>=10000?0:1)+'k' : Math.round(b));
+      naLabels.push(name);
       naPlugin.push(0);
       naPedal.push(0);
     } else {
-      labels.push(b >= 1000 ? (b/1000).toFixed(b>=10000?0:1)+'k' : Math.round(b));
+      labels.push(lowConf(i) ? name + ' †' : name);
       pluginData.push(thd.plugin_pct[i] ?? 0);
       pedalData.push(thd.pedal_pct[i] ?? 0);
     }
@@ -450,7 +488,14 @@ function updateTHD() {
     data: { labels: allLabels, datasets },
     options: {
       responsive: true,
-      plugins: { legend: { labels: { color: '#c9cdd6' } }, tooltip: { callbacks: { label: ctx => ctx.dataset.label + ': ' + (ctx.parsed.y ?? 0).toFixed(1) + '%' } } },
+      plugins: {
+        legend: { labels: { color: '#c9cdd6' } },
+        tooltip: { callbacks: {
+          label: ctx => ctx.dataset.label + ': ' + (ctx.parsed.y ?? 0).toFixed(1) + '%',
+          footer: items => (items.length && /†$/.test(items[0].label))
+            ? 'low confidence: only 1 harmonic order measurable here' : ''
+        } }
+      },
       scales: {
         x: { ticks: { color: '#6b7280', maxRotation: 60, font: { size: 10 } }, grid: { color: 'rgba(255,255,255,0.04)' } },
         y: { title: { display: true, text: 'THD %', color: '#6b7280' }, ticks: { color: '#6b7280' }, grid: { color: 'rgba(255,255,255,0.04)' } }

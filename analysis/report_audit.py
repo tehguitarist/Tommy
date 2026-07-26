@@ -32,6 +32,24 @@ EXTREME_LO, EXTREME_HI = 60.0, 12000.0  # inside this = "within 1.5 dB"; outside
 # anchor ever does coincide with one.
 CONFOUNDED_ANCHORS = ()
 
+# Absolute floor for the harmonic audit (dBc, relative to the fundamental). A harmonic sitting at
+# -50..-62 dBc is at the CAPTURE NOISE FLOOR, so the plugin-vs-pedal dB *ratio* there is comparing
+# noise to noise and is meaningless — yet it enters a median-of-|delta| with the same weight as a
+# real -30 dBc harmonic. Symmetric clippers (Soft/Medium) have no even harmonics in either the
+# pedal or the plugin, so their H2/H4/H6 are exactly this case, and their +12..+25 dB "errors"
+# used to dominate the per-mode score (Soft 1.64 -> 0.40 dB, Medium 3.24 -> 0.51 dB at -18 dBFS
+# once floored; Hard barely moves, 0.95 -> 0.90, because its asymmetry puts H2 genuinely high).
+# A point is dropped if EITHER side is below the floor — one noisy side is enough to ruin a ratio.
+# See .claude/plans/v1.4-fidelity.md §2.4 / W5.
+HARM_FLOOR_DBC = -45.0
+
+# FR deltas in the JSON already carry a null-optimal broadband gain (`gain_db_applied`, a
+# least-squares fit over the whole band). That is NOT a 1 kHz match: a genuine narrow error (Tommy's
+# LF excess below ~100 Hz) drags the fitted gain down and reappears as a phantom broadband deficit
+# across the midband. Normalising at 1 kHz instead removes the arbitrary level convention and shows
+# the honest SHAPE. Both views are reported — see .claude/plans/v1.4-fidelity.md §1.1 / W5.
+NORM_HZ = 1000.0
+
 _sink = []
 
 
@@ -52,6 +70,46 @@ def shape(plugin, pedal):
     c = np.array(pedal, dtype=float)
     d = p - c
     return d - np.median(d)
+
+
+def fr_norm_audit(d):
+    """The two level-match conventions side by side, per band, per sweep level.
+
+    Column 'raw' is `plugin_db - pedal_db` straight from the JSON (null-optimal broadband gain
+    already applied). Column '@1k' re-references each capture's delta to its own value at the
+    1 kHz band. Where the two disagree, the raw column is reporting the level-match convention,
+    not a tone error."""
+    bands = np.array(d["meta"]["bands"], dtype=float)
+    j1k = int(np.argmin(np.abs(bands - NORM_HZ)))
+    levels = ["sweep_clean"] + list(d["meta"]["driven_sweeps"])
+    out()
+    out("=" * 78)
+    out(f"1b. FR LEVEL-MATCH CONVENTION — raw (null-gain-matched) vs normalised at "
+        f"{bands[j1k]:.0f} Hz")
+    out(f"    median over all {len(d['captures'])} captures, dB (plugin - pedal)")
+    out("=" * 78)
+    hdr = "".join(f"{lv.replace('sweep_', ''):>16}" for lv in levels)
+    out(f"{'band':>9}" + hdr)
+    out(f"{'':>9}" + "".join(f"{'raw    @1k':>16}" for _ in levels))
+    raws, norms = {}, {}
+    for lv in levels:
+        r = np.array([np.array(c["fr"][lv]["plugin_db"], dtype=float)
+                      - np.array(c["fr"][lv]["pedal_db"], dtype=float)
+                      for c in d["captures"] if lv in c["fr"]])
+        raws[lv] = np.median(r, axis=0)
+        norms[lv] = np.median(r - r[:, [j1k]], axis=0)
+    for j, b in enumerate(bands):
+        row = f"{b:>9.0f}"
+        for lv in levels:
+            row += f"{raws[lv][j]:>+9.2f}{norms[lv][j]:>+7.2f}"
+        out(row)
+    out()
+    mid = (bands >= 200.0) & (bands <= 5000.0)
+    worst = max(float(np.max(np.abs(norms[lv][mid]))) for lv in levels)
+    out(f"  Normalised, the worst 200 Hz-5 kHz band across all levels is {worst:.2f} dB — the")
+    out("  midband is CLEAN. Any broad deficit in the 'raw' column across that span is the")
+    out("  least-squares gain being dragged by the LF excess, not a midband tone error.")
+    out("  Read the raw column for absolute level, the @1k column for tone shape.")
 
 
 def fr_audit(d):
@@ -171,9 +229,13 @@ def harmonic_audit(d):
         out("  none of these anchors sit on a known notch in Tommy's circuit, so every column")
         out("  below is included in the medians.")
     out()
+    out(f"  Points where EITHER pedal or plugin sits below {HARM_FLOOR_DBC:.0f} dBc are at the capture")
+    out("  noise floor and are EXCLUDED from the medians (shown as '.' in the delta columns).")
+    out()
     hdr = "".join(f"{str(a) + ('*' if a in CONFOUNDED_ANCHORS else ''):>8}" for a in anchors)
     out(f"{'capture':<24}{'order':>6}" + hdr + f"{'  med|d|':>9}")
     rev_acc = {}
+    n_excl = n_tot = 0
     for c in d["captures"]:
         h = c["harmonics"]["sweep_drv_-18"]
         for o in orders:
@@ -181,12 +243,22 @@ def harmonic_audit(d):
             pl = np.array(h[key]["plugin_db"], dtype=float)
             pc = np.array(h[key]["pedal_db"], dtype=float)
             dlt = pl - pc
-            med = float(np.median(np.abs(dlt[keep])))   # confounded anchors excluded
-            rev_acc.setdefault(c["rev"], []).append(med)
+            above = (pl >= HARM_FLOOR_DBC) & (pc >= HARM_FLOOR_DBC)
+            use = [i for i in keep if above[i]]   # confounded anchors AND floor noise excluded
+            n_tot += len(keep)
+            n_excl += len(keep) - len(use)
+            med = float(np.median(np.abs(dlt[use]))) if use else float("nan")
+            if use:
+                rev_acc.setdefault(c["rev"], []).append(med)
             if o <= 3:  # keep the printout readable: H2/H3 carry the character
-                out(f"{c['id']:<24}{key:>6}" + "".join(f"{x:>+8.1f}" for x in dlt) + f"{med:>9.1f}")
+                cells = "".join(f"{x:>+8.1f}" if above[i] else f"{'.':>8}" for i, x in enumerate(dlt))
+                medtxt = f"{med:>9.1f}" if use else f"{'-':>9}"
+                out(f"{c['id']:<24}{key:>6}" + cells + medtxt)
     out()
-    out(f"{'mode':<8}{'median |H-delta| over H2..H7, clean anchors only':<50}")
+    out(f"  excluded {n_excl} of {n_tot} (capture x order x anchor) points as below-floor "
+        f"({100.0 * n_excl / n_tot:.0f}%).")
+    out()
+    out(f"{'mode':<8}{'median |H-delta| over H2..H7, clean anchors, above floor':<58}")
     for rev, vals in rev_acc.items():
         out(f"{rev:<8}{np.median(vals):>8.1f} dB")
     out()
@@ -213,6 +285,7 @@ def main():
     out("generator: analysis/report_audit.py --write   (do NOT hand-edit; do NOT regenerate inline)")
     out()
     fr_audit(d)
+    fr_norm_audit(d)
     thd_coverage(d)
     thd_vs_level(d)
     harmonic_audit(d)

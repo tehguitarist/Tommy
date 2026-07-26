@@ -150,6 +150,14 @@ constexpr double n_1N4148  = 1.752;     // ideality factor — passed as nDiodes
 // at guitar-level diode currents Rs's ohmic drop is orders of magnitude too small to account for
 // the multi-kΩ incremental-impedance gap that motivated it.)
 
+// The Medium clip mode does NOT use these two values directly — it has its own kIsMedium (= kIs,
+// same diode part) and kNMedium (= 1.5*kN, i.e. Vt_eff 67.9 mV instead of 45.3 mV). Deriving
+// Medium as "one pair instead of two" makes it only ~31 mV different from Soft, whereas the real
+// pedal's Medium is much cleaner at low level AND harder at high level. Fitted 2026-07-26 (v1.4
+// W1) against pedal2; Soft is bit-identical and is what pins the shared parameters below. Ruled
+// out first: SW1 mid is NOT an open circuit (rendering it as Linear is +6.1 dB THD error). See
+// Stage1.h's kNMedium comment and circuit.md's Mode B threshold note.
+
 // Is CALIBRATED 2026-07-04 (half the 2.52e-9 datasheet-typical value, see Stage1.h's kIs comment
 // for the full derivation): the datasheet figure is a typical spec, not a per-unit measurement, and
 // real 1N4148 Is commonly spreads several-fold between individual parts/batches. This closed a

@@ -50,10 +50,18 @@ int main (int argc, char** argv)
     const double supplyV = (argc > 19) ? std::atof (argv[19]) : 9.0;
     // Optional Soft/Medium diode-mismatch override (argv[20]; <0 = keep shipped kSymMismatch).
     const double symBias = (argc > 20) ? std::atof (argv[20]) : -1.0;
+    // Optional Medium-branch diode overrides for the W1 fit (argv[21]=Is, argv[22]=ideality n;
+    // <=0 = keep the shipped kIsMedium/kNMedium). Soft is intentionally NOT overridable.
+    const double medIs = (argc > 21) ? std::atof (argv[21]) : -1.0;
+    const double medN = (argc > 22) ? std::atof (argv[22]) : -1.0;
 
+    // modeIdx 3 = Linear (NO clipping diodes at all; the op-amp rail clip still applies). Not a
+    // shipped plugin mode — it exists so the analysis harness can test the hypothesis that SW1's
+    // middle position is genuinely OPEN (all three ganged on/off/on gangs off => no diode branch
+    // in circuit), which is what the "Open" UI label and the pedal's measured Medium knee suggest.
     static const Stage1::ClipMode modes[] = { Stage1::ClipMode::Hard, Stage1::ClipMode::Medium,
-                                              Stage1::ClipMode::Soft };
-    const auto mode = modes[modeIdx < 0 ? 0 : (modeIdx > 2 ? 2 : modeIdx)];
+                                              Stage1::ClipMode::Soft, Stage1::ClipMode::Linear };
+    const auto mode = modes[modeIdx < 0 ? 0 : (modeIdx > 3 ? 3 : modeIdx)];
 
     // Read raw float32
     std::ifstream in (inPath, std::ios::binary | std::ios::ate);
@@ -80,6 +88,8 @@ int main (int argc, char** argv)
         dsp.setAsymMismatch (asymBias);
     if (symBias >= 0.0)
         dsp.setSymMismatch (symBias);
+    if (medIs > 0.0 || medN > 0.0)
+        dsp.setMediumDiodeParams (medIs, medN);
     dsp.setAdaaEnabled (true);
 
     const double outGain = kOutputMakeup * tp::volumeGain (volX) / kInputRef;

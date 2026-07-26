@@ -71,7 +71,7 @@ int main()
 
     std::printf ("Stage 1 SW1 clipping validation\n");
 
-    // --- 1. Small-signal linearity: feedback voltage must be << Vt_eff (~45 mV) so the
+    // --- 1. Small-signal linearity: feedback voltage must be << Vt_eff (~45 mV Soft/Hard, ~61 mV Medium) so the
     // diodes stay essentially off; then clipping modes should match Linear. (1N4148 has no
     // hard knee — it soft-conducts well below 0.6 V — so the signal must be genuinely tiny.) ---
     {
@@ -108,6 +108,12 @@ int main()
             const auto mm = measure (m, f, amp, fs, bassR, drive);
             const char* name = m == Stage1::ClipMode::Soft ? "Soft" : m == Stage1::ClipMode::Medium ? "Medium" : "Hard";
             std::printf ("  %-6s max %+.3f  min %+.3f\n", name, mm.max, mm.min);
+            // NOTE: v1.4/W1 raised Medium's effective thermal voltage (kNMedium = 1.35*kN, Vt_eff
+            // 45.3 -> 61.1 mV), so Medium legitimately clamps HIGHER than it used to: 1.194 V here,
+            // 47.8% of the Linear reference. That still clears this -6 dB bound, so the bound is
+            // deliberately left as-is. It would NOT clear it at the THD-optimal 1.35 -> 1.5*kN
+            // (1.283 V, 51%) — which is a second, independent reason that multiplier is capped;
+            // see Stage1.h's kNMedium. Check 4 below is what pins the Soft/Medium ORDERING.
             if (! (mm.max < lin * 0.5)) // must be substantially compressed
             {
                 std::fprintf (stderr, "FAIL: %s did not compress the large signal\n", name);

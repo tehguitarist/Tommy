@@ -153,8 +153,10 @@ private:
  * op-amp's feedback, so they cannot be a downstream block).
  *
  * SW1 modes (circuit.md): Soft = two antiparallel 1N4148 pairs (D5+D6 ∥ D3+D4) => one
- * DiodePairT with 2*Is; Medium = one antiparallel pair (D5+D6) => DiodePairT with Is; Hard =
- * single diode (D1) => DiodeT (asymmetric). Linear (no diodes) is retained for validation.
+ * DiodePairT with 2*Is; Medium = one antiparallel pair (D5+D6), but with its OWN diode params
+ * (kIsMedium/kNMedium) rather than plain Is -- the measured threshold gap is far larger than a
+ * halved diode area can produce, see kNMedium; Hard = single diode (D1) => DiodeT (asymmetric).
+ * Linear (no diodes) is retained for validation.
  *
  * Templated on the diode Wright-omega provider (default AccurateOmega — the shipped behaviour).
  * The template parameter exists so the feature-profiling test (tests/FeatureProfile.cpp) can A/B
@@ -167,7 +169,7 @@ enum class ClipMode
 {
     Linear, // no diodes (Step-4 validation reference)
     Soft,   // 4 diodes: two antiparallel pairs (2*Is)
-    Medium, // 2 diodes: one antiparallel pair (Is)
+    Medium, // 2 diodes: one antiparallel pair, own threshold (kIsMedium/kNMedium)
     Hard    // "Asymmetric": mismatched diode pair (AsymDiodePairT) — strong-ish even harmonics
 };
 
@@ -201,6 +203,61 @@ public:
     static constexpr double kIs = 1.26e-9;   // saturation current (A) -- see calibration note above
     static constexpr double kVt = 25.85e-3;  // thermal voltage (V)
     static constexpr double kN = 1.752;      // ideality factor (passed as nDiodes)
+
+    // --- Medium ("Open", SW1 mid) branch diode params — INDEPENDENT of Soft's. ---
+    // Soft is 2*kIs / kN and measures EXACT against pedal2 at every level and drive, which pins the
+    // shared diode parameters; Medium is then separately fittable. Deriving Medium as simply "one
+    // pair instead of two" (i.e. kIs, kN) does not reproduce the real pedal: a 2x ratio in Is is
+    // worth only n*Vt*ln(2) ~= 31 mV of threshold, whereas the pedal's Medium is markedly CLEANER
+    // than its Soft at low level (D0.35/-18 dBFS, 101 Hz: pedal 12.4% vs Soft 18.1%; model had both
+    // at ~19%) and yet MORE distorted at high level (-6 dBFS: pedal 19.4% vs Soft 15.3%). That is a
+    // higher-threshold, HARDER-kneed clip, not a softer one — the shipped model was progressively
+    // too clean as level rose (-0.2/-1.0/-1.9 dB THD error at -18/-12/-6).
+    // Ruled out first: SW1 mid is NOT a genuinely open circuit (no diodes). circuit.md calls SW1
+    // "three ganged on/off/on" switches, which would put the middle position all-off, and the UI
+    // label is "Open" — but rendering Medium as ClipMode::Linear (rail clip only) gives 33-41% THD
+    // against the pedal's ~20% (+6.1 dB median error, worst +10.3). "Open" is sonic branding.
+    // circuit.md's Mode B ("one antiparallel pair") is right in KIND; what it cannot tell us is the
+    // per-mode component detail, because the schematic images were removed from the repo and no
+    // physical re-verification is currently possible. So these are an empirical FIT, exactly as
+    // .claude/plans/v1.4-fidelity.md W1 authorises ("give the Soft/Medium branch a per-mode degree
+    // of freedom ... rather than deriving Medium from kIs and Soft from 2*kIs"). Re-derive from a
+    // measurement of the real switch/diodes if that ever becomes possible.
+    // FIT RESULT (2026-07-26, W1). Is is UNCHANGED at kIs — the same diode part as Soft, which is
+    // what a shared-diode reading requires and what the fit independently preferred (a competing
+    // n=3.066 solution needed Is at 4x kIs and was both worse, cost 0.190 vs 0.137, and in direct
+    // conflict with v1.2.1's Is calibration). The whole correction is the effective thermal-voltage
+    // multiplier: chowdsp's nDiodes scales Vt (Vt_eff = nDiodes * kVt), so kNMedium = 1.35 * kN
+    // raises Medium's Vt_eff from 45.3 mV to 61.1 mV -- a HIGHER, HARDER clip threshold.
+    // A multiplier between 1 and 2 sits between one and two 1N4148s in series (nDiodes = k * kN
+    // models k diodes in series per direction), which is consistent with -- but NOT proof of -- an
+    // extra series element in the SW1 mid leg that circuit.md does not record. It is an empirical
+    // fit, not a derivation.
+    // Fitted on all 5 pedal2 Medium captures x 3 sweep levels x 3 probe frequencies, minimising the
+    // RMS of the per-level median THD error so that BOTH the offset and the level SLOPE are
+    // corrected (a mean-only fit would leave the knee wrong):
+    //     shipped (kIs, kN):        -0.17 / -0.92 / -1.86 dB at -18/-12/-6 dBFS
+    //     fitted  (kIs, 1.35*kN):   +0.16 / -0.23 / -0.60 dB
+    // (median over the 100 Hz-2 kHz Farina bands, the canonical report metric; the 3-probe fit
+    // metric reads -0.51 at -6. Either way -6 dBFS lands just outside the +-0.5 dB gate -- a
+    // deliberate trade, see the rail note below.)
+    // The THD-optimal multiplier was 1.5x (cost 0.136) but it is NOT what ships -- see the rail
+    // note below. Soft is untouched and remains bit-identical (see setMediumDiodeParams).
+    // Held at 1.35x, NOT the THD-optimal 1.5x, because of the op-amp rails. Raising Medium's
+    // threshold delays its clip, and past ~1.35x the Stage-1 output starts reaching the ASYMMETRIC
+    // rails (+2.5/-3.4 V) before the diodes clamp — which manufactures even harmonics the real
+    // pedal does not have. Medium is a SYMMETRIC clipper, so that is an audible timbre error.
+    // Measured H2 error vs pedal at -6 dBFS (median over the 5 Medium captures):
+    //     k=1.00 (v1.3.0): -2.83 dB | k=1.25: -3.44 | k=1.35: +3.48 | k=1.50: +10.45
+    // and the matching THD error (-18/-12/-6 dBFS, rms):
+    //     k=1.00: -0.18/-0.91/-1.79 (1.164) | k=1.25: +0.09/-0.37/-0.87 (0.550)
+    //     k=1.35: +0.16/-0.21/-0.51 (0.331) | k=1.50: +0.23/-0.00/-0.05 (0.136)
+    // 1.35x meets the +-0.5 dB THD gate (at its boundary at -6) while keeping the rail artefact
+    // small. Confirmed rail-driven, not diode-driven: raising the supply to 12 V (which scales the
+    // rails but NOT the diode thresholds) drops Medium's H2 from ~-38 to -48..-53 dBc, right onto
+    // the pedal. See the rail note in circuit.md's Op-Amp Model section.
+    static constexpr double kIsMedium = kIs;         // same diode part as Soft — deliberately kIs
+    static constexpr double kNMedium = 1.35 * kN;    // 2.365 => Vt_eff 61.1 mV (was 45.3 mV)
 
     // --- 9V single-supply op-amp output headroom (verified from the schematic power section:
     // +9V -> D7 1N5817 (~0.35V) -> R8 100r/C7 filter -> op-amp V+ ~8.3V; VREF ~4.6V via R9/R10;
@@ -292,7 +349,31 @@ public:
         if (mode == ClipMode::Soft)
             diodePair.setParams (2.0 * kIs, kVt, kN, symMismatch);
         else if (mode == ClipMode::Medium)
-            diodePair.setParams (kIs, kVt, kN, symMismatch);
+            diodePair.setParams (medIs, kVt, medN, mediumMismatch());
+    }
+
+    /** Medium's fractional Vt mismatch, rescaled so the ABSOLUTE Vf spread matches what
+     *  kSymMismatch means on Soft. `mismatch` in AsymDiodePairT is a FRACTION of vtBase, and
+     *  Medium's vtBase is kNMedium/kN = 1.5x Soft's — so passing symMismatch through unscaled
+     *  would silently make Medium's absolute diode mismatch 1.5x Soft's, and it did: Medium's H2
+     *  jumped from -50.7 to -37.5 dBc at -6 dBFS against a pedal that measures -48.8 (i.e. no
+     *  even-harmonic content to speak of, as a SYMMETRIC clipper should have). That is a real
+     *  timbre error, caught by the dsp-validator pass on this change.
+     *  There is no physical basis for the scaling: kSymMismatch models 1N4148 unit-to-unit Vf
+     *  TOLERANCE, which is a device property in millivolts, whereas kNMedium's 1.5x is a lumped
+     *  threshold fit (not 1.5 literal series diodes). So hold the absolute spread constant. */
+    double mediumMismatch() const { return symMismatch * kN / medN; }
+
+    /** CALIBRATION ONLY — override the Medium branch's diode Is / ideality factor. Soft is
+     *  deliberately NOT reachable from here: it measures exact against pedal2 at every level and
+     *  drive, which is what pins the shared diode parameters and makes Medium separately fittable.
+     *  Re-applied on the next setMode. Used by analysis/offline_render.cpp's fit sweep. */
+    void setMediumDiodeParams (double is, double n)
+    {
+        medIs = is > 0.0 ? is : kIsMedium;
+        medN = n > 0.0 ? n : kNMedium;
+        if (mode == ClipMode::Medium)
+            diodePair.setParams (medIs, kVt, medN, mediumMismatch());
     }
 
     void setMode (ClipMode m)
@@ -303,7 +384,7 @@ public:
         if (mode == ClipMode::Soft)
             diodePair.setParams (2.0 * kIs, kVt, kN, symMismatch); // two diodes in parallel per side
         else if (mode == ClipMode::Medium)
-            diodePair.setParams (kIs, kVt, kN, symMismatch);
+            diodePair.setParams (medIs, kVt, medN, mediumMismatch());
     }
 
     ClipMode getMode() const { return mode; }
@@ -441,6 +522,8 @@ private:
 
     ClipMode mode = ClipMode::Linear;
     double symMismatch = kSymMismatch; // current Soft/Medium diode mismatch (default kSymMismatch)
+    double medIs = kIsMedium;          // Medium-branch diode Is (Soft always uses 2*kIs)
+    double medN = kNMedium;            // Medium-branch ideality factor (Soft always uses kN)
     bool railClampOn = true;
     bool adaaOn = false;
     double railPos = kRailPosDefault;

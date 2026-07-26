@@ -91,6 +91,8 @@ public:
     void setParams (double bassR, double driveR) { stage1.setParams (bassR, driveR); }
     void setAsymMismatch (double m) { stage1.setAsymMismatch (m); }
     void setSymMismatch (double m) { stage1.setSymMismatch (m); }
+    /** CALIBRATION ONLY — Medium-branch diode Is / ideality (see Stage1T). */
+    void setMediumDiodeParams (double is, double n) { stage1.setMediumDiodeParams (is, n); }
     void setRailClampEnabled (bool e) { stage1.setRailClampEnabled (e); }
     void setRailVoltages (double pos, double negMag) { stage1.setRailVoltages (pos, negMag); }
     void setAdaaEnabled (bool e) { stage1.setAdaaEnabled (e); }

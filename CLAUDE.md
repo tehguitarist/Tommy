@@ -41,7 +41,8 @@ Format:  clang-format -i src/**/*.{cpp,h}
 
 ## Current State
 
-**Status: SHIPPABLE, v1.3.0.** All 9 build-sequence steps are complete. Full DSP chain
+**Status: SHIPPABLE, v1.3.0 + unreleased v1.4 fidelity work (W5 harness, W1 Medium clip
+threshold — see Roadmap).** All 9 build-sequence steps are complete. Full DSP chain
 (`src/dsp/`: InputBuffer → Stage1+SW1 clipping, oversampled with ADAA on the rail clip and
 `AccurateOmega` → TrebleNetwork → Stage2, wired via `TommyDSP.h`, then base-rate
 `TopOctaveRestore` (corrects the low-OS top-octave droop) + `DriveTilt` (corrects a low-drive
@@ -50,7 +51,8 @@ rails are modelled on both stages. `auval` passes; 9 test executables pass (two,
 and `FeatureProfile`, are measurement probes rather than pass/fail accuracy — `PerfBenchmark` →
 README's Performance table; `FeatureProfile` → the v1.1 roadmap's CPU-vs-accuracy data). UI
 (Step 8) is a
-fixed 480×480 three-column layout — full design in `ui.md`. No open modelling items remain.
+fixed 480×480 three-column layout — full design in `ui.md`. Open modelling items: v1.4's W2/W3/W4
+(W2 and W4 blocked on capture batch 7 — see Roadmap).
 
 > **DSP stage classes are templated on the diode omega provider** (`Stage1T`/`ClippingOversamplerT`/
 > `TommyDSPT`, all defaulting to `AccurateOmega`; `Stage1`/`ClippingOversampler`/`TommyDSP` are the
@@ -71,6 +73,15 @@ These are load-bearing — verified against the authoritative batch-3/4/5 NAM ca
   TREBLE `50k·x/(x+1)` (linear-pot rheostat — V4 units use a linear pot, not the earlier
   reverse-log audio pot; trades ~+1.5–2.8 dB brightness at high cut for matching the real V4
   unit), VOLUME = A25K pot + R11 18k. BASS/TREBLE are cut controls: knob up = more cut.
+- Medium clip mode has its OWN diode parameters (`Stage1.h`: `kIsMedium` = `kIs`, same diode part;
+  `kNMedium` = `1.35·kN` ⇒ Vt_eff 61.1 mV vs Soft's 45.3 mV). Deriving Medium as "one pair instead
+  of two" (plain `kIs`) puts it only ~31 mV from Soft, but the real pedal's Medium is markedly
+  cleaner at low level *and* harder at high level. Fitted 2026-07-26 (v1.4 W1); **Soft is
+  bit-identical and is what pins the shared diode parameters.** The multiplier is capped by the
+  op-amp rails, not the THD fit (1.5× fitted better but manufactures even harmonics) — see
+  `circuit.md`'s Mode B threshold note **and its Op-Amp Model rail note**. Medium's diode mismatch
+  is rescaled by `kN/medN` (`Stage1T::mediumMismatch()`) so its *absolute* Vf spread still equals
+  Soft's — `kSymMismatch` is a fraction of Vt_eff, so it would otherwise have scaled with it.
 - Diode mismatch (`AsymDiodePairT`, all clip modes) models the even-harmonic content real
   diode tolerance adds: `kSymMismatch = 0.06` (Soft/Medium), `kAsymMismatch = 0.45` (Hard).
   Per-polarity Vt mismatch, not a DC bias — leaves small-signal gain unperturbed.
@@ -219,15 +230,52 @@ See `analysis/README.md` for harness usage and `analysis/CAPTURE_SPEC.md` for ca
   respects the lock and host automation; non-numeric input is rejected rather than falling back to
   `String::getFloatValue()`'s silent 0.0. See `architecture.md`'s `trim_lock` row and `ui.md`'s
   Oversampling Strip / Side Panels sections for the full spec.
-- **v1.4 — fidelity pass (PLANNED, nothing implemented). Plan: `.claude/plans/v1.4-fidelity.md`.**
+- **v1.4 — fidelity pass (IN PROGRESS). Plan: `.claude/plans/v1.4-fidelity.md`.**
+  - **DONE — W5 harness fixes.** `report_audit.py` now floors the harmonic audit at **−45 dBc**
+    (drops a point if *either* side is below it) and reports the excluded count: Soft's median
+    |H-delta| falls 1.64 → 0.40 dB and Medium's 3.24 → 0.51 at −18 dBFS, because their H2/H4/H6
+    "errors" were noise-floor comparisons (symmetric clippers have no even harmonics). Hard barely
+    moves (0.95 → 0.90) — its asymmetry puts H2 genuinely above the floor. Added a **1 kHz-normalised
+    FR view** (`fr_norm_audit`) beside the raw null-gain-matched one, which shows the ~0.9 dB
+    "midband deficit" is a level-match artefact (worst 200 Hz–5 kHz band is 0.34 dB normalised).
+    `dashboard_gen.py` gained matching raw/@1 kHz toggles on the FR + heatmap tabs, and flags THD
+    bands with only one measurable harmonic order (6.4/8.1 kHz) with a "†" — derived from
+    `meta.thd_band_orders`, not hardcoded.
+  - **DONE — W1 Medium-mode clip threshold.** Root-caused and fixed; see the Medium entry under
+    Calibration constants. Medium THD error **−0.17/−0.92/−1.86 → +0.16/−0.23/−0.60 dB** at
+    −18/−12/−6 dBFS, and H3/H5/H7 at −6 dBFS **−1.97/−1.79/−1.61 → −0.64/−0.36/−0.29**. Soft and
+    Hard renders are bit-identical (verified against the pre-change JSON: 0.00e+00 max ΔTHD).
+    `knob_tracking.py` on pedal2 improved (SHAPE 12/16 → 13/16, LEVEL 8/16 → 10/16 on identical
+    invocations); ctest 10/10; `auval` passes. **No test was relaxed** — Medium clamps higher than
+    before (1.194 V vs Soft's 0.987) but still clears `ClippingStage_Sine`'s −6 dB compression
+    bound at 47.8%; at the rejected 1.5× it would not have (51%), which is a second independent
+    reason that multiplier is capped.
+    **The multiplier is capped by the op-amp rails, not by the THD fit.** 1.5·kN fitted THD almost
+    perfectly (+0.23/−0.00/−0.05) but pushed Stage 1 into the ASYMMETRIC rails before the diodes
+    clamped, manufacturing even harmonics a symmetric mode should not have (Medium H2 error at
+    −6 dBFS: +10.5 dB at 1.5×, +3.5 dB at 1.35×, −2.8 dB at v1.3.0). 1.35× is the trade; −6 dBFS
+    THD lands just outside the ±0.5 dB gate as a result. A related bug found by the `dsp-validator`
+    pass and fixed: `kSymMismatch` is a *fractional* Vt spread, so raising Medium's `vtBase` silently
+    scaled its absolute diode mismatch too — `Stage1T::mediumMismatch()` now rescales by `kN/medN` to
+    hold the absolute Vf spread equal to Soft's.
+    **The "captures were made at 12 V" theory was tested and NOT supported** — see `circuit.md`'s
+    rail note. Revisit `kNMedium` (1.5× was the better THD fit) only if the rails are ever measured
+    and turn out wider than +2.5/−3.4 V.
+    Two harness additions support this: `offline_render.cpp` modeIdx **3 = Linear** (used to refute
+    the "SW1 mid is an open circuit" hypothesis) and argv[21]/[22] Medium diode overrides, plus
+    `Stage1T::setMediumDiodeParams` (calibration-only; Soft is deliberately unreachable from it).
+  - **STILL OPEN — W2, W3, W4, W6** (below). W2/W4 remain blocked on capture batch 7.
   Findings re-derived from `analysis/reports/comprehensive_data.json` (16 pedal2 captures, 30
   1/3-octave bands, 4 sweep levels). Four real errors, one artefact, two harness fixes:
-  - **Medium-mode clip threshold (W1, top priority).** Medium is the only clip mode with a
+  - **Medium-mode clip threshold (W1) — FIXED, see above.** Medium was the only clip mode with a
     level-dependent THD error (−0.2/−1.0/−1.9 dB at −18/−12/−6 dBFS; H3/H5/H7 all ~−1.8 dB at −6).
     **Soft is exact at every level and drive** — which pins the shared diode parameters and makes
     Medium separable for the first time. Related: the modelled Soft↔Medium threshold gap
-    (`2·kIs` vs `kIs` ⇒ only ~31 mV) is far smaller than the pedal's — run `schematic-checker` on
-    the SW1 "mid" position before changing any DSP.
+    (`2·kIs` vs `kIs` ⇒ only ~31 mV) was far smaller than the pedal's. The `schematic-checker` pass
+    found the DSP implemented `circuit.md` exactly and correctly — so the gap is in `circuit.md`'s
+    Mode B description itself, which cannot be re-verified (schematic images were removed from the
+    repo). Fixed by an empirical per-mode fit; the "SW1 mid is an open circuit" reading of the
+    on/off/on wording + "Open" label was tested and **refuted** (+6.1 dB THD error).
   - **Low-drive clip onset (W2).** At D0.20/−18 dBFS the plugin distorts ~4.4× the pedal (11.3% vs
     2.55% @101 Hz), collapsing as level rises. Edge-of-breakup region; largest single error in the
     dataset. Pulls opposite to v1.2.1's `kIs` halving — do NOT chase it with global `kIs`.
@@ -242,7 +290,7 @@ See `analysis/README.md` for harness usage and `analysis/CAPTURE_SPEC.md` for ca
   - **NOT a real error:** the apparent ~0.9 dB deficit across 40 Hz–2 kHz is an artefact of
     `null_depth`'s least-squares broadband gain being dragged down by the LF excess. Normalised at
     1 kHz, 200 Hz–5 kHz sits within ±0.35 dB at all four levels. Don't "fix" it.
-  - **Harness (W5, cheap, do first):** `report_audit.py`'s harmonic median needs an absolute floor
+  - **Harness (W5) — DONE, see above:** `report_audit.py`'s harmonic median needed an absolute floor
     (−45 dBc) — the +12…+25 dB H2/H4/H6 deltas it reports for Soft/Medium are noise-floor
     comparisons at −50…−62 dBc, and they dominate its per-mode score. Also add a 1 kHz-normalised
     FR view alongside the null-gain-matched one.

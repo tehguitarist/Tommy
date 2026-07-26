@@ -76,8 +76,31 @@ Physical switch is three ganged SPSTs. Positions are defined here by sonic chara
 | SW1 Mode | Label in UI | Active Diodes | Character |
 |---|---|---|---|
 | Mode A | "Soft" | D5+D6 AND D3+D4 (all four, two antiparallel pairs in parallel) | Softest, most symmetrical clipping |
-| Mode B | "Medium" | D5+D6 only (one antiparallel pair) | Medium clipping threshold |
+| Mode B | "Medium" | D5+D6 only (one antiparallel pair) — **see the threshold note below** | HIGHER clip threshold than Soft, harder knee |
 | Mode C | "Hard" | D1 only (single diode) | Hardest clip, asymmetric — positive peaks only |
+
+> **Mode B threshold — measured, and NOT explained by "one pair instead of two" (v1.4/W1,
+> 2026-07-26).** Taking Mode B as simply half the diode area of Mode A predicts a threshold
+> difference of only `n·Vt·ln(2)` ≈ **31 mV**, which is nowhere near what the pedal does. Measured
+> against the pedal2 captures at D0.35 / −18 dBFS / 101 Hz, the real pedal's Medium is markedly
+> **cleaner** than its Soft (THD 12.4% vs 18.1%) — yet at −6 dBFS it is markedly **more** distorted
+> (19.4% vs 15.3%). That is a *higher-threshold, harder-kneed* clip, not a softer one.
+> Two things were ruled out before fitting:
+> - **Mode B is NOT an open circuit.** The "on/off/on" wording above and the "Open" UI label both
+>   suggest the middle position might lift every diode branch (op-amp rail clipping only). Rendering
+>   it that way (`ClipMode::Linear`) gives 33–41% THD against the pedal's ~20% — **+6.1 dB median
+>   error, worst +10.3 dB.** "Open" is sonic branding. Do not re-try this.
+> - **The DSP was not at fault.** `Stage1.h` implemented this table exactly and correctly.
+>
+> The DSP therefore gives Mode B its own diode parameters (`kIsMedium`/`kNMedium`), keeping Is
+> identical to Soft's diode and raising only the effective thermal voltage — **1.35×** (Vt_eff
+> 45.3 → 61.1 mV), i.e. between one and two 1N4148s in series. 1.5× fitted the THD better still but
+> is **capped by the op-amp rails** — see the rail note in the Op-Amp Model section below. That is
+> **consistent with, but not proof of, an extra series element in
+> the SW1 mid leg that this document does not record.** It is an empirical fit; the schematic photos
+> were removed from the repo, so it could not be checked against them. **Re-verify against the
+> physical pedal if it is ever available** — trace what the middle switch position actually puts in
+> circuit. See `Stage1.h`'s `kNMedium` comment and `.claude/plans/v1.4-fidelity.md` W1.
 
 All diodes: **1N4148**
 Shockley parameters for 1N4148 (use these exact values):
@@ -137,6 +160,19 @@ IC1_A and IC1_B are both **JRC4559** (= NJM4559, equivalent to RC4559).
   tanh). This makes Hard mode's asymmetry correct (soft diode clip one way, hard rail clip the
   other) and stops Hard mode being audibly louder than Soft/Medium. Transparent (bit-exact) below
   the knee. `setRailVoltages` / `setRailClampEnabled` to tune/disable.
+  **Rail interaction with SW1 Medium (v1.4/W1, 2026-07-26):** these rails are the binding
+  constraint on how high Medium's clip threshold may be modelled. Medium's threshold multiplier was
+  capped at 1.35x (not the THD-optimal 1.5x) because past that the Stage-1 output reaches these
+  ASYMMETRIC rails before the diodes clamp, manufacturing even harmonics a SYMMETRIC clip mode
+  should not have (H2 error at -6 dBFS: +3.5 dB at 1.35x vs +10.5 dB at 1.5x). Confirmed
+  rail-driven by raising the supply (which scales the rails but not the diode thresholds).
+  **The "captures were made at 12 V" hypothesis was tested and NOT supported:** rendering all 16
+  pedal2 captures at 9 V vs 12 V changes nothing below -6 dBFS, leaves Soft bit-identical (it never
+  reaches the rails, so it carries no evidence either way), and at -6 dBFS is a wash -- Hard's H2
+  improves (-1.56 -> +0.17) but its THD worsens (-0.68 -> -0.85), and Medium's H2 error barely
+  changes magnitude (+3.48 -> -3.22, just overshooting). A genuine 12 V capture would have improved
+  all three modes consistently. Ship at 9 V. If these rails are ever measured on a scope and turn
+  out wider than +2.5/-3.4 V, revisit kNMedium -- 1.5x was the better THD fit.
   **Rail value provenance:** no published Timmy bench measurement exists. Datasheet (NJM4559) gives
   ±13V typ swing on ±15V at RL≥2k ⇒ ~2V headroom-from-rail; the Timmy loads IC1 far lighter (≥25k)
   so real headroom is ~1.2V, giving the +2.5/−3.4 estimate. Still an estimate (±0.5V) — only a

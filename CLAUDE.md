@@ -340,8 +340,35 @@ See `analysis/README.md` for harness usage and `analysis/CAPTURE_SPEC.md` for ca
     columns are safer than the clean-sweep column — see the handover's caveat).
     **This also qualifies W5's `@1 kHz` FR view:** 1 kHz is not anchor-safe at D ≥ 0.50, and at
     D ≥ 0.65 no band on the clean sweep is (20 Hz is +5.2 dB over clamp at D1.00).
-  - **STILL OPEN — W2, W3 (fix; likely unfixable), W4 (fittable as an empirical shelf — plan has a
-    full handover, next up), W7 (new, not urgent — see below).**
+  - **DONE — W4 empirical-shelf fit: TESTED AND REFUTED (no DSP change).** The handover's plan (fit
+    the LF excess as an empirical low shelf, since unlike W3 it only needs to CUT) was carried out
+    via a new `correction()` probe in `analysis/w4_bassdrive.py` (probe 5). The direction was never
+    the problem; two other things are. **(1) The excess is a genuine shape error** — it decays from
+    +1.2…+1.5 dB at 20 Hz to ~0 by 100–127 Hz with 127 Hz–1 kHz flat within ±0.13 dB, so it is not
+    the anchor artefact probe 4 raised (a compression *mismatch* would offset every band equally).
+    **(2) But its mode-independent part is subsonic:** the best static 1st-order low shelf is
+    −3.1 dB at DC with a **15 Hz corner** (fit rms 0.08 dB) ⇒ −1.38 dB @20 Hz but only **−0.23 dB
+    @60 Hz** and −0.10 @100 Hz. Low E is 82 Hz — it's a rumble trim, not a bass correction.
+    **(3) The three LF SHAPE failures pull in OPPOSITE directions** (`Hard B0.50 D0.20` is −1.60 dB
+    **dark** at 120 Hz; `Hard/Medium B0.65 D0.65` are +2.02/+3.03 **hot** at 60 Hz — the probe
+    reproduces each `shapeDev` to within 0.1 dB), so one static shelf deepens the dark one while
+    barely moving the hot two: measured effect on the gate is **0 failures fixed, 0 newly broken**,
+    SHAPE stays 13/16. **(4) The failures that matter are mode-ordered** — 2.24 dB spread across the
+    switch at identical (BASS, DRIVE), ordering Soft +0.79 < Hard +2.02 < Medium +3.03 exactly as
+    probe 4's anchor-compression prediction. Soft *passes* where Medium fails by 3 dB; no
+    bass-network error can do that. **So the residual is clip threshold/onset accuracy (W2), not
+    EQ — W4 closes as characterised-not-fixable and folds into W2. Do not ship a low shelf.**
+    Two side findings: the plan's handover table had **every sign inverted** relative to its own
+    caption (following it literally builds a shelf that BOOSTS LF, doubling the error) — flagged in
+    the plan and superseded by the probe, which states one explicit convention; and a W5-class
+    harness caveat, that `knob_tracking.py`'s SHAPE reads **`sweep_clean` only** with 60 Hz as its
+    lowest band, so at D ≥ 0.50 its normalisation anchor is itself past the diode clamp. The same
+    two settings on the **driven** sweeps collapse well inside tolerance and keep shrinking with
+    level (`Medium B0.65 D0.65` @60 Hz: +3.03 clean → +1.06/−18 → +0.69/−12 → +0.50/−6;
+    `Hard B0.65 D0.65`: +2.02 → +0.52 → +0.26 → +0.01), so the two "bass" failures are substantially
+    an artefact of scoring SHAPE on the clean sweep. Worth fixing before treating them as tone bugs.
+  - **STILL OPEN — W2 (now carries W4's residual too — recommended next), W3 (fix; likely
+    unfixable), W7 (new, not urgent — see below).**
   - **W7 — THD light at 6.3–8 kHz (added 2026-07-27, not started, low priority).** User's ear
     flagged it; likely the same gap §2.5 already found (pedal 1.49%/2.16% vs plugin 0.11%/0.12% at
     `sweep_drv_-6`, 6.4/8.1 kHz) but that was marked unvalidated — those bands have only order-2
@@ -367,12 +394,14 @@ See `analysis/README.md` for harness usage and `analysis/CAPTURE_SPEC.md` for ca
     LEVEL deficit, not a tilt" — **that premise died with v1.2.1's `kIs` fix** (LEVEL now 16/16);
     what remains is a genuine tilt. **Superseded by the W3 characterisation above** — it is half
     linear / half clip-mediated, and NO linear filter (shelf, pole or EQ) can fix the latter half.
-  - **BASS↔DRIVE coupling (W4).** LF excess below ~100 Hz (+2.8 dB @20 Hz clean) is real *as a
-    measurement* and still needs fixing — **updated by the W4 characterisation above**: the mode
-    dependence this was originally attributed to is anchor compression, not a bass mechanism (the
-    clip-mode-spread lever is refuted, do not fit against it), but the underlying LF excess itself
-    is not explained away by that and is fittable as an empirical DRIVE/level-dependent low shelf.
-    See the plan's HANDOVER block for the required-correction numbers and next steps.
+  - **BASS↔DRIVE coupling (W4) — CLOSED as characterised-not-fixable; residual folded into W2.**
+    The LF excess below ~100 Hz is real and is a genuine shape error (not an anchor artefact), but
+    it is **not correctable by a shelf**: its mode-independent part is subsonic (−0.23 dB at 60 Hz)
+    and the part that fails SHAPE is mode-dependent (2.24 dB spread across the switch at matched
+    BASS/DRIVE) and of **both signs**. Fixing it is clip-threshold work, not EQ. Full numbers in the
+    W4 roadmap entry above and the plan's W4 OUTCOME block; reproduce with
+    `w4_bassdrive.py --only correction`. **Do not fit an empirical low shelf against this** — and
+    ignore the plan's handover table, whose signs are inverted.
   - **NOT a real error:** the apparent ~0.9 dB deficit across 40 Hz–2 kHz is an artefact of
     `null_depth`'s least-squares broadband gain being dragged down by the LF excess. Normalised at
     1 kHz, 200 Hz–5 kHz sits within ±0.35 dB at all four levels. Don't "fix" it.

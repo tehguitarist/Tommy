@@ -53,8 +53,12 @@ README's Performance table; `FeatureProfile` → the v1.1 roadmap's CPU-vs-accur
 (Step 8) is a
 fixed 480×480 three-column layout — full design in `ui.md`. **W4 is FIXED and shipped**
 (`src/dsp/BassTilt.h`, a DRIVE+mode-keyed 250 Hz low shelf — SHAPE 12/16 → 16/16 with no capture
-regressed); **the only open modelling item is W3** (likely unfixable; W7 was closed into it
-2026-07-27 — characterised, its one lever refuted, no independently fixable component left).
+regressed); **the open modelling items are W3 and W8.** W3 is likely unfixable (W7 was closed into
+it 2026-07-27 — characterised, its one lever refuted, no independently fixable component left).
+**W8 (added 2026-07-27) is new and is NOT a top-octave issue:** the plugin passes ~2.5 dB too much
+below ~40 Hz (an HP-corner difference, 16/16 captures) — characterised and fittable, but whether it
+belongs to the pedal or to the NAM capture chain cannot be resolved now that W6 is struck, so
+shipping a fix is a judgement call. See the Roadmap's W8 entry before touching `InputBuffer.h`.
 Nothing is "blocked on captures" any more — W6 is struck, see Roadmap.
 
 > **DSP stage classes are templated on the diode omega provider** (`Stage1T`/`ClippingOversamplerT`/
@@ -415,10 +419,37 @@ See `analysis/README.md` for harness usage and `analysis/CAPTURE_SPEC.md` for ca
     segment at the wrong offset. This is why v1.2.1's "LEVEL 16/16" and W1's "LEVEL 8/16 → 10/16"
     disagree — **both are wrong**; the correct pre-W2 baseline is SHAPE 13/16 · LEVEL 14/16 ·
     THD 15/16. `analysis/pedal1` is also not a usable cross-check (0/8 on every gate at baseline).
-  - **STILL OPEN — W3 only, and it is the "likely unfixable" one.** Every other v1.4 item is
-    resolved: W1/W2/W4 fixed and shipped, W5 done, W6 struck, **W7 closed 2026-07-27** (fully
-    characterised, its one candidate lever `kSymMismatch` refuted — it merges into W3 and is not
-    tracked separately). W3 now carries the whole remaining residual: the pedal *expands* its top
+  - **OPEN — W8: the plugin is missing the pedal's LF CONTOUR (added 2026-07-27).** Characterised,
+    not fixed; probe `analysis/w8_lf_contour.py` (`contour`/`shelf`, JSON-only). **Found by the
+    user's eye on the dashboard — the harness could not see it, and that is half the finding.**
+    Normalise both FR curves at **20 Hz** (not 1 kHz) and the gap is a clean first-order shelf:
+    0 dB at 20 Hz → **+2.2…+2.8 dB plateau by ~200 Hz**, flat to 2.5 kHz. Midband is calibrated to
+    ±0.35 dB, so the reading is **the plugin passes ~2.5 dB too much below ~40 Hz**. Systematic:
+    **16/16 captures, all four levels** (median LF rise over 20–400 Hz, plugin vs pedal: clean
+    **1.52 vs 4.15**, −18 0.70 vs 2.01, −12 0.65 vs 1.70, −6 0.59 vs 1.48).
+    **Read it as an HP-corner difference:** plugin effective **12.5 Hz** (C2 39n + R2 510k = 8.0 Hz
+    in `InputBuffer.h`, cascaded with the C6 DC block) vs pedal **23.0 Hz** on the clean sweep
+    (17.7/16.9/16.3 at −18/−12/−6 — it falls with drive because **clipping masks it**, so trust the
+    clean figure). Direct shelf fits are good (rms 0.13–0.22 dB) but **degenerate on the driven
+    sweeps** — quote the HP pair, not the shelf gain.
+    **NOT a component error:** reaching 23 Hz needs C2 = 13.6 n (documented 39 n) or R2 = 177 k
+    (documented 510 k), ~3× departures. So it is either an element `circuit.md` does not record or
+    the **NAM reamp chain's own subsonic roll-off** — and `CAPTURE_SPEC`'s bypass anchor that would
+    separate them was never captured (W6). **Shipping a fix is therefore a judgement call, not a
+    derivation.** If fixed, the fix belongs **PRE-CLIP** (a pre-clip HP reproduces the observed
+    level-collapse for free; `BassTilt` is the wrong side of the clipper and its 250 Hz corner
+    cannot reach 40 Hz).
+    **Two harness lessons, both W5-class:** (i) *every* LF metric here normalises at 1 kHz and
+    reports a per-band deviation — a **fit-to-line** measure that renders a whole-curve **contour**
+    error as a small residual smeared over many bands, reading as "close enough" band by band;
+    (ii) **`w4_basscaps.py` scored C3/C4 on the 64/127/254 Hz bands while its own notes say "C4 is
+    nearly irrelevant at 64–254 Hz; it only dominates far lower (~20 Hz)"** — it evaluated C4 where
+    C4 does nothing, so **"C3/C4 refuted" does not hold for the 20–50 Hz contour** and must not be
+    cited for it.
+  - **STILL OPEN — W3 (likely unfixable) and W8 (characterised, awaiting a ship decision).** The
+    rest is resolved: W1/W2/W4 fixed and shipped, W5 done, W6 struck, **W7 closed 2026-07-27**
+    (fully characterised, its one candidate lever `kSymMismatch` refuted — it merges into W3 and is
+    not tracked separately). W3 carries the top-octave residual: the pedal *expands* its top
     octave under drive and no linear filter, pole, shelf or flat parameter can add that energy back
     (finite-GBW and `kSymMismatch` both tested and eliminated). **W4 is DONE and shipped**
     (2026-07-27, `src/dsp/BassTilt.h`, SHAPE 12/16 → 16/16). Levers 1, 3, 5 and the static-shelf
@@ -646,6 +677,9 @@ See `analysis/README.md` for harness usage and `analysis/CAPTURE_SPEC.md` for ca
     and all three say the bass network is already optimal. R3/R7 are not LF-shape levers (they set
     midband gain — Zg → R3 where the caps short). **The LF residual is therefore genuinely NOT a
     component error, which is what justifies the empirical `BassTilt` shelf.**
+    **⚠️ SCOPE LIMIT (added 2026-07-27, W8): all of the above was scored on the 64/127/254 Hz
+    bands and holds ONLY there.** It says nothing about the 20–50 Hz contour — see the C4 note in
+    the next entry, and W8.
   - **W4 — component-based alternatives to the shelf: C3/C4 REFUTED (2026-07-27).** The shipped fix
     is an empirical output shelf, so the obvious objection is "shouldn't a wrong component explain
     this instead?" — especially since C3/C4 sit PRE-clip (so their effect is naturally
@@ -656,6 +690,12 @@ See `analysis/README.md` for harness usage and `analysis/CAPTURE_SPEC.md` for ca
     so it measures the raw model). Result — **the shipped values are essentially optimal**:
     - **C4 is nearly irrelevant** at 64–254 Hz: across 0.47µ…2.2µ (a 4.7× range) the worst LF
       deviation moves ~0.05 dB. It only dominates far lower (~20 Hz).
+      **⚠️ THIS SENTENCE INVALIDATES THE C4 HALF OF THIS ENTRY (found 2026-07-27, W8).** The sweep
+      scored C4 on 64/127/254 Hz — i.e. **exactly where it had already established C4 does
+      nothing** — so "C4 refuted" is unsupported for the 20–50 Hz region where C4 actually acts,
+      and W8's error lives at ~40 Hz. **Do not cite this entry against a C4 change without
+      re-scoring on the 20–50 Hz contour** (`analysis/w8_lf_contour.py --only contour`). The C3
+      and BASS_R conclusions below are unaffected — C3 does act in the scored bands.
     - **C3 has a shallow minimum at 39–47n**, i.e. at/next to the shipped 39n.
     - Best grid point (46.8n / 2.2µ) gives worst **2.43 dB vs shipped 2.58** — a 0.15 dB gain, and
       the **mean gets worse** (1.06 → 1.15). Against BassTilt's 1.14 dB worst, the best component

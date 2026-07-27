@@ -9,7 +9,7 @@ rolloff and the capture chain roll off hard. So the reported "THD" up there is a
 measured in the noisiest, most-attenuated part of the capture — exactly where an extraction
 artefact would look like a real deficit.
 
-Three probes, ordered so each one can kill the next:
+Six probes, ordered so each one can kill the next:
 
   1. `bands`  — restate §2.5 against the CURRENT (post-W2) JSON, and show what the claim actually
      rests on: the Farina order available per band, and the absolute harmonic level in dBc that
@@ -24,12 +24,28 @@ Three probes, ordered so each one can kill the next:
      200 Hz-2 kHz content. Answers the two questions a fix depends on: is there real missing
      energy, and is it present on the CLEAN sweep (a linear FR error, fixable with a filter) or
      only under drive (clip-mediated, which per W3 no linear filter can fix)?
+  4. `products` — the harmonics of the fixed 1/2/4 kHz tones that LAND in 6.3-8.2 kHz, i.e. the
+     content a guitar actually puts up there. Found the side finding probes 5-6 exist to settle:
+     Soft/Medium's EVEN-order products are 7-15 dB light at high drive while Hard's are fine.
+
+  -- probes 5 and 6 close that side finding: is `kSymMismatch` the lever, and does it matter? --
+
+  5. `profile` — the even-harmonic (H2) error vs FREQUENCY at the shipped kSymMismatch, from the
+     seven fixed tones 82-4000 Hz. `kSymMismatch` is a single frequency-flat number, so it can only
+     be the lever if the error has the SAME size at every frequency. Also prints each product's
+     ABSOLUTE level (dBc and dBFS) beside W5's -45 dBc audibility floor, so "is this audible at
+     all" is answered from the same table.
+  6. `sym`     — sweep kSymMismatch over the 10 Soft/Medium captures and tabulate what each value
+     does to H2 at every tone frequency, to THD/H3 (must not move), and to the null vs the pedal.
+     Ends with the size of the change itself, rendered as a shipped-vs-candidate null: if that sits
+     below the plugin's own ~-45 dB residual against the capture, the change is unmeasurable in an
+     A/B and should not ship regardless of how the fit looks.
 
 Usage (from the repo root):
-    analysis/.venv/bin/python3 analysis/w7_hf_thd.py [--only bands,tone,energy]
+    analysis/.venv/bin/python3 analysis/w7_hf_thd.py [--only bands,tone,energy,products,profile,sym]
 
 Needs analysis/reports/comprehensive_data.json (regenerate with comprehensive_report.py) for
-probe 1, and build/OfflineRender_artefacts/Release/OfflineRender for probes 2-3.
+probe 1, and build/OfflineRender_artefacts/Release/OfflineRender for probes 2-6.
 """
 
 import argparse
@@ -315,7 +331,190 @@ def products():
                   f"{st.median([r[3] - r[2] for r in ok]):+.2f} dB")
 
 
-STEPS = {"bands": bands, "tone": tone, "energy": energy, "products": products}
+# --- probes 5-6: is kSymMismatch the lever for the even-order HF deficit? ------------------------
+
+# H2 of each fixed tone. 8 kHz is excluded (its H2 is above Nyquist); 2 kHz/4 kHz are the two that
+# put an even product INTO and ABOVE W7's band, and 82-1000 Hz are where H2 is loud enough to be
+# audible at all — the contrast between those two groups is the whole question.
+H2_TONES = [82.41, 110.0, 220.0, 440.0, 1000.0, 2000.0, 4000.0]
+SYM_SHIPPED = 0.06
+SYM_VALUES = [0.06, 0.12, 0.20, 0.30, 0.45]   # 0.45 = kAsymMismatch, i.e. Hard's value: the ceiling
+AUDIBILITY_DBC = -45.0                        # W5's floor (report_audit.py), reused unchanged
+IN_F32 = "/tmp/w7_sym_in.f32"
+OUT_F32 = "/tmp/w7_sym_out.f32"
+
+
+def _sym_args(m):
+    """OfflineRender argv[10..20] with only kSymMismatch (argv[20]) overridden.
+
+    symBias is argv[20] and render_args() supplies argv[3..9], so this list MUST be 11 long — a
+    short list silently lands the value in an earlier slot (drive taper, supply volts) and the
+    sweep becomes a no-op or, worse, a sweep of the wrong parameter. Same trap as w4_knmedium's.
+    """
+    a = ["1.2", "-1", "1.43", "-1", "1.43", "-1", "0", "-1", "1", "9", f"{m:.4f}"]
+    assert len(a) == 11, f"argv[10..20] must be 11 entries, got {len(a)}"
+    return a
+
+
+def _render_sym(parsed, m):
+    r = subprocess.run([RENDER, IN_F32, OUT_F32]
+                       + C.render_args(parsed, os_factor_log2=3, extra_args=_sym_args(m)),
+                       capture_output=True, text=True)
+    if r.returncode != 0:
+        raise RuntimeError(r.stderr.strip()[:200])
+    return np.fromfile(OUT_F32, dtype="<f4").astype(np.float64)
+
+
+def _h2_row(cap_seg, ren_seg, f0):
+    """(pedal dBc, plugin dBc, pedal margin over the local floor, plugin H2 absolute dBFS).
+
+    The floor window is narrowed to 0.4*f0 at low frequencies. `_noise_db_at`'s default +/-200 Hz
+    is fine around an 8 kHz harmonic but at H2 of the 82 Hz tone (164.8 Hz) it reaches all the way
+    down to the FUNDAMENTAL, so the "floor" it returns is the fundamental's skirt and every low
+    tone reports a large negative margin. That is a window bug, not a floor problem — with the
+    window narrowed those rows are comfortably above their real floor.
+    """
+    bw = min(200.0, 0.4 * f0)
+    fc, fg = _dft_db(cap_seg, f0), _dft_db(ren_seg, f0)
+    hc, hg = _dft_db(cap_seg, 2 * f0), _dft_db(ren_seg, 2 * f0)
+    return hc - fc, hg - fg, hc - _noise_db_at(cap_seg, 2 * f0, bw), hg
+
+
+def _sm_captures():
+    """Soft + Medium only — kSymMismatch is their parameter; Hard uses kAsymMismatch and is
+    untouched by argv[20] by construction, so it needs no regression check here."""
+    return [(p, q) for p, q in C.find_captures() if q["rev"] in ("Soft", "Medium")]
+
+
+def profile():
+    """Probe 5: is the even-harmonic error the same size at every frequency?
+
+    `kSymMismatch` is one frequency-flat number: raising it lifts H2 by the same dB at 165 Hz as at
+    8 kHz (verified — the sweep in probe 6 shows exactly that). So it can only be the lever for the
+    HF even-product deficit if the deficit is BROADBAND. If H2 is already correct at low frequency
+    and only light at HF, the error is frequency-dependent and no value of this parameter fits it.
+
+    The absolute columns answer the second question in the same pass: W5 adopted a -45 dBc floor
+    because below it the two sides are comparing noise, and probe 4 flagged these products at
+    -55..-76 dBc. A product below the floor is not worth fitting even if the fit were possible.
+    """
+    orig = A.load(SIGNAL)
+    orig.astype(np.float32).tofile(IN_F32)
+    caps = _sm_captures()
+
+    print("\n" + "=" * 100)
+    print("P5  H2 error vs FREQUENCY at the shipped kSymMismatch = %.2f  (Soft/Medium only)" % SYM_SHIPPED)
+    print("=" * 100)
+    print("    dBc = H2 below its own fundamental. 'margin' = pedal H2 over the local neighbour-bin")
+    print(f"    level. 'aud' flags a pedal H2 at or above W5's {AUDIBILITY_DBC:.0f} dBc audibility floor.")
+
+    acc = {}
+    for path, q in caps:
+        cap, _ = A.align(A.load(path), orig)
+        ren, _ = A.align(_render_sym(q, SYM_SHIPPED), orig)
+        for f0 in H2_TONES:
+            cs = A.seg_of(cap, f"tone_{f0:g}")
+            rs = A.frac_align(A.seg_of(ren, f"tone_{f0:g}"), cs)
+            acc.setdefault(f0, []).append((f"{q['rev']:<6} D{q['drive']:.2f}",) + _h2_row(cs, rs, f0))
+
+    print(f"\n  {'tone':>8}{'H2 at':>9}{'ped dBc':>10}{'plug dBc':>10}{'plug-ped':>10}"
+          f"{'margin':>9}{'audible?':>10}")
+    for f0 in H2_TONES:
+        rows = acc[f0]
+        mp = st.median([r[1] for r in rows])
+        mg = st.median([r[2] for r in rows])
+        mm = st.median([r[3] for r in rows])
+        aud = f"{sum(1 for r in rows if r[1] >= AUDIBILITY_DBC)}/{len(rows)}"
+        print(f"  {f0:>8.0f}{2*f0/1000:>8.2f}k{mp:>10.1f}{mg:>10.1f}{mg-mp:>+10.1f}{mm:>9.1f}{aud:>10}")
+    print(f"\n    (median over the {len(caps)} Soft/Medium captures; 'audible?' = how many of them"
+          f" have the\n     PEDAL's H2 at or above {AUDIBILITY_DBC:.0f} dBc.)")
+
+    print(f"\n  per-capture detail at the two ends")
+    for f0 in (H2_TONES[0], H2_TONES[-1]):
+        print(f"\n    tone {f0:g} Hz, H2 at {2*f0/1000:.2f} kHz")
+        print(f"      {'capture':<14}{'ped dBc':>10}{'plug dBc':>10}{'plug-ped':>10}{'margin':>9}")
+        for tag, pc, pg, mm, _ in acc[f0]:
+            print(f"      {tag:<14}{pc:>10.1f}{pg:>10.1f}{pg-pc:>+10.1f}{mm:>9.1f}")
+
+
+def sym():
+    """Probe 6: sweep kSymMismatch, and price the change against the plugin's existing residual.
+
+    Three questions, one render pass (10 Soft/Medium captures x len(SYM_VALUES)):
+      (a) does any value close the HF even-product gap without breaking H2 where it IS audible?
+      (b) does it move anything other than H2? (W2 said no; verified here on H3 and THD.)
+      (c) how big is the change at all? Reported as a null between the shipped render and each
+          candidate. The plugin's own null against the pedal2 captures sits near -45 dB, so a
+          change quieter than that cannot be heard as a difference in the A/B it is meant to fix.
+    """
+    orig = A.load(SIGNAL)
+    orig.astype(np.float32).tofile(IN_F32)
+    caps = _sm_captures()
+    print("\n" + "=" * 100)
+    print(f"P6  kSymMismatch sweep — {len(caps)} Soft/Medium captures x {len(SYM_VALUES)} values"
+          f" = {len(caps)*len(SYM_VALUES)} renders (shipped = {SYM_SHIPPED})")
+    print("=" * 100)
+
+    h2 = {}      # (f0, m) -> [plug-ped dB]
+    other = {}   # m -> {"h3": [...], "thd": [...]}
+    nulls = {}   # m -> [null vs shipped render, dB]
+    ped_dbc = {}
+    for path, q in caps:
+        cap, _ = A.align(A.load(path), orig)
+        base = None
+        for m in SYM_VALUES:
+            ren, _ = A.align(_render_sym(q, m), orig)
+            if m == SYM_SHIPPED:
+                base = ren
+            for f0 in H2_TONES:
+                cs = A.seg_of(cap, f"tone_{f0:g}")
+                rs = A.frac_align(A.seg_of(ren, f"tone_{f0:g}"), cs)
+                pc, pg, _, _ = _h2_row(cs, rs, f0)
+                h2.setdefault((f0, m), []).append(pg - pc)
+                ped_dbc.setdefault(f0, []).append(pc)
+            cs1 = A.seg_of(cap, "tone_1000")
+            rs1 = A.frac_align(A.seg_of(ren, "tone_1000"), cs1)
+            o = other.setdefault(m, {"h3": [], "thd": []})
+            o["h3"].append((_dft_db(rs1, 3000) - _dft_db(rs1, 1000))
+                           - (_dft_db(cs1, 3000) - _dft_db(cs1, 1000)))
+            o["thd"].append(A.thd(rs1, 1000)[0] - A.thd(cs1, 1000)[0])
+            # size of the change itself, vs the shipped render, on the hottest driven sweep
+            if base is not None and m != SYM_SHIPPED:
+                b = A.seg_of(base, "sweep_drv_-6")
+                t = A.frac_align(A.seg_of(ren, "sweep_drv_-6"), b)
+                nulls.setdefault(m, []).append(A.null_depth(b, t)[0])
+
+    print("\n  (a) H2 error (plugin - pedal, dB) by tone frequency and kSymMismatch")
+    print(f"      {'tone':>7}{'ped dBc':>10}  " + "".join(f"{m:>10.2f}" for m in SYM_VALUES))
+    print("      " + "-" * (17 + 10 * len(SYM_VALUES)))
+    for f0 in H2_TONES:
+        cells = "".join(f"{st.median(h2[(f0, m)]):>+10.1f}" for m in SYM_VALUES)
+        print(f"      {f0:>7.0f}{st.median(ped_dbc[f0]):>10.1f}  {cells}")
+    print("      " + "-" * (17 + 10 * len(SYM_VALUES)))
+    lo = [f for f in H2_TONES if f <= 1000]
+    hi = [f for f in H2_TONES if f > 1000]
+    for lbl, grp in (("mean|err| 82-1k", lo), ("mean|err| 2k-4k", hi)):
+        cells = "".join(f"{st.mean([abs(st.median(h2[(f, m)])) for f in grp]):>10.2f}"
+                        for m in SYM_VALUES)
+        print(f"      {lbl:>17}  {cells}")
+
+    print("\n  (b) collateral: does it move anything other than H2? (1 kHz tone)")
+    print(f"      {'metric':>17}  " + "".join(f"{m:>10.2f}" for m in SYM_VALUES))
+    print(f"      {'H3 err dB':>17}  "
+          + "".join(f"{st.median(other[m]['h3']):>+10.2f}" for m in SYM_VALUES))
+    print(f"      {'THD err %':>17}  "
+          + "".join(f"{st.median(other[m]['thd']):>+10.2f}" for m in SYM_VALUES))
+
+    print("\n  (c) SIZE of the change: null of each candidate against the SHIPPED render")
+    print("      (sweep_drv_-6, gain-matched. The plugin's own null vs the pedal2 captures is")
+    print("       around -45 dB, so anything below that line is inaudible in the A/B it targets.)")
+    print(f"      {'kSymMismatch':>17}  " + "".join(f"{m:>10.2f}" for m in SYM_VALUES[1:]))
+    print(f"      {'null vs shipped':>17}  "
+          + "".join(f"{st.median(nulls[m]):>10.1f}" for m in SYM_VALUES[1:]))
+
+
+STEPS = {"bands": bands, "tone": tone, "energy": energy, "products": products,
+         "profile": profile, "sym": sym}
 
 
 def main():

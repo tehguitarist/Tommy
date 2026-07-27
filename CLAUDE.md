@@ -53,7 +53,8 @@ README's Performance table; `FeatureProfile` → the v1.1 roadmap's CPU-vs-accur
 (Step 8) is a
 fixed 480×480 three-column layout — full design in `ui.md`. **W4 is FIXED and shipped**
 (`src/dsp/BassTilt.h`, a DRIVE+mode-keyed 250 Hz low shelf — SHAPE 12/16 → 16/16 with no capture
-regressed); **the only open modelling item is W3** (likely unfixable; now also carries W7).
+regressed); **the only open modelling item is W3** (likely unfixable; W7 was closed into it
+2026-07-27 — characterised, its one lever refuted, no independently fixable component left).
 Nothing is "blocked on captures" any more — W6 is struck, see Roadmap.
 
 > **DSP stage classes are templated on the diode omega provider** (`Stage1T`/`ClippingOversamplerT`/
@@ -414,10 +415,15 @@ See `analysis/README.md` for harness usage and `analysis/CAPTURE_SPEC.md` for ca
     segment at the wrong offset. This is why v1.2.1's "LEVEL 16/16" and W1's "LEVEL 8/16 → 10/16"
     disagree — **both are wrong**; the correct pre-W2 baseline is SHAPE 13/16 · LEVEL 14/16 ·
     THD 15/16. `analysis/pedal1` is also not a usable cross-check (0/8 on every gate at baseline).
-  - **STILL OPEN — W3 only** (fix; likely unfixable — now also carries W7). **W4 is DONE and
-    shipped** (2026-07-27, `src/dsp/BassTilt.h`, SHAPE 12/16 → 16/16). Levers 1, 3, 5 and the
-    static-shelf lever stay refuted; lever 2's refutation was **wrong and is retracted** — a
-    *knob-keyed* shelf was the fix all along.
+  - **STILL OPEN — W3 only, and it is the "likely unfixable" one.** Every other v1.4 item is
+    resolved: W1/W2/W4 fixed and shipped, W5 done, W6 struck, **W7 closed 2026-07-27** (fully
+    characterised, its one candidate lever `kSymMismatch` refuted — it merges into W3 and is not
+    tracked separately). W3 now carries the whole remaining residual: the pedal *expands* its top
+    octave under drive and no linear filter, pole, shelf or flat parameter can add that energy back
+    (finite-GBW and `kSymMismatch` both tested and eliminated). **W4 is DONE and shipped**
+    (2026-07-27, `src/dsp/BassTilt.h`, SHAPE 12/16 → 16/16). Levers 1, 3, 5 and the static-shelf
+    lever stay refuted; lever 2's refutation was **wrong and is retracted** — a *knob-keyed* shelf
+    was the fix all along.
   - **DONE — W4 levers 4 + 5 resolved, levers 1 + 2 REFUTED (2026-07-27, no DSP change).** New
     probes `analysis/w4_bassdrive.py --only metric,decompose` (6 `metric`, 7 `decompose`); pure
     analysis, no render or build. Also fixed a stale `drive_resistance` in that file (`x^2.2` →
@@ -548,11 +554,11 @@ See `analysis/README.md` for harness usage and `analysis/CAPTURE_SPEC.md` for ca
     drives (D0.35 clean **+0.24**, D0.20 −0.67) and grows with both drive and level to −1.3 dB at
     D0.80–1.00/−6. Not present unclipped, so **no linear filter can fix it** — W7 merges into W3
     rather than being tracked separately.
-    (e) **New side finding, separate from W3 and possibly actionable:** Soft/Medium's **even**-order
-    HF products are **7–15 dB light** at high drive while Hard's are within ±3 dB — that is the
-    `kSymMismatch = 0.06` term, a targeted lever (W2 established the mismatch parameters "move H2
-    and almost nothing else"). **But they sit at −55…−76 dBc, below W5's −45 dBc audibility floor**
-    — check audibility before touching `kSymMismatch`.
+    (e) ~~**New side finding, separate from W3 and possibly actionable:** Soft/Medium's
+    **even**-order HF products are 7–15 dB light at high drive while Hard's are within ±3 dB — that
+    is the `kSymMismatch = 0.06` term, a targeted lever.~~ **REFUTED — see the W7 closure entry
+    below. `kSymMismatch` is frequency-flat and the error is a sign-reversing frequency ramp; do
+    not touch it.**
     (f) **`analysis/pedal2` has an extremely clean floor** — 18–23 kHz energy is **−160 dBFS**
     during a −29 dBFS segment and the file head is 57% exact zeros, i.e. no measurable
     recording-chain noise. **This is expected of a NAM capture, not a sign of inaccuracy** — NAM
@@ -560,12 +566,34 @@ See `analysis/README.md` for harness usage and `analysis/CAPTURE_SPEC.md` for ca
     here depends on. Consequence: noise floor is never the limit in a pedal2 measurement, and
     W3/W7's "the pedal expands its top octave under drive" should be read as a genuine property of
     the real pedal that the capture faithfully preserved, not a modelling artefact to be discounted.
-  - **W7 — THD light at 6.3–8 kHz (added 2026-07-27, not started, low priority).** User's ear
-    flagged it; likely the same gap §2.5 already found (pedal 1.49%/2.16% vs plugin 0.11%/0.12% at
-    `sweep_drv_-6`, 6.4/8.1 kHz) but that was marked unvalidated — those bands have only order-2
-    Farina resolution near the measurement ceiling. Probably the same phenomenon as W3 (clip-driven
-    top-octave energy the model can't produce, which no linear filter can fix), but not confirmed.
-    See `.claude/plans/v1.4-fidelity.md`'s W7 for the next-steps checklist before touching any DSP.
+  - **DONE — W7 CLOSED: `kSymMismatch` REFUTED as the even-order HF lever (2026-07-27, no DSP
+    change).** This was W7's last open item — the "possibly actionable" side finding in (e) above.
+    New probes `analysis/w7_hf_thd.py --only profile,sym` (5 = H2 error vs frequency at the shipped
+    value; 6 = a 10 Soft/Medium captures × 5 values render sweep via `offline_render` argv[20]).
+    **`kSymMismatch` stays at 0.06.**
+    **(a) The even-harmonic error is a frequency RAMP that reverses sign, not an offset.** Median
+    plugin−pedal H2 over the 10 Soft/Medium captures, by tone (every row 49–97 dB above its own
+    local floor): 82 Hz **+7.8**, 110 +9.4, 220 **+12.3**, 440 +5.8, 1k +1.6, 2k −1.5, 4k **−10.2**
+    (H2 at 8 kHz). The plugin is 6–12 dB **hot** on even harmonics across the whole audible
+    midrange and light only at the very top — (e)'s "7–15 dB light" is one end of a **21 dB spread**.
+    **(b) The parameter is exactly frequency-FLAT, so it slides that ramp but cannot tilt it.**
+    0.06 → 0.12 adds **+6.0…+6.1 dB at all seven frequencies**. So the shipped 0.06 already
+    minimises the audible midrange (mean |err| 82 Hz–1 kHz **8.09** dB, rising monotonically to
+    25.60 at 0.45), and the only value that helps the top (0.12: mean |err| 2k–4k 4.73 → 3.37)
+    **buys 1.4 dB at HF by spending 6 dB at LF.**
+    **(c) That trade is inaudible regardless:** the 0.12 render nulls against the shipped render at
+    **−47.2 dB**, i.e. the entire change is quieter than the plugin's own ≈−45 dB residual vs the
+    capture. **(d) Collateral nil, as W2 said** — over 0.06…0.45 the 1 kHz H3 error moves 0.15 dB
+    and THD 0.22 %. Hard needs no regression check (`kSymMismatch` is Soft/Medium-only; argv[20]
+    cannot reach `kAsymMismatch`).
+    **(e) Where it IS audible it is W3's wall:** the one even product at/above the −45 dBc floor is
+    4 kHz H2 at 8 kHz (pedal −44.6 dBc, **6/10** captures above the floor) — exactly the top octave
+    W3 showed the pedal *expands* under drive. Every other H2 row is −51…−57 dBc with 0–1/10 above
+    the floor. **W7 therefore has no independently fixable component and merges into W3 in full.**
+    **Harness bug fixed on the way (W5-class):** `_noise_db_at`'s default ±200 Hz window reaches the
+    FUNDAMENTAL for harmonics below ~500 Hz, so H2 of the 82/110 Hz tones first reported margins of
+    −29 dB ("in the floor") when they are really 59–64 dB clear. `_h2_row` narrows it to `0.4·f0`;
+    any future probe reading a low-frequency harmonic must do the same.
   Findings re-derived from `analysis/reports/comprehensive_data.json` (16 pedal2 captures, 30
   1/3-octave bands, 4 sweep levels). Four real errors, one artefact, two harness fixes:
   - **Medium-mode clip threshold (W1) — FIXED, see above.** Medium was the only clip mode with a

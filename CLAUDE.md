@@ -53,12 +53,13 @@ README's Performance table; `FeatureProfile` → the v1.1 roadmap's CPU-vs-accur
 (Step 8) is a
 fixed 480×480 three-column layout — full design in `ui.md`. **W4 is FIXED and shipped**
 (`src/dsp/BassTilt.h`, a DRIVE+mode-keyed 250 Hz low shelf — SHAPE 12/16 → 16/16 with no capture
-regressed); **the open modelling items are W3 and W8.** W3 is likely unfixable (W7 was closed into
-it 2026-07-27 — characterised, its one lever refuted, no independently fixable component left).
-**W8 (added 2026-07-27) is new and is NOT a top-octave issue:** the plugin passes ~2.5 dB too much
-below ~40 Hz (an HP-corner difference, 16/16 captures) — characterised and fittable, but whether it
-belongs to the pedal or to the NAM capture chain cannot be resolved now that W6 is struck, so
-shipping a fix is a judgement call. See the Roadmap's W8 entry before touching `InputBuffer.h`.
+regressed); **W8 is FIXED and shipped** (`InputBuffer.h` `kC2` 39 n → 16.4 n, moving the pre-clip
+input high-pass 8.0 → 19.1 Hz — the plugin had been passing ~2.5 dB too much below ~40 Hz in 16/16
+captures; every sweep level improved, all gates unchanged). That 16.4 n is the **only deliberately
+non-schematic passive value in the plugin** and is a fit, not a claim about the part — read
+`circuit.md`'s C2 note before touching `InputBuffer.h`. **W3 is the one open modelling item** and is
+likely unfixable (W7 was closed into it 2026-07-27 — characterised, its one lever refuted, no
+independently fixable component left).
 Nothing is "blocked on captures" any more — W6 is struck, see Roadmap.
 
 > **DSP stage classes are templated on the diode omega provider** (`Stage1T`/`ClippingOversamplerT`/
@@ -419,9 +420,40 @@ See `analysis/README.md` for harness usage and `analysis/CAPTURE_SPEC.md` for ca
     segment at the wrong offset. This is why v1.2.1's "LEVEL 16/16" and W1's "LEVEL 8/16 → 10/16"
     disagree — **both are wrong**; the correct pre-W2 baseline is SHAPE 13/16 · LEVEL 14/16 ·
     THD 15/16. `analysis/pedal1` is also not a usable cross-check (0/8 on every gate at baseline).
-  - **OPEN — W8: the plugin is missing the pedal's LF CONTOUR (added 2026-07-27).** Characterised,
-    not fixed; probe `analysis/w8_lf_contour.py` (`contour`/`shelf`, JSON-only). **Found by the
-    user's eye on the dashboard — the harness could not see it, and that is half the finding.**
+  - **DONE — W8: the missing LF contour, FIXED AND SHIPPED (2026-07-27) — `InputBuffer.h` `kC2`
+    39 n → 16.4 n (input pole 8.0 → 19.1 Hz).** The fix is a **pre-clip high-pass corner**, and the
+    placement matters more than the value: the error's level-collapse is clipping masking a linear
+    error, so only a filter before the clipper reproduces it for free. Fitted on the **minimax
+    across sweep levels** (probe `--only fit`, 16 captures × 8 C2 values), not the rms — the rms
+    optimum (pole 23.5 Hz) is the clean sweep outvoting the three levels anyone actually plays at.
+    **Result — median |deviation| over 20–64 Hz, 1 kHz-normalised: clean 1.10 → 0.58, −18
+    0.62 → 0.29, −12 0.57 → 0.41, −6 0.55 → 0.54; every level improves** (rms over all bands ×
+    levels 1.13 → 0.72, worst 3.45 → 2.25). On the shape metric the missing LF rise falls clean
+    2.63 → 1.64 dB, −18 1.31 → 0.74, −12 1.05 → 0.39, −6 0.88 → **0.07**; the 20 Hz-normalised
+    plateau falls +2.24/+1.09/+0.91/+0.77 → +1.21/+0.44/+0.12/**−0.21** dB.
+    **Gates: SHAPE 16/16, LEVEL 15/16, THD 16/16 — all unchanged; ctest 10/10; `auval` passes.**
+    `Stage0_FreqResponse` was rewritten to derive its corner from `InputBuffer::kC2` and to check
+    audio-band points against the analytic first-order HP rather than against flat 0 dB (at a 19 Hz
+    pole the network is legitimately −0.15 dB at 100 Hz; asserting flatness there would have tested
+    the old corner by the back door).
+    **This is the ONLY deliberately non-schematic passive value in the plugin and it is a fit, not a
+    claim about the part** — reaching the corner needs a ~3× departure from the documented 39 n, so
+    the roll-off is either an unrecorded element or the NAM chain's own subsonic response, and W6
+    means that cannot be resolved. `kC2Documented` keeps 39 n; `setC2Value` → `setInputC2` →
+    `offline_render.cpp` argv[28] A/Bs back to it. See `circuit.md`'s C2 note before touching it.
+    **RESIDUAL, stated plainly: the ideal corner still falls with level** (the clean sweep wants
+    ~23.5 Hz, −6 dBFS wants ~14.5 Hz), so one static value sits in the middle and the −6 dBFS case
+    now slightly OVER-corrects (−0.21 dB plateau). Pre-clip placement tracks most of the collapse
+    but not all of it, because Stage 1's clipper compresses a pre-clip change even on the −30 dBFS
+    clean sweep. Closing the rest needs an envelope follower the plugin does not have.
+    **HARNESS CAVEAT: `shelf`'s implied pedal corner is no longer a pedal measurement.** It reads
+    off a hardcoded plugin f1 (now 20.8 Hz, was 12.5) and, because the linear algebra over-states
+    how far a pre-clip corner actually moves under compression, the post-fix f2 comes out ABOVE the
+    23.0 Hz it reported pre-fix. Judge W8 on `fit`'s per-level deviations, never on f2.
+    Characterisation follows (unchanged, still the reason the fix looks the way it does).
+    **Found by the user's eye on the dashboard — the harness could not see it, and that is half the
+    finding.** `knob_tracking`'s SHAPE scores no band below 60 Hz, so the whole fix moved it
+    0.79 → 0.78 dB. Any future LF work must be judged on `w8_lf_contour.py`, not on SHAPE.
     Normalise both FR curves at **20 Hz** (not 1 kHz) and the gap is a clean first-order shelf:
     0 dB at 20 Hz → **+2.2…+2.8 dB plateau by ~200 Hz**, flat to 2.5 kHz. Midband is calibrated to
     ±0.35 dB, so the reading is **the plugin passes ~2.5 dB too much below ~40 Hz**. Systematic:
@@ -446,8 +478,8 @@ See `analysis/README.md` for harness usage and `analysis/CAPTURE_SPEC.md` for ca
     nearly irrelevant at 64–254 Hz; it only dominates far lower (~20 Hz)"** — it evaluated C4 where
     C4 does nothing, so **"C3/C4 refuted" does not hold for the 20–50 Hz contour** and must not be
     cited for it.
-  - **STILL OPEN — W3 (likely unfixable) and W8 (characterised, awaiting a ship decision).** The
-    rest is resolved: W1/W2/W4 fixed and shipped, W5 done, W6 struck, **W7 closed 2026-07-27**
+  - **STILL OPEN — W3 alone, and it is likely unfixable.** The
+    rest is resolved: W1/W2/W4/W8 fixed and shipped, W5 done, W6 struck, **W7 closed 2026-07-27**
     (fully characterised, its one candidate lever `kSymMismatch` refuted — it merges into W3 and is
     not tracked separately). W3 carries the top-octave residual: the pedal *expands* its top
     octave under drive and no linear filter, pole, shelf or flat parameter can add that energy back

@@ -21,7 +21,7 @@ static constexpr double kOutputMakeup = 1.217;
 int main (int argc, char** argv)
 {
     // Optional overrides beyond argv[9] are documented at their point of use below (argv[10]
-    // kInputRef ... argv[24] DriveTilt shelf gain); all are calibration-only and default to shipped.
+    // kInputRef ... argv[28] input cap C2); all are calibration-only and default to shipped.
     if (argc < 9)
     {
         std::fprintf (stderr, "usage: %s in.f32 out.f32 bassX driveX trebX volX modeIdx factorLog2 [sr]\n", argv[0]);
@@ -76,6 +76,11 @@ int main (int argc, char** argv)
     // empirical output shelf, is the real explanation. See Stage1T::setBassCaps.
     const double c3Override = (argc > 26) ? std::atof (argv[26]) : -1.0;
     const double c4Override = (argc > 27) ? std::atof (argv[27]) : -1.0;
+    // Optional input coupling-cap override in FARADS (argv[28]; <=0 = shipped 39n). v1.4 W8: C2+R2
+    // set the pre-clip high-pass corner, and the pedal captures roll off ~10 Hz higher than the
+    // model does. This is the ONLY lever that can reproduce the error's level-collapse for free
+    // (it sits before the clipper); see InputBuffer::setC2Value and analysis/w8_lf_contour.py.
+    const double c2Override = (argc > 28) ? std::atof (argv[28]) : -1.0;
 
     // modeIdx 3 = Linear (NO clipping diodes at all; the op-amp rail clip still applies). Not a
     // shipped plugin mode — it exists so the analysis harness can test the hypothesis that SW1's
@@ -119,6 +124,8 @@ int main (int argc, char** argv)
         dsp.setBassTiltScale (bassTiltScale);
     if (c3Override > 0.0 || c4Override > 0.0)
         dsp.setBassCaps (c3Override, c4Override); // after prepare() — see TommyDSP::setBassCaps
+    if (c2Override > 0.0)
+        dsp.setInputC2 (c2Override); // after prepare() — see TommyDSP::setInputC2
 
     const double outGain = kOutputMakeup * tp::volumeGain (volX) / kInputRef;
 

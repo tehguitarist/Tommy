@@ -179,7 +179,7 @@ constexpr double n_1N4148  = 1.752;     // ideality factor — passed as nDiodes
   base-rate bilinear discretisation droops the top octave (~2.3 dB @12k even after prewarp).
   Implemented via `ClippingOversampler::processBlock(data, n, postFn)`: the postFn (treble +
   Stage 2) runs per oversampled sample; prepare those stages at `getOversampledRate()`. Do NOT
-  oversample stages with no audible-band HF caps (e.g. the InputBuffer ≈8 Hz HP) — no benefit,
+  oversample stages with no audible-band HF caps (e.g. the InputBuffer ≈19 Hz HP) — no benefit,
   just cost. Keep the prewarp (`Prewarp.h`) too — it still helps at the 1x setting.
 - **Top-octave restore (`TopOctaveRestore.h`) — base-rate correction for the LOW-OS droop.** Even
   with prewarp, at low oversampling the Treble/Stage 2 bilinear discretisation droops the top
@@ -227,6 +227,23 @@ constexpr double n_1N4148  = 1.752;     // ideality factor — passed as nDiodes
   **Two W4 arguments were retracted to get here** and must not be re-made: "the error collapses
   with level so it is not linear" (clipping MASKS linear errors at high level) and "a shelf is
   mode-independent by construction" (SW1 position is a knob). See `CLAUDE.md`'s W4 entry.
+  **`BassTilt` is NOT the place to fix a sub-100 Hz contour error** — its 250 Hz corner cannot reach
+  40 Hz, and being post-clip and static it cannot track a level-collapsing error. That is W8's
+  territory and W8 is fixed pre-clip; see the input-HP entry below.
+- **Input high-pass corner (`InputBuffer.h` `kC2`) — a FITTED, deliberately non-schematic value
+  (v1.4 W8).** C2 ships at **16.4 n** (pole 19.1 Hz) against `circuit.md`'s documented 39 n
+  (8.0 Hz), because the model passed ~2.5 dB too much below ~40 Hz vs pedal2 in 16/16 captures at
+  all four levels. **It is a filter placement decision as much as a value:** the error's
+  level-collapse (+2.24 dB clean → +0.77 dB at −6 dBFS) is clipping masking a linear error, and only
+  a PRE-clip filter reproduces that for free. Fitted on the **minimax across sweep levels**, not the
+  rms — the rms optimum (pole 23.5 Hz) is the clean sweep, the one level nobody plays at, outvoting
+  the rest. Result, median |deviation| over 20–64 Hz (1 kHz-normalised): clean 1.10 → 0.58, −18
+  0.62 → 0.29, −12 0.57 → 0.41, −6 0.55 → 0.54 — **every level improves**, which is the pre-clip
+  claim holding. `setC2Value` (→ `TommyDSP::setInputC2` → `offline_render.cpp` argv[28]) A/Bs back
+  to 39 n. Sweep with `analysis/w8_lf_contour.py --only fit`.
+  **The gates cannot see this and never could** — `knob_tracking`'s SHAPE scores no band below
+  60 Hz, so it moved 0.79 → 0.78 dB. Any future LF work must be judged on `w8_lf_contour.py`'s
+  shape metric, not on SHAPE.
 
   **`kMaxGainDB` RE-FITTED 2.5 → 1.0 dB (2026-07-27, v1.4 W2)** — this shelf and the DRIVE taper are
   fitted against the SAME low-drive captures, so W2's taper re-fit (`x^2.2` → `x^2.75`) invalidated

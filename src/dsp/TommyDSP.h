@@ -97,6 +97,10 @@ public:
      *  already-stored sample rate, so no re-prepare is needed (and one would undo nothing). */
     void setBassCaps (double c3F, double c4F) { clipper.setBassCaps (c3F, c4F); }
 
+    /** CALIBRATION ONLY — override the input coupling cap C2, i.e. move the pre-clip high-pass
+     *  corner (see InputBuffer::setC2Value; v1.4 W8). Call AFTER prepare(). */
+    void setInputC2 (double c2F) { input.setC2Value (c2F); }
+
     /** Selectable supply voltage (9 / 12 / 18 V). Scales BOTH op-amp output rails — at a higher
      *  supply the op-amp can swing further before clipping (more headroom / "more open"), exactly as
      *  the real pedal responds to a higher supply. The diode clip thresholds are supply-INDEPENDENT

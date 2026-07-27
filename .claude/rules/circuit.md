@@ -35,9 +35,25 @@ asymmetric saturation on both op-amp outputs — see "Op-Amp Model" below.
 | Ref  | Value | Function |
 |------|-------|----------|
 | R1   | 2m2   | Input series resistor |
-| C2   | 39n   | Input coupling cap |
+| C2   | 39n   | Input coupling cap — **the DSP deliberately ships 16.4 n instead; see below** |
 | C12  | 47p   | HF shunt (RF filter) |
 | R2   | 510k  | Bias resistor to VREF |
+
+> **C2 — the model ships a value this document does not support (v1.4 W8, 2026-07-27).**
+> `InputBuffer.h` uses **16.4 n** (input pole 19.1 Hz), not the 39 n above (8.0 Hz). This is the only
+> deliberately non-schematic passive value in the plugin, and it is a **fit, not a claim about the
+> part**. Measured against pedal2 with both FR curves normalised at **20 Hz**, the pedal rolls off
+> ~10 Hz higher than the documented network does — a clean first-order shelf, 0 dB at 20 Hz rising
+> to a +2.2…+2.8 dB plateau by ~200 Hz, in **16/16 captures at all four sweep levels**. With the
+> midband independently calibrated to ±0.35 dB, that reads as the model passing ~2.5 dB too much
+> below ~40 Hz.
+> Reaching the measured corner needs C2 = ~14 n or R2 = 177 k — ~3× departures, far outside
+> tolerance — so the extra roll-off is either an element this document does not record or the **NAM
+> reamp chain's own subsonic roll-off**. `CAPTURE_SPEC`'s bypass anchor would have separated the two
+> and **W6 struck all further captures**, so it cannot be attributed on the evidence available.
+> `InputBuffer::kC2Documented` keeps the 39 n figure; `setC2Value` A/Bs back to it.
+> **Re-verify against the physical pedal if it is ever available** — trace the input network and, if
+> it really is 39 n/510 k, the roll-off belongs to the capture chain and this should be reverted.
 
 ### Stage 1 — IC1_A (JRC4559 op-amp, **non-inverting**)
 | Ref  | Value  | Function |
@@ -245,6 +261,8 @@ node_A ──C2(39n)──┬── node_B
 
 node_B → IC1_A non-inverting input (+)
 ```
+
+(C2 is modelled at 16.4 n, not the 39 n shown — see the C2 note in Component Values.)
 
 WDF tree: R1 and C12 form a series-parallel network at the input. C2 is AC coupling. R2 pulls non-inverting input to VREF. Since IC1_A non-inverting input is high impedance and driven to virtual ground by the feedback, this network primarily sets the input impedance and HF rolloff. Model as a linear WDF tree terminated at the op-amp's non-inverting port.
 

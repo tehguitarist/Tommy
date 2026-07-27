@@ -1,7 +1,11 @@
 // Step 4 validation: Stage 0 (input network) frequency response.
 //
 // Expected behaviour:
-//  - High-pass corner from C2 (39n) + R2 (510k): f = 1/(2*pi*510k*39n) ~= 8 Hz
+//  - High-pass corner from C2 + R2 (510k). C2 is FITTED, not the documented 39n — see
+//    InputBuffer::kC2 (v1.4 W8), so the corner is derived from the constant rather than hardcoded.
+//    Audio-band points are checked against the analytic first-order HP response, not against a flat
+//    0 dB: with the pole at ~19 Hz the network is legitimately -0.15 dB at 100 Hz, and asserting
+//    flatness there would test the old corner by the back door.
 //  - R1 (2m2 = 2.2 MΩ) is an input PULLDOWN to GND, transparent with a low-Z source.
 //  - HF shunt from the series source impedance (rSrc) + C12 (47p) is far above the audio band
 //    (~GHz), so the network should be flat (0 dB) through the audio range.
@@ -38,10 +42,11 @@ double measureMagnitudeDB (double freq, double fs)
 int main()
 {
     constexpr double fs = 96000.0;
-    constexpr double fc = 1.0 / (2.0 * M_PI * 510.0e3 * 39.0e-9); // ~8 Hz
+    constexpr double fc = 1.0 / (2.0 * M_PI * 510.0e3 * tommy::dsp::InputBuffer::kC2);
 
     std::printf ("Stage 0 (Input Network) frequency response\n");
-    std::printf ("  High-pass corner (R2+C2) target: %.3f Hz\n", fc);
+    std::printf ("  High-pass corner (R2+C2) target: %.3f Hz  (C2 = %.1fn, fitted; documented %.0fn)\n",
+                 fc, tommy::dsp::InputBuffer::kC2 * 1e9, tommy::dsp::InputBuffer::kC2Documented * 1e9);
 
     int failures = 0;
 
@@ -56,12 +61,13 @@ int main()
         }
     }
 
-    // In the audio band, should be flat (0 dB).
+    // In the audio band, should follow the analytic first-order high-pass (flat well above fc).
     for (double freq : { 100.0, 1000.0, 5000.0, 10000.0, 15000.0 })
     {
         const auto mag = measureMagnitudeDB (freq, fs);
-        std::printf ("  Magnitude at %.1f Hz: %.4f dB (expected ~0 dB)\n", freq, mag);
-        if (std::abs (mag) > 0.1)
+        const auto want = 20.0 * std::log10 (freq / std::sqrt (freq * freq + fc * fc));
+        std::printf ("  Magnitude at %.1f Hz: %.4f dB (expected %.4f dB)\n", freq, mag, want);
+        if (std::abs (mag - want) > 0.1)
         {
             std::fprintf (stderr, "FAIL: audio-band magnitude at %.1f Hz out of tolerance\n", freq);
             ++failures;

@@ -71,12 +71,13 @@ exponential-sweep harmonic separation, and a level-matched null test). Measured 
   most of a several-dB gap a 1x-only fix couldn't.
 - **Output level** matches the real pedal within ~±0.5 dB at and above noon volume, with unity
   gain landing at 1 o'clock as on the real pedal.
-- A **level-matched null** against the captures reaches about **−14 dB** at the cleanest
-  settings and **−8 to −12 dB** across the range. About half of that residual is linear
-  (EQ-shape + phase): after correcting linear differences, the **purely nonlinear residual — the
-  real measure of how well the clipping itself matches — is ~−20 dB across all three modes.**
-  (Nulling against a NAM capture has an inherent floor — the capture is itself a model, and the
-  phase of clipping harmonics decorrelates — so this measures timbre/feel agreement, not a
+- A **level-matched null** against the captures reaches **−17.6 dB at mid gain** at a normal
+  playing level (−12 dBFS in, ≈300 mV — a typical single coil), **−18.2 dB** at its best, and
+  **−11.7 to −18.2 dB** across every setting and input level measured. About half of that residual
+  is linear (EQ-shape + phase): after correcting linear differences, the **purely nonlinear
+  residual — the real measure of how well the clipping itself matches — is ~−20 dB across all three
+  modes.** (Nulling against a NAM capture has an inherent floor — the capture is itself a model, and
+  the phase of clipping harmonics decorrelates — so this measures timbre/feel agreement, not a
   sample-exact match.)
 
 None of this is neural-net or sample-based modelling — every stage is an analytic circuit solve,

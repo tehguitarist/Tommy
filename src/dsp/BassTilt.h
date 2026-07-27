@@ -37,11 +37,42 @@ namespace tommy::dsp
  * What DOES work is keying the shelf on the knobs, because the plugin knows DRIVE and SW1 position.
  * See analysis/w4_bassdrive.py --only knobshelf and CLAUDE.md's W4 entry.
  *
- * FITTED as an oracle bound: one static low shelf per (DRIVE, mode), chosen minimax across all four
- * sweep depths (clean/-18/-12/-6 dBFS) and the LF SHAPE bands (60/120/250 Hz). Result — worst LF
- * deviation median 1.00 -> 0.46 dB, max 2.61 -> 1.14 dB, and settings over the 1.5 dB SHAPE gate
- * 4 -> 0. A FIXED 250 Hz corner gives up almost nothing vs letting the corner float per setting
- * (median residual 0.48 vs 0.46 dB), so the corner is fixed and only the gain is keyed.
+ * FITTED as an oracle bound: one static low shelf per (DRIVE, mode). A FIXED 250 Hz corner gives up
+ * almost nothing vs letting the corner float per setting (median residual 0.48 vs 0.46 dB), so the
+ * corner is fixed and only the gain is keyed.
+ *
+ * ============================================================================================
+ * TABLE RE-FITTED 2026-07-27 (v1.4 W9) — IT IS NOW SCORED ON -18/-12 dBFS, NOT ON sweep_clean.
+ * ============================================================================================
+ * W4's original fit was minimax across ALL FOUR sweep depths. That let `sweep_clean` set the table,
+ * and the result overcorrected every level anyone actually plays at: the shipped shelf was the WORST
+ * of five strengths on the driven sweeps, and turning it OFF entirely beat it there (mean |LF dev|
+ * 40-160 Hz: off 0.182, shipped 0.419 dB). Audibly, the plugin ran bass-heavy at D0.35 and bass-thin
+ * at D0.65 — spotted by ear/eye before any metric flagged it.
+ *
+ * WHY sweep_clean LOST ITS VOTE — it is neither realistic nor the measurement it was designed to be:
+ *   * It is -30 dBFS (~38 mV at kInputRef), BELOW normal guitar level. -18/-12/-6 dBFS are ~151/
+ *     301/601 mV, i.e. soft picking / typical single coil / hard-strummed humbucker. -12 is the
+ *     centre of normal playing (user decision, 2026-07-27: fit -18 and -12).
+ *   * CAPTURE_SPEC.md intends it as the CLIPPING-FREE linear-EQ reference. It is not one here: W4
+ *     probe 4 showed Stage 1's midband gain is 25-44 dB at these settings, so even -30 dBFS is past
+ *     the diode clamp in 12/16 captures, by a drive- and mode-dependent amount. That is exactly why
+ *     it disagrees with the other three levels by 2-4x AND sign-flips at D0.50.
+ * The driven sweeps are not anchor-"safe" either (they are hotter still) — what makes them the
+ * better reference is that plugin and pedal compress IN STEP (W4 lever 4).
+ *
+ * RESULT (analysis/w9_lf_levelbias.py, 16 captures x 5 shelf strengths x 4 levels, real renders):
+ *      mean  |LF dev| over -18/-12:  0.363 -> 0.086 dB
+ *      worst |LF dev| over -18/-12:  0.960 -> 0.177 dB
+ *      -6 dBFS improves too (~0.50 -> ~0.19 mean) — it does not set the fit but is not sacrificed.
+ * COST, STATED PLAINLY: `sweep_clean` degrades (worst Soft D0.35 -1.78, Medium D0.65 +1.48 dB), and
+ * knob_tracking's SHAPE gate is scored on sweep_clean, so it drops (see CLAUDE.md's W9 entry for the
+ * measured counts). SHAPE on the DRIVEN sweeps is insensitive to this shelf either way — its worst
+ * band there is 8128 Hz, W3's top octave, which no low shelf can reach. Judge this on w9's LF
+ * metric, not on SHAPE.
+ * W8 IS NOT DISTURBED: a 250 Hz shelf is flat across 20-64 Hz, so it moves the whole LF plateau
+ * together and leaves the 20->200 Hz CONTOUR W8 fixed alone. Measured, not assumed — the contour
+ * mismatch spans 0.788..0.728 dB across the ENTIRE 0..1 strength range (w9 probe 3).
  *
  * KEYED ON DRIVE, NOT BASS (user decision, 2026-07-27). The fitted table is near-monotone in DRIVE
  * alone — boost below ~D0.5, cut above, crossing zero near D0.55 — and pedal2 samples SIX DRIVE
@@ -106,16 +137,19 @@ private:
     // measured plugin-pedal deviation — the v1.4 plan's old handover table inverted exactly this
     // and would have doubled the error, so do not re-derive the sign, use these numbers.
     // Soft/Medium have no D0.20 capture; the D0.35 value is held below that (see kDriveGrid).
-    //   NOTE Medium's -1.7 at D0.65 is the least-certain entry: it is the single largest deviation
-    //   in the set and sits at the capture most affected by anchor compression (its 1 kHz
-    //   normalisation reference is past the diode clamp). It is kept because the driven sweeps
-    //   agree on its sign and it is the mode's own worst point, but it is the first value to
-    //   revisit if Medium's low end ever sounds over-thinned at mid drive.
+    //   Two decimals, not one: post-W9 these gains are small enough that rounding to 0.1 dB would
+    //   be a material fraction of several entries (and would flip the sign of Soft's D0.50-D0.80).
+    //   Medium D0.65 (-0.79) is still the largest entry and still the least-certain — it is the
+    //   capture most affected by anchor compression — but it is no longer an outlier at -1.7, and
+    //   all three driven levels now agree on it to within 0.30 dB.
+    //   Soft is nearly DRIVE-flat post-W9 (+0.04..+0.30). That is a real result, not a fit
+    //   collapse: Soft's LF tracked the pedal closely all along, and most of the old Soft column
+    //   was correcting sweep_clean's anchor artefact rather than anything Soft's low end did.
     static constexpr int kN = 6;
     static constexpr double kDriveGrid[kN] = { 0.20, 0.35, 0.50, 0.65, 0.80, 1.00 };
-    static constexpr double kGainSoft[kN] = { +1.1, +1.1, +0.2, -0.2, -0.1, -0.2 };
-    static constexpr double kGainMedium[kN] = { +0.9, +0.9, +0.2, -1.7, -0.7, -0.7 };
-    static constexpr double kGainHard[kN] = { +0.5, +0.5, +0.1, -0.9, -0.6, -0.6 };
+    static constexpr double kGainSoft[kN] = { +0.30, +0.30, +0.04, +0.06, +0.07, +0.14 };
+    static constexpr double kGainMedium[kN] = { +0.26, +0.26, -0.02, -0.79, -0.25, -0.24 };
+    static constexpr double kGainHard[kN] = { +0.71, +0.14, -0.06, -0.26, -0.23, -0.24 };
 
     static constexpr double kFc = 250.0; // shelf corner (Hz) — fitted; see class doc
     static constexpr double kS = 0.7;    // gentle slope, matching DriveTilt

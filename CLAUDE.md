@@ -41,8 +41,9 @@ Format:  clang-format -i src/**/*.{cpp,h}
 
 ## Current State
 
-**Status: SHIPPABLE, v1.3.0 + unreleased v1.4 fidelity work (W5 harness, W1 Medium clip
-threshold, W2 low-drive clip onset — see Roadmap).** All 9 build-sequence steps are complete. Full DSP chain
+**Status: SHIPPABLE, v1.4.0 — the fidelity pass is released (W1/W2/W4/W8/W9 fixed and shipped,
+W5 harness done, W6 struck, W7 closed into W3; W3 alone remains open and is likely unfixable —
+see Roadmap).** All 9 build-sequence steps are complete. Full DSP chain
 (`src/dsp/`: InputBuffer → Stage1+SW1 clipping, oversampled with ADAA on the rail clip and
 `AccurateOmega` → TrebleNetwork → Stage2, wired via `TommyDSP.h`, then base-rate
 `TopOctaveRestore` (corrects the low-OS top-octave droop) + `DriveTilt` (corrects a low-drive
@@ -52,8 +53,11 @@ and `FeatureProfile`, are measurement probes rather than pass/fail accuracy — 
 README's Performance table; `FeatureProfile` → the v1.1 roadmap's CPU-vs-accuracy data). UI
 (Step 8) is a
 fixed 480×480 three-column layout — full design in `ui.md`. **W4 is FIXED and shipped**
-(`src/dsp/BassTilt.h`, a DRIVE+mode-keyed 250 Hz low shelf — SHAPE 12/16 → 16/16 with no capture
-regressed); **W8 is FIXED and shipped** (`InputBuffer.h` `kC2` 39 n → 16.4 n, moving the pre-clip
+(`src/dsp/BassTilt.h`, a DRIVE+mode-keyed 250 Hz low shelf), and its table was **RE-FITTED by W9
+(2026-07-27) onto −18/−12 dBFS instead of `sweep_clean`** — the original fit let the −30 dBFS clean
+sweep set the shelf and overcorrect every level anyone plays at (mean |LF dev| over −18/−12
+0.363 → 0.086 dB; **SHAPE(clean) 16/16 → 14/16 — deliberately spent, see W9**);
+**W8 is FIXED and shipped** (`InputBuffer.h` `kC2` 39 n → 16.4 n, moving the pre-clip
 input high-pass 8.0 → 19.1 Hz — the plugin had been passing ~2.5 dB too much below ~40 Hz in 16/16
 captures; every sweep level improved, all gates unchanged). That 16.4 n is the **only deliberately
 non-schematic passive value in the plugin** and is a fit, not a claim about the part — read
@@ -245,7 +249,13 @@ See `analysis/README.md` for harness usage and `analysis/CAPTURE_SPEC.md` for ca
   respects the lock and host automation; non-numeric input is rejected rather than falling back to
   `String::getFloatValue()`'s silent 0.0. See `architecture.md`'s `trim_lock` row and `ui.md`'s
   Oversampling Strip / Side Panels sections for the full spec.
-- **v1.4 — fidelity pass (IN PROGRESS). Plan: `.claude/plans/v1.4-fidelity.md`.**
+- **v1.4.0 — fidelity pass (SHIPPED 2026-07-27). Plan: `.claude/plans/v1.4-fidelity.md`.**
+  Ships W1 (Medium clip threshold), W2 (low-drive clip onset / DRIVE taper), W4 (`BassTilt`
+  BASS↔DRIVE LF coupling), W8 (pre-clip input HP corner) and W9 (`BassTilt` re-fitted onto
+  −18/−12 dBFS), plus the W5 harness work. W6 struck (no further captures possible); W7 closed
+  into W3. **W3 — the pedal expanding its top octave under drive — ships as a documented
+  residual**, not a regression: no linear filter can add that energy, and finite-GBW, slew
+  limiting and `kSymMismatch` were each tested and eliminated.
   - **DONE — W5 harness fixes.** `report_audit.py` now floors the harmonic audit at **−45 dBc**
     (drops a point if *either* side is below it) and reports the excluded count: Soft's median
     |H-delta| falls 1.64 → 0.40 dB and Medium's 3.24 → 0.51 at −18 dBFS, because their H2/H4/H6
@@ -478,6 +488,70 @@ See `analysis/README.md` for harness usage and `analysis/CAPTURE_SPEC.md` for ca
     nearly irrelevant at 64–254 Hz; it only dominates far lower (~20 Hz)"** — it evaluated C4 where
     C4 does nothing, so **"C3/C4 refuted" does not hold for the 20–50 Hz contour** and must not be
     cited for it.
+  - **DONE — W9: BassTilt was fitted to `sweep_clean` and overcorrected every playing level.
+    RE-FITTED ONTO −18/−12 dBFS AND SHIPPED (2026-07-27).** New probe
+    `analysis/w9_lf_levelbias.py` (`sweep`/`refit`/`w8guard`; 16 captures × 5 shelf strengths × 4
+    levels = 80 real renders) plus a `BASSTILT=<scale>` env hook in `knob_tracking.py` so the gate
+    cost could be **measured, not predicted**. `BassTilt.h`'s three gain arrays replaced.
+    **Found by the user's eye on the dashboard's default `raw (null gain)` FR view** — the same way
+    W8 was found, and again the harness could not see it.
+    **The reported symptom split into one real error and one artefact.** Re-anchoring at 1 kHz and
+    splitting into SUB (20–32 Hz) / LF (40–160) / MID (202–806): **MID is already exact**
+    (driven-mean −0.24…+0.04 dB over all 16 captures), so the "200 Hz–2 kHz is light where the bass
+    is heavy" half is the `raw` view's least-squares gain being dragged up by the LF excess — the
+    artefact `CLAUDE.md` already documents under "NOT a real error". **Do not correct the midband.**
+    The LF half is real and matched every specific called out: `Hard D0.20` **−0.02** (the "strange
+    exception", exact), D0.35 **+0.39…+0.80 hot**, D0.50 +0.16…+0.19, `Medium D0.65` **−0.90 light**
+    (the reported reversal), D0.80/1.00 −0.21…−0.46 light.
+    **Root cause — a fit-weighting bug, not a new physical error.** W4 fitted BassTilt minimax
+    across all four sweep depths, so `sweep_clean` set the table. Swept over real renders, the
+    shipped strength is the **WORST of five** on the driven sweeps and **turning the shelf off
+    entirely beats it there**: mean |LF dev| 40–160 Hz = off 0.182, 0.25× **0.145**, 0.50× 0.190,
+    0.75× 0.300, shipped 0.419. Even scoring all four levels by measurement count (3 driven : 1
+    clean), 0.25× beat shipped 0.299 vs 0.409 — only W4's worst-case-across-levels minimax, where
+    the single outlier level dominates, preferred the shipped table.
+    **Why `sweep_clean` lost its vote — it is neither realistic nor the measurement it was designed
+    to be.** (a) It is **−30 dBFS ≈ 38 mV** at `kInputRef`, BELOW normal guitar level; −18/−12/−6
+    are ≈151/301/601 mV = soft picking / typical single coil / hard-strummed humbucker. **User
+    decision (2026-07-27): fit −18 and −12.** (b) `CAPTURE_SPEC.md` intends it as the CLIPPING-FREE
+    linear-EQ reference and **it is not one here** — W4 probe 4 showed Stage 1's midband gain is
+    25–44 dB at these settings, so even −30 dBFS is past the diode clamp in 12/16 captures, by a
+    drive- and mode-dependent amount. That is exactly why it disagrees with the other three by 2–4×
+    **and sign-flips at D0.50**. The driven sweeps are not anchor-"safe" either — what makes them
+    the better reference is that both sides compress IN STEP (W4 lever 4).
+    **Result (targeting −18/−12): mean |LF dev| 0.363 → 0.086 dB, worst 0.960 → 0.177.** −6 dBFS
+    improves alongside (~0.50 → ~0.19 mean) rather than being traded away, so all three driven
+    levels win. Targeting −18/−12 beat targeting all three driven levels equally (which gave
+    ~0.12 mean), because −6's larger residual otherwise pulls the fit.
+    **COST, STATED PLAINLY: SHAPE(clean) 16/16 → 14/16** — `Soft D0.35` 1.82 dB and `Medium D0.65`
+    1.76 dB, the two captures whose clean-sweep readings are most anchor-compromised. SHAPE on the
+    driven sweeps is **insensitive to this shelf either way** (its worst band there is 8128 Hz,
+    W3's top octave, which no low shelf can reach), though the −18/−12 medians improved
+    0.51 → 0.49 and 0.80 → 0.69. **LEVEL 15/16 and THD 16/16 unmoved; ctest 10/10; `auval` passes.**
+    **W8 IS NOT DISTURBED — measured, not assumed** (the user asked for this guard explicitly).
+    Probe 3 scores W8's own contour metric (rise from 20 Hz to the 20–400 Hz peak, plugin vs pedal):
+    it spans **0.788…0.728 dB across the ENTIRE 0→1 strength range**, i.e. 0.06 dB. A 250 Hz shelf
+    is flat across 20–64 Hz, so it moves the whole LF plateau together and leaves the contour alone.
+    **Side finding worth keeping:** post-refit, Soft's column is nearly DRIVE-flat (+0.04…+0.30).
+    That is not a fit collapse — Soft's low end tracked the pedal closely all along, and most of the
+    old Soft column was correcting `sweep_clean`'s anchor artefact rather than anything Soft did.
+    **Generalise the lesson:** `sweep_clean` is the LEAST trustworthy level in this capture set at
+    D ≥ 0.5, not the most. Any future EQ fit must say which levels it is scored on, and SHAPE —
+    which reads `sweep_clean` only — must not arbitrate it.
+    **HARNESS FINDING — the NULL TEST cannot see a fix of this class, and must not be used to
+    validate one.** `null_test.py` was run on pedal2 with the pre- and post-W9 tables (same
+    captures, same binary otherwise). Mid-gain (G0.35–0.65) BEST null improved 0.5–0.6 dB
+    (−12 dBFS −17.0 → **−17.6**, −18 dBFS −16.5 → −17.0), but every MEAN is flat or slightly worse
+    (mid-gain −12 mean −16.4 → −16.4; all-setting −12 mean −16.1 → −16.0; clean mean
+    −15.1 → −14.7). **Net: a wash.** The null is a broadband RMS residual dominated by the 2–6 kHz
+    harmonic phase decorrelation and W3's top octave, so a ≤1 dB LF shelf barely moves it. Judge LF
+    work on `w9_lf_levelbias.py` / `w8_lf_contour.py`, never on the null.
+    `null_test.py` was extended in the same pass to report **all four sweep levels** rather than
+    clean + one unnamed "driven" column (v1's `sweep_driven` aliases to `sweep_drv_-12` under v2, so
+    the old column is preserved as the −12 column), plus a mid-gain-only summary. **README updated
+    from these numbers** — its previous "−14 dB at the cleanest settings, −8 to −12 across the
+    range" was measured on `pedal_results3`, which no longer exists in the repo or git history, and
+    is pessimistic against pedal2 (actual range −11.7 … −18.2 dB).
   - **STILL OPEN — W3 alone, and it is likely unfixable.** The
     rest is resolved: W1/W2/W4/W8 fixed and shipped, W5 done, W6 struck, **W7 closed 2026-07-27**
     (fully characterised, its one candidate lever `kSymMismatch` refuted — it merges into W3 and is
@@ -553,6 +627,10 @@ See `analysis/README.md` for harness usage and `analysis/CAPTURE_SPEC.md` for ca
       knob-keyed term costs almost nothing vs the free-corner oracle (median residual 0.48, max
       1.19, 0 settings over gate) — the scattered per-setting corners were fit noise. Same shape as
       the already-shipped `DriveTilt`/`TopOctaveRestore`.
+      **⚠️ THE GAIN TABLE BELOW IS SUPERSEDED — W9 (2026-07-27) re-fitted it onto −18/−12 dBFS and
+      every number changed** (e.g. Soft D0.35 +1.1 → +0.30, Medium D0.65 −1.7 → −0.79). It is kept
+      only because the surrounding argument — form factor, fixed corner, extrapolation risk — still
+      holds. **Read the shipped values from `BassTilt.h`, never from here.**
       **Correction gain table (fc = 250 Hz; sign is the correction TO APPLY, i.e. the negative of
       the measured plugin−pedal deviation — the plan's old handover table inverted exactly this):**
 
@@ -684,6 +762,8 @@ See `analysis/README.md` for harness usage and `analysis/CAPTURE_SPEC.md` for ca
     `PluginProcessor → TommyDSP` at base rate after `DriveTilt`; calibration override
     `TommyDSP::setBassTiltScale` → `offline_render.cpp` argv[25] (0.0 = bit-transparent, reproduces
     pre-W4 renders).
+    **⚠️ The SHAPE figures in this entry describe the ORIGINAL W4 fit, which W9 replaced. The
+    shipped state is SHAPE(clean) 14/16 — see the W9 entry for why that is the better trade.**
     **Results (`SIGNAL=v2 SHAPE_LEVELS=1 knob_tracking.py analysis/pedal2`): SHAPE 12/16 → 16/16**
     — all four bass failures cleared, and **no capture regressed** (worst movement +0.02 dB, noise;
     biggest wins `G0.65 mid` 2.69 → 1.09, `G0.35 down` 1.99 → 1.19, `G1.00 mid` 1.12 → 0.45).

@@ -50,6 +50,16 @@ def render_plugin(p, kin=""):
             str(p["mode"]), str(OSLOG2), "48000"]
     if kin:
         args.append(kin)
+    # CALIBRATION ONLY (v1.4 W9) — BASSTILT=<scale> re-runs the gate with BassTilt's fitted table
+    # scaled (1.0 = shipped, 0.0 = disabled), so the SHAPE cost of re-weighting that fit can be
+    # MEASURED rather than predicted. bassTiltScale is offline_render's argv[25], so setting it
+    # means filling argv[10..25]; every other slot here is its shipped default. Unset = untouched.
+    bt = os.environ.get("BASSTILT", "")
+    if bt:
+        if kin:
+            args.pop()  # KIN is argv[10]; it is re-supplied as the first slot of the full block
+        args += [kin or "1.2", "-1", "1.43", "-1", "1.43", "-1", "0", "-1", "1", "9",
+                 "-1", "-1", "-1", "1", "-1", f"{float(bt):.6f}"]
     subprocess.run(args, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     orig2 = A.load(A.ORIG)
     x, _ = A.align(np.fromfile("/tmp/knob_plug.f32", dtype=np.float32).astype(np.float64), orig2)

@@ -209,19 +209,40 @@ constexpr double n_1N4148  = 1.752;     // ideality factor — passed as nDiodes
   low end is ~1 dB **dark** at low DRIVE and up to **2.6 dB hot** at DRIVE ≥ 0.65, mode-ordered
   (Medium worst, Soft nearly exact), in 15/16 captures. Fixed corner **250 Hz**, gain interpolated
   from a fitted per-mode table over six DRIVE positions (see the table in `BassTilt.h`).
-  Fitted as an oracle bound — one static shelf per (DRIVE, mode), minimax over all four sweep
-  depths and the LF SHAPE bands: **worst LF deviation median 1.00 → 0.46 dB, max 2.61 → 1.14, and
-  settings over the 1.5 dB SHAPE gate 4 → 0.** Letting the corner float per setting buys only
-  0.02 dB, so the corner is fixed and only the gain is keyed.
+  Letting the corner float per setting buys only 0.02 dB, so the corner is fixed and only the gain
+  is keyed.
+  **TABLE RE-FITTED 2026-07-27 (W9) — it is now scored on −18/−12 dBFS, NOT on `sweep_clean`.**
+  W4's original fit was minimax across all four sweep depths, which let the −30 dBFS clean sweep set
+  the table and overcorrect every level anyone plays at: the shipped shelf was the **worst of five
+  strengths** on the driven sweeps, and turning it off entirely beat it there (mean |LF dev|
+  40–160 Hz: off 0.182, shipped 0.419 dB). Audibly, bass-heavy at D0.35 and bass-thin at D0.65.
+  `sweep_clean` lost its vote for two independent reasons: it is **below normal guitar level**
+  (−30 dBFS ≈ 38 mV at `kInputRef`, vs −18/−12/−6 ≈ 151/301/601 mV — soft picking, typical single
+  coil, hard-strummed humbucker), and it is **not the clipping-free reference `CAPTURE_SPEC.md`
+  intends it to be** — Stage 1's 25–44 dB midband gain puts even −30 dBFS past the diode clamp in
+  12/16 captures, which is why it disagrees with the other three levels by 2–4× and sign-flips at
+  D0.50. Result: **mean |LF dev| over −18/−12 0.363 → 0.086 dB, worst 0.960 → 0.177**, and −6 dBFS
+  improves too (~0.50 → ~0.19) rather than being traded away.
+  **Cost: SHAPE(clean) 16/16 → 14/16** (`Soft D0.35` 1.82, `Medium D0.65` 1.76); SHAPE on the driven
+  sweeps is *insensitive* to this shelf either way — its worst band there is 8128 Hz, W3's top
+  octave, out of a low shelf's reach — though the −18/−12 medians did improve (0.51 → 0.49,
+  0.80 → 0.69). LEVEL 15/16 and THD 16/16 unmoved; ctest 10/10; `auval` passes.
+  **Judge this shelf on `analysis/w9_lf_levelbias.py`'s LF metric, never on SHAPE.**
+  **W8 is not disturbed — measured, not assumed:** a 250 Hz shelf is flat across 20–64 Hz, so it
+  moves the whole LF plateau together and leaves W8's 20→200 Hz *contour* alone. The contour
+  mismatch spans only 0.788…0.728 dB across the **entire** 0→1 strength range (w9 probe 3).
   **Keyed on DRIVE, not BASS (user decision).** pedal2 samples six DRIVE values across the full
   range but only two BASS values, locked to DRIVE — so DRIVE-keying is a 1-D fit with complete
   coverage, where (BASS, DRIVE) would be a 2-D surface from five points on a diagonal that no
   future capture can ever constrain (W6). Accepted cost: if the effect is physically BASS-driven,
   high-BASS/low-DRIVE gets the wrong sign.
-  **Irreducible ~0.42 dB residual:** the ideal shelf differs per signal LEVEL and a static one can
-  only sit in the middle; closing that needs an envelope follower, which the plugin does not have
-  (these shelves key off POT positions, never the signal). `setGainScale(0)` makes it
-  bit-transparent — used by `offline_render.cpp` argv[25] for A/B.
+  **Irreducible residual (~0.09 dB over the fitted −18/−12 post-W9, ~0.19 at −6):** the ideal shelf
+  differs per signal LEVEL and a static one can only sit in the middle of the levels it targets;
+  closing that needs an envelope follower, which the plugin does not have (these shelves key off POT
+  positions, never the signal). Narrowing the target from all four levels to −18/−12 is what shrank
+  this — it is not that the level-dependence went away. `setGainScale(0)` makes it bit-transparent —
+  used by `offline_render.cpp` argv[25] for A/B, and by `knob_tracking.py`'s `BASSTILT=<scale>` env
+  hook to re-score the gate at any strength.
   **Do not re-derive the table's sign** — it is the correction to APPLY, i.e. the negative of the
   measured plugin−pedal deviation; the v1.4 plan's old handover table inverted exactly this.
   **Two W4 arguments were retracted to get here** and must not be re-made: "the error collapses

@@ -101,8 +101,17 @@ def bass_resistance(x):
 
 
 def drive_resistance(x):
-    """DRIVE_R = 1e6 * x^2.2 (A1M pot)."""
-    return 0.0 if x <= 0.0 else 1.0e6 * x**2.2
+    """DRIVE_R = 1e6 * x^2.75 (A1M pot).
+
+    MUST track TaperUtils.h's driveResistance. Was x^2.2 here until 2026-07-27: that was correct
+    when probes 1-5 were first run, but v1.4 W2 re-fitted the shipped taper to x^2.75 the same day
+    and left this stale. Since x < 1 gives x^2.2 > x^2.75, the stale value OVERSTATED Stage 1's
+    midband gain and so OVERSTATED the anchor overdrive in probe 4 (e.g. 0.388 vs 0.306 of Rmax at
+    x=0.65, ~1.0 dB of gain). The anchor conclusions survive — the overdrive margins are 8-40 dB —
+    but any change to the shipped taper invalidates every anchor-safety number here; re-check both
+    together.
+    """
+    return 0.0 if x <= 0.0 else 1.0e6 * x**2.75
 
 
 # ---------------------------------------------------------------- analytic Stage 1
@@ -669,8 +678,455 @@ def correction(data):
     print()
 
 
+# ---------------------------------------------------------------- probe 6: the SHAPE metric itself
+def shape_dev(cap, level, bands, i1k):
+    """knob_tracking.py's shapeDev, recomputed on an arbitrary sweep.
+
+    Returns (worst_abs_dev, worst_band_hz, signed_plugin_minus_pedal_at_that_band). knob_tracking
+    scores max|(pedal_norm) - (plugin_norm)| over SHAPE_FREQS with each side normalised at its own
+    1 kHz gain; this reproduces that on the 1/3-octave banded data to within ~0.1 dB (verified
+    against the three known failures in probe 5).
+    """
+    fr = cap["fr"][level]
+    worst = (-1.0, 0.0, 0.0)
+    for hz in SHAPE_FREQS:
+        i = band_index(bands, hz)
+        signed = ((fr["plugin_db"][i] - fr["plugin_db"][i1k])
+                  - (fr["pedal_db"][i] - fr["pedal_db"][i1k]))
+        if abs(signed) > worst[0]:
+            worst = (abs(signed), bands[i], signed)
+    return worst
+
+
+def metric(data):
+    print("=" * 96)
+    print("PROBE 6 — is the SHAPE gate's clean-sweep-only scoring what makes W4 look large?")
+    print("=" * 96)
+    print(
+        "W4 lever 4. knob_tracking.py scores SHAPE on `sweep_clean` ALONE (check_one ->\n"
+        "A.seg_of(orig, 'sweep_clean')), normalising each side at 1 kHz. Probe 4 showed that anchor\n"
+        "is past the diode clamp at D >= 0.50 — exactly where the surviving LF failures live. This\n"
+        "probe recomputes the SAME metric on all four sweeps, so a level-INDEPENDENT tone-stack\n"
+        "error (which is what SHAPE claims to measure) can be separated from a level-DEPENDENT\n"
+        "clipping artefact. Levers 1-3 would otherwise be fitted against a compromised target.\n"
+    )
+
+    print("    CAVEAT — this probe's PASS COUNTS are not the gate's. It scores 1/3-octave band")
+    print("    energies from comprehensive_data.json; knob_tracking scores point gains from a csd")
+    print("    transfer on a live render. They agree exactly on sweep_clean (12/16) and drv_-18")
+    print("    (16/16) but diverge on the hot sweeps, where the top-octave band is steep and a")
+    print("    1/3-octave integral reads a larger deviation than a point estimate:")
+    print("        drv_-12: this probe 14/16 vs knob_tracking 16/16")
+    print("        drv_-6 : this probe  8/16 vs knob_tracking 13/16")
+    print("    Verified 2026-07-27 with `SIGNAL=v2 SHAPE_LEVELS=1 knob_tracking.py analysis/pedal2`.")
+    print("    Use knob_tracking for COUNTS; use this probe for the per-capture level TREND, which")
+    print("    is what the W4 conclusions rest on and which both agree about.\n")
+
+    bands = data["meta"]["bands"]
+    i1k = band_index(bands, NORM_HZ)
+    v_full = KINPUT_REF
+
+    rows = []
+    for cap in data["captures"]:
+        s = cap["settings"]
+        b, d, m = s["bass"], s["drive"], cap["rev"]
+        per = {}
+        for lv in LEVELS:
+            if lv not in cap["fr"]:
+                continue
+            dev, hz, signed = shape_dev(cap, lv, bands, i1k)
+            v_in = v_full * 10.0 ** (LEVEL_DBFS[lv] / 20.0)
+            over = 20.0 * math.log10(stage1_lin_gain(NORM_HZ, b, d) * v_in / CLAMP_V[m])
+            per[lv] = (dev, hz, signed, over)
+        rows.append((d, b, m, per))
+    rows.sort()
+
+    # --- per-capture table -----------------------------------------------------------------
+    print(f"    shapeDev per sweep (gate is {SHAPE_TOL_DB} dB). '*' = fails that sweep.")
+    print("    'worst band' is where the clean sweep peaks; it can differ per sweep.\n")
+    hdr = "".join(f"{lv.replace('sweep_', ''):>12}" for lv in LEVELS)
+    print(f"    {'DRIVE':>5} {'BASS':>5} {'mode':>7} |{hdr} | {'clean worst band':>16}")
+    print("    " + "-" * 88)
+    for d, b, m, per in rows:
+        cells = ""
+        for lv in LEVELS:
+            if lv not in per:
+                cells += f"{'-':>12}"
+                continue
+            dev = per[lv][0]
+            cells += f"{dev:>10.2f}{'*' if dev > SHAPE_TOL_DB else ' '} "
+        band = f"{per['sweep_clean'][1]:.0f} Hz" if "sweep_clean" in per else "-"
+        print(f"    {d:5.2f} {b:5.2f} {m:>7} |{cells}| {band:>16}")
+
+    print()
+    print("    PASS COUNT BY WHICH SWEEP SHAPE IS SCORED ON:")
+    for lv in LEVELS:
+        ok = sum(1 for _, _, _, per in rows if lv in per and per[lv][0] <= SHAPE_TOL_DB)
+        n = sum(1 for _, _, _, per in rows if lv in per)
+        devs = sorted(per[lv][0] for _, _, _, per in rows if lv in per)
+        med = st.median(devs)
+        print(f"      {lv:>15}: {ok}/{n} pass   median shapeDev {med:.2f} dB   "
+              f"worst {devs[-1]:.2f} dB")
+
+    # --- level-independent floor ----------------------------------------------------------
+    print()
+    print("    LEVEL-INDEPENDENT FLOOR — a genuine tone-stack error cannot vanish when the signal")
+    print("    gets louder, so min-across-sweeps bounds the part of shapeDev that is really tone:")
+    print(f"      {'DRIVE':>5} {'BASS':>5} {'mode':>7} | {'clean':>8} {'min':>8} "
+          f"{'at':>14} | {'clean-only inflation':>20}")
+    print("    " + "-" * 82)
+    infl = []
+    for d, b, m, per in rows:
+        if "sweep_clean" not in per:
+            continue
+        clean = per["sweep_clean"][0]
+        best_lv = min(per, key=lambda lv: per[lv][0])
+        mn = per[best_lv][0]
+        infl.append(clean - mn)
+        print(f"      {d:5.2f} {b:5.2f} {m:>7} | {clean:8.2f} {mn:8.2f} "
+              f"{best_lv.replace('sweep_', ''):>14} | {clean - mn:+20.2f}")
+    print()
+    print(f"    median clean-only inflation: {st.median(infl):+.2f} dB   "
+          f"max {max(infl):+.2f} dB")
+    n_fail_any = sum(1 for _, _, _, per in rows
+                     if min(per[lv][0] for lv in per) > SHAPE_TOL_DB)
+    print(f"    captures failing SHAPE at EVERY level (i.e. level-independent): {n_fail_any}/{len(rows)}")
+
+    # --- level trend of the three known failures ------------------------------------------
+    print()
+    print("    LEVEL TREND of the captures that fail on the clean sweep:")
+    for d, b, m, per in rows:
+        if "sweep_clean" not in per or per["sweep_clean"][0] <= SHAPE_TOL_DB:
+            continue
+        print(f"      D{d:.2f} B{b:.2f} {m:>7}: ", end="")
+        parts = []
+        for lv in LEVELS:
+            if lv in per:
+                dev, hz, signed, over = per[lv]
+                parts.append(f"{lv.replace('sweep_', '')} {signed:+.2f}@{hz:.0f}Hz"
+                             f" (anchor {over:+.0f})")
+        print("  ".join(parts))
+
+    print()
+    print("    READ THE ANCHOR COLUMN: it gets WORSE on the driven sweeps (they are 12-24 dB hotter")
+    print("    than the clean one), so 'driven sweeps are anchor-safe' is FALSE. What makes them the")
+    print("    better reference is that both sides are then compressed roughly in step, so the")
+    print("    DIFFERENTIAL is closer to a true shape error — not that the anchor is clean.")
+    print()
+
+
+# ------------------------------------------------- probe 7: mode-independent vs mode-dependent
+def decompose(data):
+    print("=" * 96)
+    print("PROBE 7 — split the LF deviation into a TAPER-shaped part and a CLIP-shaped part")
+    print("=" * 96)
+    print(
+        "This is the test that decides W4 lever 1 (BASS taper shape between x=0.50 and 0.65).\n"
+        "The BASS network (R3/C3/C4/pot) is LINEAR and sits upstream of SW1, so a taper-shape error\n"
+        "must be MODE-INDEPENDENT: identical for Soft/Medium/Hard at matched (BASS, DRIVE). A clip\n"
+        "threshold/onset error must be MODE-DEPENDENT. At each matched group this probe therefore\n"
+        "splits the signed LF deviation into:\n"
+        "    mode-independent = mean over the three modes   -> candidate taper / EQ error\n"
+        "    mode-dependent   = max - min over the modes    -> clip threshold error\n"
+        "Second discriminator: a linear taper error is also LEVEL-independent in its\n"
+        "mode-independent part, because a linear filter does not know how loud the signal is.\n"
+        "(Clipping can MASK it at high level by saturating both sides, so level-dependence alone\n"
+        "does not refute a taper error — but level-INdependence would strongly support one.)\n"
+        "Sign convention throughout: POSITIVE = plugin hotter than pedal, 1 kHz-normalised.\n"
+    )
+
+    bands = data["meta"]["bands"]
+    i1k = band_index(bands, NORM_HZ)
+    lf_bands = [60.0, 120.0]
+
+    groups = {}
+    for cap in data["captures"]:
+        groups.setdefault(group_key(cap), []).append(cap)
+
+    for hz in lf_bands:
+        i = band_index(bands, hz)
+        print(f"    --- {bands[i]:.0f} Hz band " + "-" * 62)
+        print(f"      {'BASS':>5} {'DRIVE':>5} {'level':>9} | {'Soft':>7} {'Medium':>7} "
+              f"{'Hard':>7} | {'mode-indep':>11} {'mode-dep':>9}")
+        print("      " + "-" * 76)
+        for key in sorted(groups, key=lambda k: (k[1], k[0])):
+            by_mode = {c["rev"]: c for c in groups[key]}
+            if len(by_mode) < 3:
+                continue
+            b, d = key
+            for lv in LEVELS:
+                if not all(lv in c["fr"] for c in by_mode.values()):
+                    continue
+                vals = {}
+                for m in MODE_ORDER:
+                    fr = by_mode[m]["fr"][lv]
+                    vals[m] = ((fr["plugin_db"][i] - fr["plugin_db"][i1k])
+                               - (fr["pedal_db"][i] - fr["pedal_db"][i1k]))
+                mi = st.mean(vals.values())
+                md = max(vals.values()) - min(vals.values())
+                print(f"      {b:5.2f} {d:5.2f} {lv.replace('sweep_', ''):>9} | "
+                      f"{vals['Soft']:+7.2f} {vals['Medium']:+7.2f} {vals['Hard']:+7.2f} | "
+                      f"{mi:+11.2f} {md:9.2f}")
+            print()
+
+    # --- summary: how big is each part, and is the taper-shaped part level-stable? ----------
+    print("    SUMMARY — is there a coherent taper-shaped error?")
+    print(f"      {'band':>7} {'BASS':>5} {'DRIVE':>5} | mode-indep by level "
+          f"(clean / -18 / -12 / -6) | {'level spread':>12}")
+    print("      " + "-" * 84)
+    taper_evidence = []
+    for hz in lf_bands:
+        i = band_index(bands, hz)
+        for key in sorted(groups, key=lambda k: (k[1], k[0])):
+            by_mode = {c["rev"]: c for c in groups[key]}
+            if len(by_mode) < 3:
+                continue
+            b, d = key
+            per_lv = {}
+            for lv in LEVELS:
+                if not all(lv in c["fr"] for c in by_mode.values()):
+                    continue
+                vals = []
+                for m in MODE_ORDER:
+                    fr = by_mode[m]["fr"][lv]
+                    vals.append((fr["plugin_db"][i] - fr["plugin_db"][i1k])
+                                - (fr["pedal_db"][i] - fr["pedal_db"][i1k]))
+                per_lv[lv] = st.mean(vals)
+            if len(per_lv) < 2:
+                continue
+            spread_lv = max(per_lv.values()) - min(per_lv.values())
+            cells = "  ".join(f"{per_lv.get(lv, float('nan')):+6.2f}" for lv in LEVELS)
+            print(f"      {bands[i]:7.0f} {b:5.2f} {d:5.2f} | {cells} | {spread_lv:12.2f}")
+            taper_evidence.append((bands[i], b, d, per_lv, spread_lv))
+    print()
+    print("      A taper error would show a LEVEL-STABLE mode-independent column (small level")
+    print("      spread) with a sign that flips between BASS=0.50 and BASS=0.65 (needing a steeper")
+    print("      taper through that range). Read the level-spread column: if it is comparable to or")
+    print("      larger than the mode-independent values themselves, the deviation is dominated by")
+    print("      level-dependent behaviour and a static taper refit cannot be fitted to it.")
+    print()
+    med_spread = st.median(t[4] for t in taper_evidence)
+    med_abs_mi = st.median(abs(v) for t in taper_evidence for v in t[3].values())
+    print(f"      median level spread of the mode-independent part: {med_spread:.2f} dB")
+    print(f"      median |mode-independent| value:                  {med_abs_mi:.2f} dB")
+    print()
+
+
+# ------------------------------------------------- probe 8: the knob-keyed shelf's CEILING
+def _best_static_shelf(dev_by_level):
+    """Minimax (gain_db, fp_hz) for ONE static shelf against a setting's deviation at every level.
+
+    dev_by_level: {level: {hz: signed plugin-pedal dB}}. Returns (gain, fp, worst_residual,
+    worst_uncorrected). Grid search covers BOTH signs — some settings need a cut, some a boost.
+    """
+    best = None
+    for g10 in range(-60, 61):
+        gain = g10 / 10.0
+        for fp in (40, 50, 63, 80, 100, 125, 160, 200, 250, 315, 400, 500):
+            worst = 0.0
+            for lv, per_hz in dev_by_level.items():
+                for hz, d in per_hz.items():
+                    worst = max(worst, abs(d - shelf_response_db(hz, gain, fp)))
+            if best is None or worst < best[2]:
+                best = (gain, fp, worst)
+    raw = max(abs(d) for per_hz in dev_by_level.values() for d in per_hz.values())
+    return best[0], best[1], best[2], raw
+
+
+def knobshelf(data):
+    print("=" * 96)
+    print("PROBE 8 — CEILING on a knob-keyed corrective shelf (the user's proposal, measured)")
+    print("=" * 96)
+    print(
+        "Probes 1-7 argued about MECHANISM. This one ignores mechanism and asks the only question\n"
+        "that decides whether to ship a correction: how much of the error can a shelf REMOVE?\n"
+        "\n"
+        "Two earlier arguments are retracted here and must not be reused:\n"
+        "  * 'a shelf is mode-independent by construction' (probe 5 / lever 2) — FALSE. SW1 position\n"
+        "    is a knob the plugin knows, so a shelf keyed on (BASS, DRIVE, mode) is mode-dependent.\n"
+        "  * 'the error collapses with level, so it is not a linear taper error' (lever 1) — FALSE.\n"
+        "    Clipping MASKS a linear error at high level, because both sides pin to the clip\n"
+        "    ceiling. Level-collapse is exactly what a masked linear LF error looks like.\n"
+        "\n"
+        "This probe fits ONE static 1st-order low shelf per capture, i.e. per exact (BASS, DRIVE,\n"
+        "mode) setting, chosen minimax over all four sweep levels and all SHAPE bands. That is an\n"
+        "ORACLE BOUND, not a shippable filter: a real knob-keyed shelf must INTERPOLATE, and pedal2\n"
+        "samples only 5 distinct (BASS, DRIVE) points. No achievable shelf can beat this table.\n"
+        "The residual column is therefore the honest answer to 'why not just shelve it?'.\n"
+    )
+
+    bands = data["meta"]["bands"]
+    i1k = band_index(bands, NORM_HZ)
+
+    rows = []
+    for cap in data["captures"]:
+        s = cap["settings"]
+        b, d, m = s["bass"], s["drive"], cap["rev"]
+        dev = {}
+        for lv in LEVELS:
+            if lv not in cap["fr"]:
+                continue
+            fr = cap["fr"][lv]
+            dev[lv] = {}
+            for hz in SHAPE_FREQS:
+                i = band_index(bands, hz)
+                dev[lv][bands[i]] = ((fr["plugin_db"][i] - fr["plugin_db"][i1k])
+                                     - (fr["pedal_db"][i] - fr["pedal_db"][i1k]))
+        gain, fp, resid, raw = _best_static_shelf(dev)
+        rows.append((d, b, m, gain, fp, resid, raw, dev))
+    rows.sort()
+
+    print(f"    {'DRIVE':>5} {'BASS':>5} {'mode':>7} | {'shelf gain':>10} {'corner':>7} | "
+          f"{'worst NOW':>9} {'worst AFTER':>11} | {'gained':>7}")
+    print("    " + "-" * 82)
+    for d, b, m, gain, fp, resid, raw, _ in rows:
+        flag = ""
+        if raw > SHAPE_TOL_DB and resid <= SHAPE_TOL_DB:
+            flag = "  FIXES"
+        elif raw > SHAPE_TOL_DB:
+            flag = "  still fails"
+        print(f"    {d:5.2f} {b:5.2f} {m:>7} | {gain:+10.1f} {fp:7.0f} | "
+              f"{raw:9.2f} {resid:11.2f} | {raw - resid:+7.2f}{flag}")
+
+    now_ok = sum(1 for r in rows if r[6] <= SHAPE_TOL_DB)
+    aft_ok = sum(1 for r in rows if r[5] <= SHAPE_TOL_DB)
+    print()
+    print(f"    worst-of-all-levels SHAPE:  now {now_ok}/{len(rows)} pass  ->  "
+          f"with an ORACLE per-setting shelf {aft_ok}/{len(rows)} pass")
+    print(f"    median worst-case deviation: {st.median(r[6] for r in rows):.2f} dB  ->  "
+          f"{st.median(r[5] for r in rows):.2f} dB")
+    print()
+    print("    ^ READ THIS CAREFULLY. Most '+0.00 gained' rows are NOT rows where the bass is")
+    print("      already right — they are rows whose WORST band is 8128 Hz, i.e. W3's top-octave")
+    print("      deficit, which no low shelf can reach. The all-band minimax above is therefore")
+    print("      dominated by W3 and UNDERSTATES what an LF correction does to the bass.")
+
+    # --- the same question restricted to the bands a low shelf can actually act on -----------
+    lf_only = [f for f in SHAPE_FREQS if f <= 250]
+    print()
+    print(f"    LF-ONLY view — same oracle shelf, scored on {lf_only} Hz (what W4 is about):")
+    print(f"      {'DRIVE':>5} {'BASS':>5} {'mode':>7} | {'gain':>6} {'corner':>7} | "
+          f"{'worst NOW':>9} {'worst AFTER':>11}")
+    print("      " + "-" * 66)
+    now_lf, aft_lf = [], []
+    for d, b, m, _, _, _, _, dev in rows:
+        sub = {lv: {hz: v for hz, v in per.items() if hz <= 250.0} for lv, per in dev.items()}
+        gain, fp, resid, raw = _best_static_shelf(sub)
+        now_lf.append(raw)
+        aft_lf.append(resid)
+        print(f"      {d:5.2f} {b:5.2f} {m:>7} | {gain:+6.1f} {fp:7.0f} | "
+              f"{raw:9.2f} {resid:11.2f}")
+    print()
+    print(f"      worst LF deviation: median {st.median(now_lf):.2f} -> "
+          f"{st.median(aft_lf):.2f} dB, max {max(now_lf):.2f} -> {max(aft_lf):.2f} dB")
+    print(f"      settings over {SHAPE_TOL_DB} dB in the bass: "
+          f"{sum(1 for v in now_lf if v > SHAPE_TOL_DB)} -> "
+          f"{sum(1 for v in aft_lf if v > SHAPE_TOL_DB)}")
+    print("      THIS is the honest measure of the proposal: a knob-keyed shelf DOES fix most of")
+    print("      the bass error. It just cannot move the SHAPE gate much, because at driven levels")
+    print("      that gate is scoring W3's top octave, not W4's bass.")
+
+    # --- feasibility: the per-setting corners above scatter 40..500 Hz, which means the fit is
+    # underdetermined. A SHIPPABLE filter needs ONE fixed shape with only the gain keyed to knobs
+    # (that is how DriveTilt/TopOctaveRestore are built). Does that survive?
+    print()
+    print("    FEASIBILITY — one FIXED corner, gain the only knob-keyed term (DriveTilt's shape):")
+    print(f"      {'corner':>7} | {'median resid':>12} {'max resid':>10} | {'over 1.5 dB':>11}")
+    print("      " + "-" * 48)
+    best_fixed = None
+    for fp in (40, 63, 80, 100, 125, 160, 200, 250, 315, 400):
+        resids = []
+        for d, b, m, _, _, _, _, dev in rows:
+            sub = {lv: {hz: v for hz, v in per.items() if hz <= 250.0}
+                   for lv, per in dev.items()}
+            best = None
+            for g10 in range(-60, 61):
+                gain = g10 / 10.0
+                worst = max(abs(v - shelf_response_db(hz, gain, fp))
+                            for per in sub.values() for hz, v in per.items())
+                if best is None or worst < best:
+                    best = worst
+            resids.append(best)
+        over = sum(1 for v in resids if v > SHAPE_TOL_DB)
+        med, mx = st.median(resids), max(resids)
+        if best_fixed is None or med < best_fixed[1]:
+            best_fixed = (fp, med, mx, over)
+        print(f"      {fp:7.0f} | {med:12.2f} {mx:10.2f} | {over:11d}")
+    fp, med, mx, over = best_fixed
+    print()
+    print(f"      BEST FIXED CORNER: {fp:.0f} Hz — median residual {med:.2f} dB, max {mx:.2f} dB, "
+          f"{over} setting(s) still over {SHAPE_TOL_DB} dB.")
+    print("      Compare the free-corner oracle above: the fixed-shape version gives up very"
+          " little,")
+    print("      so the scattered corners were fit noise, not a real per-setting shape difference.")
+    print("      => A single low-shelf SHAPE with a knob-keyed GAIN is the right form factor.")
+    print()
+    # The design deliverable: the CORRECTION gain per setting at the chosen fixed corner.
+    print()
+    print(f"      GAIN TABLE at fc = {fp:.0f} Hz. SIGN IS THE CORRECTION THE SHELF APPLIES")
+    print("      (negative = cut the plugin's bass). This is the NEGATIVE of the measured")
+    print("      plugin-pedal deviation — the plan's old handover table inverted exactly this and")
+    print("      would have doubled the error. Do not re-derive the sign; use this column.")
+    print(f"      {'BASS':>5} {'DRIVE':>5} | {'Soft':>7} {'Medium':>7} {'Hard':>7}")
+    print("      " + "-" * 40)
+    by_bd = {}
+    for d, b, m, _, _, _, _, dev in rows:
+        sub = {lv: {hz: v for hz, v in per.items() if hz <= 250.0} for lv, per in dev.items()}
+        best = None
+        for g10 in range(-60, 61):
+            gain = g10 / 10.0
+            worst = max(abs(v - shelf_response_db(hz, gain, fp))
+                        for per in sub.values() for hz, v in per.items())
+            if best is None or worst < best[1]:
+                best = (gain, worst)
+        by_bd.setdefault((b, d), {})[m] = -best[0]  # negate: measured deviation -> correction
+    for (b, d) in sorted(by_bd, key=lambda k: (k[0], k[1])):
+        g = by_bd[(b, d)]
+        cells = "".join(f"{g[m]:+7.1f}" if m in g else f"{'-':>7}" for m in MODE_ORDER)
+        print(f"      {b:5.2f} {d:5.2f} |{cells}")
+    print()
+    print("      Note the sign flip along the captured diagonal: BOOST at (B0.50, low DRIVE),")
+    print("      CUT at (B0.65, high DRIVE). That is the see-saw, and a knob-keyed shelf handles")
+    print("      it precisely BECAUSE it is keyed on the knobs — no de-confounding required.")
+    print()
+    print("      REMAINING RISK, and it is the real one: pedal2 samples only 5 distinct (BASS,")
+    print("      DRIVE) points and they are perfectly CONFOUNDED (B steps 0.50->0.65 exactly when")
+    print("      D steps 0.50->0.65). The gain table above is therefore 5 points on a diagonal")
+    print("      through a 2-D knob space. Interpolating along that diagonal is defensible;")
+    print("      extrapolating OFF it (high BASS + low DRIVE, or low BASS + high DRIVE) is")
+    print("      unconstrained by any capture, and W6 means no capture can ever constrain it.")
+    print()
+
+    # --- why a static per-setting shelf cannot go further: the level spread it must straddle ---
+    print()
+    print("    WHY THE RESIDUAL DOES NOT GO TO ZERO — the ideal shelf is different at each level.")
+    print("    Per setting, the 64 Hz deviation the ONE shelf has to straddle:")
+    print(f"      {'DRIVE':>5} {'BASS':>5} {'mode':>7} | "
+          + "".join(f"{lv.replace('sweep_', ''):>9}" for lv in LEVELS)
+          + f" | {'half-range':>10}")
+    print("    " + "-" * 78)
+    halves = []
+    for d, b, m, _, _, _, _, dev in rows:
+        vals = [dev[lv].get(63.5) for lv in LEVELS if lv in dev]
+        vals = [v for v in vals if v is not None]
+        if not vals:
+            continue
+        half = (max(vals) - min(vals)) / 2.0
+        halves.append(half)
+        print(f"      {d:5.2f} {b:5.2f} {m:>7} | "
+              + "".join(f"{v:+9.2f}" for v in vals) + f" | {half:10.2f}")
+    print()
+    print(f"    median half-range across levels: {st.median(halves):.2f} dB, max {max(halves):.2f} dB")
+    print("    A static shelf can at best sit in the middle of each row, so the half-range IS its")
+    print("    irreducible error. Removing it needs the shelf to follow SIGNAL LEVEL, i.e. an")
+    print("    envelope follower — the plugin has no level detector (DriveTilt keys off the DRIVE")
+    print("    POT, not the signal), so that is a dynamics feature, not a filter re-tune.")
+    print()
+
+
 PROBES = {"spread": spread, "order": order, "anchor": anchor, "shelf": shelf,
-          "correction": correction}
+          "correction": correction, "metric": metric, "decompose": decompose,
+          "knobshelf": knobshelf}
 
 
 def main():

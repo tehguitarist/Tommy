@@ -96,6 +96,8 @@ public:
     void setRailClampEnabled (bool e) { stage1.setRailClampEnabled (e); }
     void setRailVoltages (double pos, double negMag) { stage1.setRailVoltages (pos, negMag); }
     void setAdaaEnabled (bool e) { stage1.setAdaaEnabled (e); }
+    /** CALIBRATION ONLY — see Stage1T::setBassCaps (v1.4 W4 component-vs-shelf test). */
+    void setBassCaps (double c3F, double c4F) { stage1.setBassCaps (c3F, c4F); }
     void setHighQuality (bool hq) { stage1.setHighQuality (hq); }
 
     double getLatencySamples() const { return oversampler ? (double) oversampler->getLatencyInSamples() : 0.0; }

@@ -314,6 +314,22 @@ public:
      *  aliases most). In addition to oversampling, not instead — see dsp.md. */
     void setAdaaEnabled (bool enabled) { adaaOn = enabled; }
 
+    /** CALIBRATION ONLY — override the BASS-network caps C3 / C4 (<=0 keeps the shipped value).
+     *  Exists for v1.4 W4: those two caps DOMINATE the deep-LF cut (the BASS pot only trims it,
+     *  see TaperUtils.h's bassResistance note), they sit PRE-clip so their effect is naturally
+     *  level-dependent, and circuit.md — which is the only surviving source for them, the
+     *  schematic images having been removed — is internally inconsistent about this exact network
+     *  in three places. So "the DSP matches circuit.md" (verified) does NOT establish the values
+     *  are right, and this hook lets the harness ask whether a different C3/C4 explains the LF
+     *  residual better than the empirical BassTilt shelf does. Production never calls it. */
+    void setBassCaps (double c3F, double c4F)
+    {
+        if (c3F > 0.0)
+            c3.setCapacitanceValue (c3F);
+        if (c4F > 0.0)
+            c4.setCapacitanceValue (c4F);
+    }
+
     /** HQ on → accurate Wright-omega diode solve; off → fast omega4 (cheaper, slight distortion
      *  floor). Drives the user-facing HQ button; applies to both diode sub-trees. */
     void setHighQuality (bool hq)

@@ -203,6 +203,31 @@ constexpr double n_1N4148  = 1.752;     // ideality factor — passed as nDiodes
   the tilt is already gone) and break the validated high-drive match. One biquad, ~0 CPU, high drive
   bit-unchanged. **pedal2 is the definitive tone reference for this** (user decision); the hot
   tone-set pedal1 disagrees on the top octave, but pedal2 is authoritative.
+- **BASS↔DRIVE LF coupling correction (`BassTilt.h`) — a DRIVE- and CLIP-MODE-keyed LOW shelf
+  (v1.4 W4).** Distinct from both shelves above: it acts below ~250 Hz, and its gain **changes
+  sign** with DRIVE rather than fading out. Measured 1 kHz-normalised against pedal2, the model's
+  low end is ~1 dB **dark** at low DRIVE and up to **2.6 dB hot** at DRIVE ≥ 0.65, mode-ordered
+  (Medium worst, Soft nearly exact), in 15/16 captures. Fixed corner **250 Hz**, gain interpolated
+  from a fitted per-mode table over six DRIVE positions (see the table in `BassTilt.h`).
+  Fitted as an oracle bound — one static shelf per (DRIVE, mode), minimax over all four sweep
+  depths and the LF SHAPE bands: **worst LF deviation median 1.00 → 0.46 dB, max 2.61 → 1.14, and
+  settings over the 1.5 dB SHAPE gate 4 → 0.** Letting the corner float per setting buys only
+  0.02 dB, so the corner is fixed and only the gain is keyed.
+  **Keyed on DRIVE, not BASS (user decision).** pedal2 samples six DRIVE values across the full
+  range but only two BASS values, locked to DRIVE — so DRIVE-keying is a 1-D fit with complete
+  coverage, where (BASS, DRIVE) would be a 2-D surface from five points on a diagonal that no
+  future capture can ever constrain (W6). Accepted cost: if the effect is physically BASS-driven,
+  high-BASS/low-DRIVE gets the wrong sign.
+  **Irreducible ~0.42 dB residual:** the ideal shelf differs per signal LEVEL and a static one can
+  only sit in the middle; closing that needs an envelope follower, which the plugin does not have
+  (these shelves key off POT positions, never the signal). `setGainScale(0)` makes it
+  bit-transparent — used by `offline_render.cpp` argv[25] for A/B.
+  **Do not re-derive the table's sign** — it is the correction to APPLY, i.e. the negative of the
+  measured plugin−pedal deviation; the v1.4 plan's old handover table inverted exactly this.
+  **Two W4 arguments were retracted to get here** and must not be re-made: "the error collapses
+  with level so it is not linear" (clipping MASKS linear errors at high level) and "a shelf is
+  mode-independent by construction" (SW1 position is a knob). See `CLAUDE.md`'s W4 entry.
+
   **`kMaxGainDB` RE-FITTED 2.5 → 1.0 dB (2026-07-27, v1.4 W2)** — this shelf and the DRIVE taper are
   fitted against the SAME low-drive captures, so W2's taper re-fit (`x^2.2` → `x^2.75`) invalidated
   the 2.5 dB by construction. It turned out 2.5 dB was partly compensating **clipping compression**

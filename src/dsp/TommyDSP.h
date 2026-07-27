@@ -1,5 +1,6 @@
 #pragma once
 
+#include "BassTilt.h"
 #include "ClippingOversampler.h"
 #include "DriveTilt.h"
 #include "InputBuffer.h"
@@ -51,6 +52,9 @@ public:
         // Drive-faded top-octave tilt correction (base rate): lifts the linear top octave at low
         // drive, fading to 0 by high drive (where clip harmonics fill it). See DriveTilt.h.
         driveTilt.prepare (baseSampleRate);
+        // BASS<->DRIVE coupling correction (base rate): a 250 Hz low shelf whose gain is keyed to
+        // DRIVE and clip mode — boost at low drive, cut above ~D0.55. See BassTilt.h (v1.4 W4).
+        bassTilt.prepare (baseSampleRate);
     }
 
     void reset()
@@ -62,6 +66,7 @@ public:
         dcX1 = dcY1 = 0.0;
         topRestore.reset();
         driveTilt.reset();
+        bassTilt.reset();
     }
 
     void setControls (double bassR, double driveR, double trebR, Stage1::ClipMode mode)
@@ -69,14 +74,28 @@ public:
         clipper.setParams (bassR, driveR);
         clipper.setMode (mode);
         treble.setParams (trebR);
+        bassTilt.setClipMode (mode); // the LF correction is clip-mode keyed (see BassTilt.h)
     }
 
-    /** DRIVE pot position (0..1), for the drive-faded top-octave tilt correction (see DriveTilt.h).
+    /** DRIVE pot position (0..1), for the drive-keyed shelves (see DriveTilt.h / BassTilt.h).
      *  Pass the raw normalised drive parameter, NOT the tapered resistance. */
-    void setDrivePosition (double driveX) { driveTilt.setDrive (driveX); }
+    void setDrivePosition (double driveX)
+    {
+        driveTilt.setDrive (driveX);
+        bassTilt.setDrive (driveX);
+    }
 
     /** CALIBRATION ONLY — override DriveTilt's shelf gain (see DriveTilt::setMaxGainDB). */
     void setDriveTiltGainDB (double g) { driveTilt.setMaxGainDB (g); }
+
+    /** CALIBRATION ONLY — scale BassTilt's fitted table (1.0 = shipped, 0.0 = off).
+     *  See BassTilt::setGainScale; used by analysis/offline_render.cpp's A/B sweeps. */
+    void setBassTiltScale (double s) { bassTilt.setGainScale (s); }
+
+    /** CALIBRATION ONLY — override the BASS-network caps C3/C4 (see Stage1T::setBassCaps).
+     *  Call AFTER prepare(): chowdsp's setCapacitanceValue re-propagates impedance using the
+     *  already-stored sample rate, so no re-prepare is needed (and one would undo nothing). */
+    void setBassCaps (double c3F, double c4F) { clipper.setBassCaps (c3F, c4F); }
 
     /** Selectable supply voltage (9 / 12 / 18 V). Scales BOTH op-amp output rails — at a higher
      *  supply the op-amp can swing further before clipping (more headroom / "more open"), exactly as
@@ -146,7 +165,8 @@ public:
             dcX1 = y;
             dcY1 = out;
             const double restored = topRestore.processSample (out); // restore low-OS top-octave droop
-            data[i] = driveTilt.processSample (restored);           // low-drive top-octave tilt fix
+            const double tilted = driveTilt.processSample (restored); // low-drive top-octave tilt fix
+            data[i] = bassTilt.processSample (tilted);                // BASS<->DRIVE LF coupling fix
         }
     }
 
@@ -161,6 +181,7 @@ private:
 
     TopOctaveRestore topRestore; // base-rate low-OS top-octave correction
     DriveTilt driveTilt;         // base-rate drive-faded low-drive top-octave tilt correction
+    BassTilt bassTilt;           // base-rate drive+mode-keyed LF coupling correction (v1.4 W4)
 };
 
 /** Production per-channel chain (accurate Wright-omega). PluginProcessor uses this alias. */

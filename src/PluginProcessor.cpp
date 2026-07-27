@@ -192,7 +192,7 @@ void TommyAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::
     for (auto& ch : dsp)
     {
         ch.setControls (bassR, driveR, trebR, mode);
-        ch.setDrivePosition (driveX); // drive-faded low-drive top-octave tilt correction
+        ch.setDrivePosition (driveX); // drive-keyed shelves: DriveTilt (top octave) + BassTilt (LF)
         ch.setSupplyVoltage (supplyV);
         ch.setHighQuality (highQ);
     }

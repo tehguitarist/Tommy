@@ -57,8 +57,15 @@ inline double bassResistance (double x)
     // concavity into this convex cut-vs-rotation — so convex is correct here even though the pot
     // itself isn't.) Coefficient is 50k (= the A50k pot's nominal max; bumped from a 41k fit) — it
     // tightens 60 Hz at x=0.8 from +0.8 to +0.1 dB vs real and shaves the small residual bright bias
-    // seen across the capture set. NOTE the 60 Hz cut is only weakly sensitive to this coefficient
-    // (the deep-LF cut is dominated by C3/C4, not the pot R), so this is a fine trim, not a big lever.
+    // seen across the capture set.
+    // ⚠️ CORRECTION (2026-07-27, v1.4 W4): this comment used to claim "the 60 Hz cut is only weakly
+    // sensitive to this coefficient (the deep-LF cut is dominated by C3/C4, not the pot R), so this
+    // is a fine trim, not a big lever." That is WRONG at 60 Hz and it discouraged a lever that
+    // should have been checked. Measured from the shipped analytic Stage-1 gain (64 Hz re 1 kHz):
+    //     B0.50/D0.35:  BASS_R  4.7k -> -2.73 dB |  9.4k (shipped) -> -5.66 |  18.8k -> -9.40
+    //     B0.65/D0.65:  BASS_R  8.9k -> -5.86 dB | 17.7k (shipped) -> -10.32 | 35.4k -> -14.81
+    // i.e. ~3-4 dB per doubling of R — a STRONG lever at 60 Hz, not a fine trim. C3/C4 dominate
+    // only much lower (~20 Hz), which is where the original observation must have come from.
     // BASS is unaffected by the V4 treble change.
     return 50.0e3 * std::pow (x, 2.41);
 }

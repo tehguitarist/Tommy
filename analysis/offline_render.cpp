@@ -65,6 +65,17 @@ int main (int argc, char** argv)
     // for v1.4 W2: DriveTilt is fitted against the same low-drive captures the DRIVE taper is, so a
     // taper re-fit has to be able to re-check the shelf jointly instead of assuming it still holds.
     const double tiltGainDB = (argc > 24) ? std::atof (argv[24]) : -1.0;
+    // Optional BassTilt strength scale (argv[25]; <0 = shipped 1.0, 0 = correction disabled).
+    // Exists for v1.4 W4: the LF correction is an empirical fit, so the harness must be able to
+    // A/B it and re-verify the fit without a rebuild. 0.0 reproduces pre-W4 renders exactly.
+    const double bassTiltScale = (argc > 25) ? std::atof (argv[25]) : -1.0;
+    // Optional BASS-network cap overrides in FARADS (argv[26]=C3, argv[27]=C4; <=0 = shipped
+    // 39n/1u). v1.4 W4: these two caps dominate the deep-LF cut and sit PRE-clip, and circuit.md
+    // (the only surviving source, schematics removed) is internally inconsistent about this exact
+    // network — so the harness must be able to ask whether a component value, rather than an
+    // empirical output shelf, is the real explanation. See Stage1T::setBassCaps.
+    const double c3Override = (argc > 26) ? std::atof (argv[26]) : -1.0;
+    const double c4Override = (argc > 27) ? std::atof (argv[27]) : -1.0;
 
     // modeIdx 3 = Linear (NO clipping diodes at all; the op-amp rail clip still applies). Not a
     // shipped plugin mode — it exists so the analysis harness can test the hypothesis that SW1's
@@ -104,6 +115,10 @@ int main (int argc, char** argv)
     dsp.setAdaaEnabled (adaaOn);
     if (tiltGainDB >= 0.0)
         dsp.setDriveTiltGainDB (tiltGainDB);
+    if (bassTiltScale >= 0.0)
+        dsp.setBassTiltScale (bassTiltScale);
+    if (c3Override > 0.0 || c4Override > 0.0)
+        dsp.setBassCaps (c3Override, c4Override); // after prepare() — see TommyDSP::setBassCaps
 
     const double outGain = kOutputMakeup * tp::volumeGain (volX) / kInputRef;
 

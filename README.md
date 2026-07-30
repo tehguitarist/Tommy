@@ -1,6 +1,6 @@
 # Tommy
 
-![CI](https://github.com/tehguitarist/Tommy/actions/workflows/ci.yml/badge.svg?branch=main)
+![Build](https://github.com/tehguitarist/Tommy/actions/workflows/ci.yml/badge.svg?branch=main)
 [![License](https://img.shields.io/badge/License-AGPLv3-blue.svg)](https://opensource.org/license/agpl-v3)
 [![Downloads](https://img.shields.io/github/downloads/tehguitarist/Tommy/total)](https://somsubhra.github.io/github-release-stats/?username=tehguitarist&repository=Tommy&page=1&per_page=30)
 

@@ -3,13 +3,14 @@
 
 // ── Image loading ─────────────────────────────────────────────────────────────
 // All images are PNG with alpha, pre-rotated to "noon" (knobs/switch-up) where relevant.
-// Loaded once (function-local statics) and cached for the process lifetime.
+// Loaded into TommyArtwork, shared by the open editors and freed when the last one closes (see the header for why they must
+// not be statics). Decoded directly rather than through juce::ImageCache, which would keep its own reference.
 
 namespace
 {
     juce::Image loadImg(const void* data, int size)
     {
-        return juce::ImageCache::getFromMemory(data, size);
+        return juce::ImageFileFormat::loadFrom(data, (size_t) size);
     }
 
     // Draws `img` centred at (cx, cy), scaled so its larger dimension equals `diameter`, rotated by
@@ -30,50 +31,35 @@ namespace
     }
 }
 
-const juce::Image& TommyLookAndFeel::getKnobImage()
+TommyArtwork::TommyArtwork()
+    : knob          (loadImg(BinaryData::T_Knob_png,          BinaryData::T_Knob_pngSize)),
+      trimKnob      (loadImg(BinaryData::vol_trim_png,        BinaryData::vol_trim_pngSize)),
+      ledOn         (loadImg(BinaryData::blue_led_on_png,     BinaryData::blue_led_on_pngSize)),
+      ledOff        (loadImg(BinaryData::blue_led_off_png,    BinaryData::blue_led_off_pngSize)),
+      footswitchUp  (loadImg(BinaryData::footswitch_up_png,   BinaryData::footswitch_up_pngSize)),
+      footswitchDown(loadImg(BinaryData::footswitch_down_png, BinaryData::footswitch_down_pngSize)),
+      switchUp      (loadImg(BinaryData::switch_up_png,       BinaryData::switch_up_pngSize)),
+      switchMid     (loadImg(BinaryData::switch_mid_png,      BinaryData::switch_mid_pngSize)),
+      switchDown    (loadImg(BinaryData::switch_down_png,     BinaryData::switch_down_pngSize)),
+      texture       (loadImg(BinaryData::tommy_texture_png,   BinaryData::tommy_texture_pngSize))
 {
-    static const juce::Image img = loadImg(BinaryData::T_Knob_png, BinaryData::T_Knob_pngSize);
-    return img;
 }
 
-const juce::Image& TommyLookAndFeel::getTrimKnobImage()
-{
-    static const juce::Image img = loadImg(BinaryData::vol_trim_png, BinaryData::vol_trim_pngSize);
-    return img;
-}
+// A temporary handle takes a reference on the shared artwork for the duration of the call; the Image it returns is a
+// reference-counted copy, so it stays valid even if that handle was the only one.
+juce::Image TommyLookAndFeel::getKnobImage()         { return juce::SharedResourcePointer<TommyArtwork>()->knob; }
+juce::Image TommyLookAndFeel::getTrimKnobImage()     { return juce::SharedResourcePointer<TommyArtwork>()->trimKnob; }
+juce::Image TommyLookAndFeel::getLedOnImage()        { return juce::SharedResourcePointer<TommyArtwork>()->ledOn; }
+juce::Image TommyLookAndFeel::getLedOffImage()       { return juce::SharedResourcePointer<TommyArtwork>()->ledOff; }
+juce::Image TommyLookAndFeel::getFootswitchUpImage() { return juce::SharedResourcePointer<TommyArtwork>()->footswitchUp; }
+juce::Image TommyLookAndFeel::getFootswitchDownImage(){ return juce::SharedResourcePointer<TommyArtwork>()->footswitchDown; }
 
-const juce::Image& TommyLookAndFeel::getLedOnImage()
+juce::Image TommyLookAndFeel::getSwitchImage(int position)
 {
-    static const juce::Image img = loadImg(BinaryData::blue_led_on_png, BinaryData::blue_led_on_pngSize);
-    return img;
-}
-
-const juce::Image& TommyLookAndFeel::getLedOffImage()
-{
-    static const juce::Image img = loadImg(BinaryData::blue_led_off_png, BinaryData::blue_led_off_pngSize);
-    return img;
-}
-
-const juce::Image& TommyLookAndFeel::getFootswitchUpImage()
-{
-    static const juce::Image img = loadImg(BinaryData::footswitch_up_png, BinaryData::footswitch_up_pngSize);
-    return img;
-}
-
-const juce::Image& TommyLookAndFeel::getFootswitchDownImage()
-{
-    static const juce::Image img = loadImg(BinaryData::footswitch_down_png, BinaryData::footswitch_down_pngSize);
-    return img;
-}
-
-const juce::Image& TommyLookAndFeel::getSwitchImage(int position)
-{
-    static const juce::Image up   = loadImg(BinaryData::switch_up_png,   BinaryData::switch_up_pngSize);
-    static const juce::Image mid  = loadImg(BinaryData::switch_mid_png,  BinaryData::switch_mid_pngSize);
-    static const juce::Image down = loadImg(BinaryData::switch_down_png, BinaryData::switch_down_pngSize);
-    if (position <= 0) return up;
-    if (position == 1) return mid;
-    return down;
+    const juce::SharedResourcePointer<TommyArtwork> art;
+    if (position <= 0) return art->switchUp;
+    if (position == 1) return art->switchMid;
+    return art->switchDown;
 }
 
 void TommyLookAndFeel::drawImageCentredAspect(juce::Graphics& g, const juce::Image& image,
@@ -125,7 +111,7 @@ void TommyLookAndFeel::paintPedalBackground(juce::Graphics& g, juce::Rectangle<i
 
     // Texture — "cover" fit: scale to fill both dimensions (no stretch), crop the overflow.
     {
-        static const juce::Image texture = loadImg(BinaryData::tommy_texture_png, BinaryData::tommy_texture_pngSize);
+        const auto& texture = artwork->texture;
         if (! texture.isNull())
         {
             const float srcW = (float) texture.getWidth(), srcH = (float) texture.getHeight();

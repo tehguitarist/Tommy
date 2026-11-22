@@ -4,6 +4,19 @@
 // All colour constants are uint32 to avoid constexpr Colour portability issues.
 // Use as juce::Colour(TommyLookAndFeel::cFoo).
 
+// The pedal artwork. Shared by every open editor (juce::SharedResourcePointer) and released when the last editor closes.
+//
+// Do NOT cache these in function-local or namespace-scope statics. A static outlives the editor and is destroyed when the
+// plug-in DLL is unloaded, under the Windows loader lock. JUCE 9's Direct2D images release GPU resources in their destructor,
+// and the graphics driver can wait on its own threads, which need that same lock: the host then hangs on closing the plug-in
+// (REAPER "Unloading track", Gig Performer). Images owned by the editor are freed while JUCE and the driver are still alive.
+struct TommyArtwork
+{
+    TommyArtwork();
+
+    juce::Image knob, trimKnob, ledOn, ledOff, footswitchUp, footswitchDown, switchUp, switchMid, switchDown, texture;
+};
+
 class TommyLookAndFeel : public juce::LookAndFeel_V4
 {
 public:
@@ -49,13 +62,15 @@ public:
     static void drawImageCentredAspect(juce::Graphics& g, const juce::Image& image,
                                         juce::Rectangle<float> bounds);
 
-    static const juce::Image& getKnobImage();        // T_Knob.png      — pedal knobs (bass/gain/vol/treble)
-    static const juce::Image& getTrimKnobImage();     // vol_trim.png    — input/output trim knobs
-    static const juce::Image& getLedOnImage();        // blue_led_on.png
-    static const juce::Image& getLedOffImage();       // blue_led_off.png
-    static const juce::Image& getFootswitchUpImage();   // footswitch_up.png
-    static const juce::Image& getFootswitchDownImage(); // footswitch_down.png
-    static const juce::Image& getSwitchImage(int position); // 0=up,1=mid,2=down
+    // The artwork, returned by value (a juce::Image is a cheap reference-counted handle). Valid whether or not an editor is
+    // open; while one is, it comes from the editor's shared copy.
+    static juce::Image getKnobImage();          // T_Knob.png      — pedal knobs (bass/gain/vol/treble)
+    static juce::Image getTrimKnobImage();      // vol_trim.png    — input/output trim knobs
+    static juce::Image getLedOnImage();         // blue_led_on.png
+    static juce::Image getLedOffImage();        // blue_led_off.png
+    static juce::Image getFootswitchUpImage();  // footswitch_up.png
+    static juce::Image getFootswitchDownImage();// footswitch_down.png
+    static juce::Image getSwitchImage(int position); // 0=up,1=mid,2=down
 
     // ── LookAndFeel overrides ─────────────────────────────────────────────────
     // Rotary sliders: differentiated by componentID — "trim" = halo style, else = pedal knob.
@@ -84,4 +99,8 @@ public:
     juce::Font getComboBoxFont(juce::ComboBox& box) override;
 
     void positionComboBoxText(juce::ComboBox& box, juce::Label& label) override;
+
+private:
+    // Keeps the artwork alive for as long as this look-and-feel (that is, the editor) exists.
+    juce::SharedResourcePointer<TommyArtwork> artwork;
 };

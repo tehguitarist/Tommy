@@ -52,9 +52,11 @@ jobs:
         if: runner.os == 'Linux'
         run: cmake --build build --config Release --parallel 2
 
+      # macOS is capped too: its runner has 3 cores and 14 GB, and an unbounded build starts one multi-GB compile per core
+      # and can swap until the job stalls (seen in the Build step at ~79%). Windows hasn't needed a cap.
       - name: Build
         if: runner.os != 'Linux'
-        run: cmake --build build --config Release --parallel
+        run: cmake --build build --config Release --parallel ${{ runner.os == 'macOS' && 3 || '' }}
 
       - name: Run tests (Linux, headless display)
         if: runner.os == 'Linux'

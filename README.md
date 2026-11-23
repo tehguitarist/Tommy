@@ -126,7 +126,7 @@ guided installer. Six files total:
 |---|---|---|
 | macOS | `Tommy-macOS-vX.Y.Z.zip` — AU + VST3 | `Tommy-macOS-vX.Y.Z-Installer.pkg` — lets you choose AU, VST3, or both (both checked by default) |
 | Windows | `Tommy-Windows-vX.Y.Z.zip` — VST3 | `Tommy-Windows-vX.Y.Z-Installer.exe` — VST3 only (no AU on Windows) |
-| Linux | `Tommy-Linux-vX.Y.Z.zip` — VST3 | `Tommy-Linux-vX.Y.Z-Installer.deb` — VST3 only (no AU on Linux) |
+| Linux | `Tommy-Linux-vX.Y.Z.zip` — VST3 + LV2 | `Tommy-Linux-vX.Y.Z-Installer.deb` — VST3 + LV2 (no AU on Linux) |
 
 ### Installer (recommended)
 

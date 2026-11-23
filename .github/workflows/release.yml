@@ -427,13 +427,16 @@ jobs:
       - name: Configure
         run: cmake -B build -DCMAKE_BUILD_TYPE=Release
 
-      - name: Build VST3
-        run: cmake --build build --config Release --target Tommy_VST3 --parallel
+      - name: Build VST3 and LV2
+        run: |
+          cmake --build build --config Release --target Tommy_VST3 --parallel
+          cmake --build build --config Release --target Tommy_LV2 --parallel
 
       - name: Package
         run: |
           VERSION="${{ needs.version.outputs.version }}"
           (cd build/Tommy_artefacts/Release/VST3 && zip -r "${GITHUB_WORKSPACE}/Tommy-Linux-v${VERSION}.zip" Tommy.vst3)
+          (cd build/Tommy_artefacts/Release/LV2 && zip -r "${GITHUB_WORKSPACE}/Tommy-Linux-v${VERSION}.zip" Tommy.lv2)
 
       - name: Build installer
         run: |

@@ -48,12 +48,19 @@ juce_add_binary_data(TommyUIAssets
         assets/ui/switch_down.png
 )
 
+# LV2 is built on Linux only (an empty value elsewhere, so the FORMATS list below is unchanged).
+set(PLUGIN_LV2_FORMAT "")
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    set(PLUGIN_LV2_FORMAT LV2)
+endif()
+
 juce_add_plugin(Tommy
     COMPANY_NAME "Leigh Pierce"
     BUNDLE_ID com.leighpierce.Tommy
     PLUGIN_MANUFACTURER_CODE LeP1
     PLUGIN_CODE Tom1
-    FORMATS AU VST3
+    FORMATS AU VST3 ${PLUGIN_LV2_FORMAT}
+    LV2URI "https://github.com/tehguitarist/Tommy"   # permanent: hosts identify the plug-in by it
     PRODUCT_NAME "Tommy"
     COPY_PLUGIN_AFTER_BUILD TRUE
 )

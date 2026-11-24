@@ -8,7 +8,7 @@ set(CMAKE_OSX_DEPLOYMENT_TARGET "10.13" CACHE STRING "Minimum macOS deployment v
 # crashes). Needs CMP0091 (NEW from cmake_minimum_required 3.15); must precede the targets, so JUCE.
 set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 
-project(Tommy VERSION 1.4.2)
+project(Tommy VERSION 1.4.3)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)

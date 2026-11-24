@@ -4,7 +4,7 @@
 [![License](https://img.shields.io/badge/License-AGPLv3-blue.svg)](https://opensource.org/license/agpl-v3)
 [![Downloads](https://img.shields.io/github/downloads/tehguitarist/Tommy/total)](https://somsubhra.github.io/github-release-stats/?username=tehguitarist&repository=Tommy&page=1&per_page=30)
 
-Tommy is an overdrive plugin (AU and VST3) modelled on the classic "transparent overdrive"
+Tommy is an overdrive plugin (AU, VST3, and LV2 on Linux) modelled on the classic "transparent overdrive"
 pedal circuit. Rather than capturing a handful of fixed gain settings, Tommy simulates the actual
 analog circuit — drive stage, diode clipper, passive tone network, and output buffer — sample by
 sample, so every control behaves the way the real pedal's electronics would at any setting in between.
@@ -136,7 +136,7 @@ guided installer. Six files total:
 - **Windows:** run the `.exe` and follow the prompts. Installs the VST3 to
   `%COMMONPROGRAMFILES%\VST3\Tommy.vst3`. Includes an uninstaller.
 - **Linux:** `sudo dpkg -i Tommy-Linux-vX.Y.Z-Installer.deb` installs the VST3 to
-  `/usr/lib/vst3/Tommy.vst3`.
+  `/usr/lib/vst3/Tommy.vst3` and the LV2 to `/usr/lib/lv2/Tommy.lv2`.
 
 ### Manual (zip)
 
@@ -146,7 +146,7 @@ Unzip and copy the plugin bundle(s) to your system's plugin folder yourself:
   `/Library/Audio/Plug-Ins/Components/` for all users), `Tommy.vst3` → `~/Library/Audio/Plug-Ins/VST3/`
   (or `/Library/Audio/Plug-Ins/VST3/`).
 - **Windows:** `Tommy.vst3` → `C:\Program Files\Common Files\VST3\`.
-- **Linux:** `Tommy.vst3` → `~/.vst3/` (or `/usr/lib/vst3/` for all users).
+- **Linux:** `Tommy.vst3` → `~/.vst3/` (or `/usr/lib/vst3/` for all users); `Tommy.lv2` → `~/.lv2/` (or `/usr/lib/lv2/`).
 
 > **macOS signing:** release artifacts (the AU/VST3 bundles and the `.pkg` installer itself) are
 > signed with Developer ID certificates and notarized by Apple — no Gatekeeper warning on launch
